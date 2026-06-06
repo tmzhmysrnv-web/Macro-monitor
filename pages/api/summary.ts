@@ -108,9 +108,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
       return res.status(200).json(cachedSummary)
     } catch (err) {
+      console.error('Summary generation error (GET):', err)
       return res.status(200).json({
         text: 'Summary temporarily unavailable.',
-        debug: err instanceof Error ? err.message : String(err),
         generatedAt: new Date().toISOString(),
       })
     }
