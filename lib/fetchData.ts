@@ -85,7 +85,7 @@ export async function fetchAllData(): Promise<MacroData> {
   ])
 
   return {
-    vix:           vixR?.value ?? null,
+    vix:           vixR != null ? parseFloat(vixR.value.toFixed(2)) : null,
     treasury10y:   t10y,
     treasury2y:    t2y,
     fedfunds:      ff,

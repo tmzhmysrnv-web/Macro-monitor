@@ -160,13 +160,16 @@ export type OpportunityStatus = 'opportunity' | 'favorable' | 'normal' | 'elevat
 
 export function getStatus(indicator: Indicator, value: number): AlertStatus {
   const { alertAbove, alertBelow, warnBuffer = 0.1 } = indicator
+  // Warn zone sits just on the safe side of the alert threshold, sized by
+  // |threshold| * warnBuffer so it works for negative thresholds too
+  // (e.g. yield curve alertBelow -0.5 warns at -0.4, not -0.6).
   if (alertAbove !== undefined) {
     if (value >= alertAbove) return 'alert'
-    if (value >= alertAbove * (1 - warnBuffer)) return 'warn'
+    if (value >= alertAbove - Math.abs(alertAbove) * warnBuffer) return 'warn'
   }
   if (alertBelow !== undefined) {
     if (value <= alertBelow) return 'alert'
-    if (value <= alertBelow * (1 + warnBuffer)) return 'warn'
+    if (value <= alertBelow + Math.abs(alertBelow) * warnBuffer) return 'warn'
   }
   return 'ok'
 }
