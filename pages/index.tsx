@@ -349,7 +349,6 @@ export default function Dashboard() {
         .summary-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; color: var(--text-muted); font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
         .summary-text { font-size: 13px; line-height: 1.65; color: var(--text-secondary); }
         .summary-time { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 8px; }
-        .ai-badge { font-size: 9px; background: var(--border); border-radius: 3px; padding: 1px 5px; color: var(--text-muted); font-family: var(--mono); }
 
         .section { margin-bottom: 1.5rem; }
         .section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
@@ -414,10 +413,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* AI Summary */}
+        {/* Summary */}
         <div className={`summary-box ${overallStatus !== 'ok' ? overallStatus : ''}`}>
           <div className="summary-label">
-            Daily summary <span className="ai-badge">AI</span>
+            Summary
           </div>
           {aiSummary ? (
             <>

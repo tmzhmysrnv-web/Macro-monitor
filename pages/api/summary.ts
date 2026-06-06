@@ -71,7 +71,10 @@ Keep it under 120 words total.`
     }),
   })
 
-  if (!response.ok) throw new Error(`Anthropic API error: ${response.status}`)
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(`Anthropic API error ${response.status}: ${body.slice(0, 300)}`)
+  }
   const result = await response.json()
   return result.content?.[0]?.text ?? 'Summary unavailable.'
 }
@@ -104,9 +107,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       cachedSummary = { text, generatedAt: new Date().toISOString() }
       res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
       return res.status(200).json(cachedSummary)
-    } catch {
+    } catch (err) {
       return res.status(200).json({
         text: 'Summary temporarily unavailable.',
+        debug: err instanceof Error ? err.message : String(err),
         generatedAt: new Date().toISOString(),
       })
     }
