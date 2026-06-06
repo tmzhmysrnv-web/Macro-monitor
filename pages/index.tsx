@@ -13,6 +13,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     joblessClaims: data.joblessClaims,
     yieldCurve: data.yieldCurve,
     hySpread: data.hySpread,
+    igSpread: data.igSpread,
     sp500: data.sp500,
   }
   return map[key] ?? null
@@ -55,7 +56,7 @@ const STATUS_STYLES: Record<AlertStatus, StatusConfig> = {
 }
 
 const SECTIONS = [
-  { label: 'Volatility & risk',     keys: ['vix', 'hySpread'] },
+  { label: 'Volatility & risk',     keys: ['vix', 'hySpread', 'igSpread'] },
   { label: 'Rates & yield curve',   keys: ['treasury10y', 'fedfunds', 'yieldCurve'] },
   { label: 'Inflation & labor',     keys: ['cpi', 'joblessClaims'] },
   { label: 'Markets',               keys: ['sp500'] },

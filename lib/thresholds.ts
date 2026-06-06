@@ -75,6 +75,15 @@ export const INDICATORS: Indicator[] = [
     description: 'High yield bond spread over Treasuries',
   },
   {
+    key: 'igSpread',
+    label: 'IG Credit Spread',
+    unit: '%',
+    unitPosition: 'suffix',
+    alertAbove: 2.0,
+    warnBuffer: 0.15,
+    description: 'Investment grade credit spread — early stress signal',
+  },
+  {
     key: 'sp500',
     label: 'S&P 500',
     unit: '',

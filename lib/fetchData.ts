@@ -6,17 +6,18 @@ const FRED_KEY = process.env.FRED_API_KEY
 
 // FRED series IDs
 const FRED_SERIES = {
-  treasury10y: 'DGS10',       // 10-Year Treasury Constant Maturity Rate
-  treasury2y: 'DGS2',         // 2-Year Treasury (for yield curve)
-  fedfunds: 'FEDFUNDS',       // Federal Funds Effective Rate
-  cpi: 'CPIAUCSL',            // CPI All Urban Consumers
-  joblessClaims: 'ICSA',      // Initial Claims (weekly)
-  hySpread: 'BAMLH0A0HYM2',   // ICE BofA US High Yield Option-Adjusted Spread
+  treasury10y: 'DGS10',        // 10-Year Treasury Constant Maturity Rate
+  treasury2y: 'DGS2',          // 2-Year Treasury (for yield curve)
+  fedfunds: 'FEDFUNDS',        // Federal Funds Effective Rate
+  cpi: 'CPIAUCSL',             // CPI level; fetched with units=pc1 for YoY % (fixes raw index bug)
+  joblessClaims: 'ICSA',       // Initial Claims (weekly, in persons)
+  hySpread: 'BAMLH0A0HYM2',    // ICE BofA US High Yield OAS
+  igSpread: 'BAMLC0A0CM',      // ICE BofA US Investment Grade OAS
 }
 
-async function fetchFredSeries(seriesId: string): Promise<number | null> {
+async function fetchFredSeries(seriesId: string, units = 'lin'): Promise<number | null> {
   try {
-    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=5`
+    const url = `${FRED_BASE}?series_id=${seriesId}&units=${units}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=5`
     const res = await fetch(url, { next: { revalidate: 900 } }) // cache 15 min
     if (!res.ok) return null
     const data = await res.json()
@@ -81,34 +82,30 @@ export type MacroData = {
   joblessClaims: number | null
   yieldCurve: number | null
   hySpread: number | null
+  igSpread: number | null
   sp500: number | null
   sp500Change: number | null
   fetchedAt: string
 }
 
 export async function fetchAllData(): Promise<MacroData> {
-  const [vix, t10y, t2y, ff, cpi, claims, hy, spx] = await Promise.all([
+  const [vix, t10y, t2y, ff, cpi, claims, hy, ig, spx] = await Promise.all([
     fetchVix(),
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
-    fetchFredSeries(FRED_SERIES.cpi),
+    fetchFredSeries(FRED_SERIES.cpi, 'pc1'),  // units=pc1 -> YoY % change
     fetchFredSeries(FRED_SERIES.joblessClaims),
     fetchFredSeries(FRED_SERIES.hySpread),
+    fetchFredSeries(FRED_SERIES.igSpread),
     fetchSP500(),
   ])
 
-  // CPI from FRED is a level — convert to YoY % ourselves
-  // FRED returns raw CPI level; we'd need 12-month comparison for YoY
-  // For simplicity we'll use a separate series: CPILFESL or display raw
-  // Better: use series CPIAUCNS and compute, or use pre-computed FRED series
-  // FRED series "CPIAUCSL_PC1" = CPI % change from year ago
   const yieldCurve = t10y != null && t2y != null
     ? parseFloat((t10y - t2y).toFixed(2))
     : null
 
-  // Jobless claims from FRED is in thousands already for ICSA? 
-  // Actually ICSA is in persons — divide by 1000
+  // ICSA is in persons — divide by 1000 for display in thousands
   const joblessK = claims != null ? parseFloat((claims / 1000).toFixed(1)) : null
 
   return {
@@ -116,10 +113,11 @@ export async function fetchAllData(): Promise<MacroData> {
     treasury10y: t10y,
     treasury2y: t2y,
     fedfunds: ff,
-    cpi,
+    cpi: cpi != null ? parseFloat(cpi.toFixed(2)) : null,
     joblessClaims: joblessK,
     yieldCurve,
     hySpread: hy,
+    igSpread: ig,
     sp500: spx?.value ?? null,
     sp500Change: spx?.change ?? null,
     fetchedAt: new Date().toISOString(),
