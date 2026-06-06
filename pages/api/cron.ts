@@ -14,14 +14,10 @@ const ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000 // 4 hours between repeat alerts
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
-    vix: data.vix,
-    treasury10y: data.treasury10y,
-    fedfunds: data.fedfunds,
-    cpi: data.cpi,
-    joblessClaims: data.joblessClaims,
-    yieldCurve: data.yieldCurve,
-    hySpread: data.hySpread,
-    sp500: data.sp500,
+    vix: data.vix, treasury10y: data.treasury10y, fedfunds: data.fedfunds,
+    cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
+    hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
+    dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
   }
   return map[key] ?? null
 }
