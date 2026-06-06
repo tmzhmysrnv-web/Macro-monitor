@@ -187,58 +187,58 @@ export function getContextText(key: string, value: number, status: AlertStatus):
   if (status === 'ok') return null
   const contexts: Record<string, { warn: string; alert: string }> = {
     vix: {
-      warn: 'Volatility is elevated — markets are pricing in uncertainty. Watch for credit spread widening.',
-      alert: 'Fear is spiking. Historically, sustained VIX above 35 signals a crisis in progress. Risk assets under pressure.',
+      warn: 'Volatility is elevated — markets are pricing in uncertainty. Credit spread widening is worth monitoring.',
+      alert: 'Fear is spiking. Historically, sustained VIX above 35 has coincided with significant market stress events.',
     },
     treasury10y: {
-      warn: 'Yields approaching stress territory. Mortgage rates climb, equity valuations compress.',
-      alert: 'Yields at stress levels. Borrowing costs elevated across the economy. Refinancing windows closing.',
+      warn: 'Yields approaching historically elevated territory. Borrowing costs across the economy are climbing.',
+      alert: 'Yields at historically elevated levels. Fixed-rate borrowing costs are high across mortgages, auto, and corporate debt.',
     },
     cpi: {
-      warn: 'Inflation reaccelerating toward 4%. Fed rate cuts may be off the table.',
-      alert: 'Inflation above 4% — Fed is under pressure to hike or hold. Purchasing power eroding.',
+      warn: 'Inflation reaccelerating toward 4%. The Fed\'s dual mandate is under pressure.',
+      alert: 'Inflation above 4%. Purchasing power is eroding and the Fed faces difficult tradeoffs.',
     },
     joblessClaims: {
-      warn: 'Claims ticking up. Early signal of labor market softening — watch for confirmation.',
-      alert: 'Claims at stress levels. Labor market deteriorating. Recession risk rising.',
+      warn: 'Claims ticking up. Early signal of labor market softening — worth monitoring for confirmation.',
+      alert: 'Claims at elevated levels. Labor market conditions are deteriorating.',
     },
     yieldCurve: {
-      warn: 'Curve deeply inverted. Historically precedes recession by 12–18 months.',
-      alert: 'Extreme inversion. Every US recession in 50 years was preceded by this signal.',
+      warn: 'Curve deeply inverted. Historically, this pattern has preceded recessions by 12–18 months.',
+      alert: 'Extreme inversion. This signal has preceded every US recession in the past 50 years.',
     },
     hySpread: {
-      warn: 'High yield spreads widening — credit stress building in riskier companies.',
-      alert: 'HY spreads above 6%. Credit markets pricing in significant default risk.',
+      warn: 'High yield spreads widening — credit stress building in lower-rated corporate debt.',
+      alert: 'HY spreads above 6%. Credit markets are pricing in elevated default risk.',
     },
     igSpread: {
-      warn: 'IG spreads widening — early stress signal even in investment grade. Watch closely.',
-      alert: 'IG spreads at stress levels. Credit conditions tightening across the board.',
+      warn: 'IG spreads widening — credit stress signal appearing even in investment grade debt.',
+      alert: 'IG spreads at elevated levels. Credit conditions are tightening broadly.',
     },
     oil: {
-      warn: 'Oil approaching $100 — energy costs feeding into CPI and consumer spending.',
-      alert: 'Oil above $100. Historical spikes at this level have preceded recessions.',
+      warn: 'Oil approaching $100 — energy costs are feeding into broader inflation measures.',
+      alert: 'Oil above $100. Historically, sustained prices at this level have coincided with recessions.',
     },
     dxy: {
       warn: value > 105
-        ? 'Strong dollar tightening global financial conditions and pressuring US exports.'
-        : 'Weakening dollar may signal rising inflation expectations or loss of confidence.',
+        ? 'Dollar strength at elevated levels — tightening global financial conditions and pressuring US exports.'
+        : 'Dollar weakening — inflation expectations may be rising.',
       alert: value > 110
-        ? 'Dollar at extreme strength. Emerging market debt stress likely. Global tightening.'
-        : 'Dollar at extreme weakness. Inflation risk elevated. Watch gold and commodities.',
+        ? 'Dollar at historically strong levels. Emerging market debt stress is elevated.'
+        : 'Dollar at historically weak levels. Inflation risk is elevated.',
     },
   }
   return contexts[key]?.[status] ?? null
 }
 
-// Returns opportunity text when conditions are historically favorable
+// Returns historical context when conditions are at notable extremes
 export function getOpportunityText(key: string, percentile: number, value: number): string | null {
-  if (percentile > 15) return null // Only show for bottom 15th percentile of "low-good" indicators
-  const opportunities: Record<string, string> = {
-    fedfunds: `Fed Funds at ${value}% — historically low. Once-in-a-cycle window to lock in fixed-rate debt, refinance, or buy bonds.`,
-    treasury10y: `10Y yield at ${value}% — near historic lows. Long-term borrowing cheap. Consider locking in mortgage rates.`,
-    hySpread: `HY spreads compressed — credit calm. Not a buy signal itself, but risk appetite is high.`,
-    vix: `VIX at ${value} — historically low fear. Markets complacent. Good time to review portfolio hedges.`,
-    joblessClaims: `Claims at ${value}k — labor market exceptionally strong. Historically, this precedes wage growth.`,
+  if (percentile > 15) return null
+  const notes: Record<string, string> = {
+    fedfunds: `Fed Funds at ${value}% — in the bottom 15th percentile historically. Low-rate environments like this have been rare over the past 30 years.`,
+    treasury10y: `10Y yield at ${value}% — near historic lows. Long-term borrowing costs are at a historically compressed level.`,
+    hySpread: `HY spreads at ${value}% — historically tight. Credit markets are calm by historical standards.`,
+    vix: `VIX at ${value} — historically low volatility. Markets have rarely been this calm over the past 30 years.`,
+    joblessClaims: `Claims at ${value}k — labor market is historically strong by this measure.`,
   }
-  return opportunities[key] ?? null
+  return notes[key] ?? null
 }

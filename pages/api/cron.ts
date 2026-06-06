@@ -1,16 +1,14 @@
 // pages/api/cron.ts
-// Called by Vercel Cron — checks thresholds and sends alerts
-// Protect with CRON_SECRET so only Vercel can call it
+// Daily cron: checks thresholds, sends alerts, regenerates AI summary
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchAllData, MacroData } from '../../lib/fetchData'
 import { INDICATORS, getStatus } from '../../lib/thresholds'
 import { sendAllAlerts, AlertPayload } from '../../lib/sendAlert'
+import { generateSummary } from './summary'
 
-// Track last alert time in-memory (resets on cold start — good enough for free tier)
-// For production, persist this to Supabase or Vercel KV
 const lastAlerted: Record<string, number> = {}
-const ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000 // 4 hours between repeat alerts
+const ALERT_COOLDOWN_MS = 20 * 60 * 60 * 1000 // 20 hours
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -23,7 +21,6 @@ function getValueForKey(data: MacroData, key: string): number | null {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Verify secret header (Vercel Cron sends this automatically when configured)
   const authHeader = req.headers.authorization
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' })
@@ -37,43 +34,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const indicator of INDICATORS) {
       const value = getValueForKey(data, indicator.key)
       if (value == null) continue
-
       const status = getStatus(indicator, value)
       if (status !== 'alert') continue
-
-      // Respect cooldown — don't spam
       const lastTime = lastAlerted[indicator.key] || 0
       if (now - lastTime < ALERT_COOLDOWN_MS) continue
-
       lastAlerted[indicator.key] = now
-
       if (indicator.alertAbove != null && value >= indicator.alertAbove) {
-        triggeredAlerts.push({
-          indicator: indicator.label,
-          value,
-          threshold: indicator.alertAbove,
-          direction: 'above',
-          unit: indicator.unit,
-        })
+        triggeredAlerts.push({ indicator: indicator.label, value, threshold: indicator.alertAbove, direction: 'above', unit: indicator.unit })
       } else if (indicator.alertBelow != null && value <= indicator.alertBelow) {
-        triggeredAlerts.push({
-          indicator: indicator.label,
-          value,
-          threshold: indicator.alertBelow,
-          direction: 'below',
-          unit: indicator.unit,
-        })
+        triggeredAlerts.push({ indicator: indicator.label, value, threshold: indicator.alertBelow, direction: 'below', unit: indicator.unit })
       }
     }
 
-    if (triggeredAlerts.length > 0) {
-      await sendAllAlerts(triggeredAlerts)
+    if (triggeredAlerts.length > 0) await sendAllAlerts(triggeredAlerts)
+
+    // Regenerate AI summary daily
+    let summaryStatus = 'skipped'
+    try {
+      const summaryText = await generateSummary(data)
+      // Store in the summary module's cache by calling the endpoint internally
+      summaryStatus = summaryText ? 'generated' : 'failed'
+    } catch (e) {
+      summaryStatus = 'error'
+      console.error('Summary generation failed in cron:', e)
     }
 
     res.status(200).json({
       checked: INDICATORS.length,
       triggered: triggeredAlerts.length,
       alerts: triggeredAlerts.map(a => a.indicator),
+      summary: summaryStatus,
       at: new Date().toISOString(),
     })
   } catch (err) {

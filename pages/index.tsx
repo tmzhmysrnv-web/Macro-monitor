@@ -1,11 +1,9 @@
-// pages/index.tsx
-import { useEffect, useState } from 'react'
+// pages/index.tsx — Is the World Breaking?
+import { useEffect, useState, useCallback } from 'react'
 import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
-import {
-  INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText,
-  type AlertStatus,
-} from '../lib/thresholds'
+import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus } from '../lib/thresholds'
+import type { DataPoint } from '../lib/fetchHistory'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -20,7 +18,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
 function getChangeForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
     sp500: data.sp500Change, dxy: data.dxyChange, gold: data.goldChange,
-    oil: data.oilChange, copper: data.copperChange,
+    oil: data.oilChange, copper: data.copperChange, vix: null,
   }
   return map[key] ?? null
 }
@@ -39,9 +37,9 @@ function formatValue(key: string, value: number | null): string {
 }
 
 const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: string; bg: string; note: string }> = {
-  ok:    { dot: '#639922', value: 'inherit',  border: 'var(--border)',   bg: 'var(--card-bg)', note: '#999' },
-  warn:  { dot: '#BA7517', value: '#854F0B',  border: '#EF9F27',         bg: 'var(--warn-bg)', note: '#BA7517' },
-  alert: { dot: '#E24B4A', value: '#A32D2D',  border: '#E24B4A',         bg: 'var(--alert-bg)',note: '#A32D2D' },
+  ok:    { dot: '#639922', value: 'inherit',  border: 'var(--border)',    bg: 'var(--card-bg)',  note: '#888' },
+  warn:  { dot: '#BA7517', value: '#854F0B',  border: '#EF9F27',          bg: 'var(--warn-bg)', note: '#BA7517' },
+  alert: { dot: '#E24B4A', value: '#A32D2D',  border: '#E24B4A',          bg: 'var(--alert-bg)',note: '#A32D2D' },
 }
 
 const SECTIONS = [
@@ -52,68 +50,174 @@ const SECTIONS = [
   { label: 'Markets',              keys: ['sp500'] },
 ]
 
-function getDashboardSummary(data: MacroData): { text: string; status: AlertStatus } {
-  const checks = [
-    { key: 'vix', v: data.vix },
-    { key: 'treasury10y', v: data.treasury10y },
-    { key: 'cpi', v: data.cpi },
-    { key: 'hySpread', v: data.hySpread },
-    { key: 'igSpread', v: data.igSpread },
-    { key: 'joblessClaims', v: data.joblessClaims },
-    { key: 'yieldCurve', v: data.yieldCurve },
-    { key: 'oil', v: data.oil },
-    { key: 'dxy', v: data.dxy },
-  ]
-  const statuses = checks.map(c => {
-    const ind = INDICATORS.find(i => i.key === c.key)
-    return c.v != null && ind ? getStatus(ind, c.v) : 'ok'
-  })
-  const alerts = statuses.filter(s => s === 'alert').length
-  const warns = statuses.filter(s => s === 'warn').length
-
-  // Build contextual summary
-  const alertedKeys = checks.filter((c, i) => statuses[i] === 'alert').map(c => c.key)
-  const warnedKeys  = checks.filter((c, i) => statuses[i] === 'warn').map(c => c.key)
-
-  const labelMap: Record<string, string> = {
-    vix: 'volatility', treasury10y: '10Y yields', cpi: 'inflation',
-    hySpread: 'HY credit spreads', igSpread: 'IG credit spreads',
-    joblessClaims: 'jobless claims', yieldCurve: 'yield curve',
-    oil: 'oil prices', dxy: 'the dollar',
-  }
-
-  if (alerts === 0 && warns === 0) {
-    // Check for opportunity conditions
-    const ffPerc = data.fedfunds != null ? getPercentile(INDICATORS.find(i => i.key === 'fedfunds')!, data.fedfunds) : null
-    const t10yPerc = data.treasury10y != null ? getPercentile(INDICATORS.find(i => i.key === 'treasury10y')!, data.treasury10y) : null
-    if (ffPerc != null && ffPerc <= 15) {
-      return { text: `All indicators in normal range. Notably, the Fed Funds rate is in the bottom ${ffPerc}th historical percentile — a historically rare low-rate environment that favors borrowers and long-duration assets.`, status: 'ok' }
-    }
-    if (t10yPerc != null && t10yPerc <= 15) {
-      return { text: `All clear. 10Y yields are historically low — a window that historically favors locking in long-term fixed-rate debt like mortgages. No stress signals anywhere in the data.`, status: 'ok' }
-    }
-    return { text: 'All indicators within normal historical ranges. No stress signals. Markets are calm, credit is orderly, and labor conditions are healthy.', status: 'ok' }
-  }
-
-  if (alerts > 0) {
-    const names = alertedKeys.map(k => labelMap[k] || k).join(' and ')
-    const warnNames = warnedKeys.length > 0 ? ` ${warnedKeys.map(k => labelMap[k] || k).join(' and ')} are also elevated.` : ''
-    if (alerts >= 3) {
-      return { text: `Multiple indicators in alert territory — ${names}.${warnNames} When this many signals fire simultaneously, historical precedent suggests a significant macro stress event is underway. Review your portfolio defensively.`, status: 'alert' }
-    }
-    return { text: `${names.charAt(0).toUpperCase() + names.slice(1)} ${alerts > 1 ? 'are' : 'is'} in alert territory.${warnNames} Monitor closely — single-indicator alerts can resolve quickly, but watch for others joining.`, status: 'alert' }
-  }
-
-  // Warns only
-  const names = warnedKeys.map(k => labelMap[k] || k).join(' and ')
-  return { text: `${names.charAt(0).toUpperCase() + names.slice(1)} ${warns > 1 ? 'are' : 'is'} approaching alert levels. No threshold has been crossed yet, but conditions are worth watching. Check back daily.`, status: 'warn' }
+// ── Mini sparkline SVG ────────────────────────────────────────────────
+function Sparkline({ series, status }: { series: DataPoint[]; status: AlertStatus }) {
+  if (!series || series.length < 2) return null
+  const W = 80, H = 28
+  const vals = series.map(d => d.value)
+  const min = Math.min(...vals), max = Math.max(...vals)
+  const range = max - min || 1
+  const pts = series.map((d, i) => {
+    const x = (i / (series.length - 1)) * W
+    const y = H - ((d.value - min) / range) * H
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const color = status === 'alert' ? '#E24B4A' : status === 'warn' ? '#BA7517' : '#639922'
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', opacity: 0.7 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
 }
 
+// ── Historical chart modal ────────────────────────────────────────────
+function HistoryModal({ indicatorKey, label, onClose }: { indicatorKey: string; label: string; onClose: () => void }) {
+  const [series, setSeries] = useState<DataPoint[] | null>(null)
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`/api/history?key=${indicatorKey}`)
+      .then(r => r.json())
+      .then(d => { setSeries(d.series); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [indicatorKey])
+
+  const W = 560, H = 200, PAD = { top: 16, right: 16, bottom: 32, left: 48 }
+  const innerW = W - PAD.left - PAD.right
+  const innerH = H - PAD.top - PAD.bottom
+
+  const chartData = series && series.length > 1 ? series : null
+  const vals = chartData ? chartData.map(d => d.value) : []
+  const min = vals.length ? Math.min(...vals) : 0
+  const max = vals.length ? Math.max(...vals) : 1
+  const range = max - min || 1
+
+  const toX = (i: number) => PAD.left + (i / (vals.length - 1)) * innerW
+  const toY = (v: number) => PAD.top + innerH - ((v - min) / range) * innerH
+
+  const points = chartData ? chartData.map((d, i) => `${toX(i).toFixed(1)},${toY(d.value).toFixed(1)}`).join(' ') : ''
+
+  // Year labels
+  const yearLabels: { x: number; year: string }[] = []
+  if (chartData) {
+    let lastYear = ''
+    chartData.forEach((d, i) => {
+      const y = d.date.slice(0, 4)
+      if (y !== lastYear) { yearLabels.push({ x: toX(i), year: y }); lastYear = y }
+    })
+  }
+
+  // Y-axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    y: PAD.top + innerH * (1 - t),
+    label: (min + range * t).toFixed(range > 100 ? 0 : range > 10 ? 1 : 2),
+  }))
+
+  const hovered = hoverIdx != null && chartData ? chartData[hoverIdx] : null
+
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!chartData) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = (e.clientX - rect.left) * (W / rect.width)
+    const relX = mx - PAD.left
+    const idx = Math.round((relX / innerW) * (chartData.length - 1))
+    setHoverIdx(Math.max(0, Math.min(chartData.length - 1, idx)))
+  }
+
+  const indicator = INDICATORS.find(i => i.key === indicatorKey)
+  const hoverStatus = hovered && indicator ? getStatus(indicator, hovered.value) : 'ok'
+  const dotColor = STATUS_STYLES[hoverStatus].dot
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={onClose}>
+      <div style={{ background: 'var(--card-bg)', border: '0.5px solid var(--border-med)', borderRadius: '12px', padding: '1.5rem', maxWidth: '620px', width: '100%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>{label} — 20-year history</div>
+            {hovered ? (
+              <div style={{ fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <span style={{ color: dotColor, fontWeight: 500 }}>{formatValue(indicatorKey, hovered.value)}</span>
+                <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>{hovered.date}</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hover to explore</div>
+            )}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: 'var(--text-muted)', lineHeight: 1, padding: '0 0 0 12px' }}>×</button>
+        </div>
+
+        {loading && <div style={{ height: `${H}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--mono)' }}>Loading…</div>}
+
+        {!loading && !chartData && <div style={{ height: `${H}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No historical data available</div>}
+
+        {!loading && chartData && (
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', cursor: 'crosshair', overflow: 'visible' }}
+            onMouseMove={handleMouseMove} onMouseLeave={() => setHoverIdx(null)}>
+            {/* Grid lines */}
+            {yTicks.map((t, i) => (
+              <g key={i}>
+                <line x1={PAD.left} y1={t.y} x2={PAD.left + innerW} y2={t.y} stroke="var(--border)" strokeWidth="0.5" />
+                <text x={PAD.left - 6} y={t.y + 4} textAnchor="end" fontSize="9" fill="var(--text-muted)" fontFamily="monospace">{t.label}</text>
+              </g>
+            ))}
+            {/* Alert threshold line */}
+            {indicator?.alertAbove != null && indicator.alertAbove >= min && indicator.alertAbove <= max && (
+              <line x1={PAD.left} y1={toY(indicator.alertAbove)} x2={PAD.left + innerW} y2={toY(indicator.alertAbove)}
+                stroke="#E24B4A" strokeWidth="1" strokeDasharray="4,3" opacity="0.6" />
+            )}
+            {indicator?.alertBelow != null && indicator.alertBelow >= min && indicator.alertBelow <= max && (
+              <line x1={PAD.left} y1={toY(indicator.alertBelow)} x2={PAD.left + innerW} y2={toY(indicator.alertBelow)}
+                stroke="#E24B4A" strokeWidth="1" strokeDasharray="4,3" opacity="0.6" />
+            )}
+            {/* Year labels */}
+            {yearLabels.filter((_, i) => i % 2 === 0).map((yl, i) => (
+              <text key={i} x={yl.x} y={PAD.top + innerH + 20} textAnchor="middle" fontSize="9" fill="var(--text-muted)" fontFamily="monospace">{yl.year}</text>
+            ))}
+            {/* Main line */}
+            <polyline points={points} fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+            {/* Hover crosshair */}
+            {hoverIdx != null && chartData[hoverIdx] && (() => {
+              const x = toX(hoverIdx), y = toY(chartData[hoverIdx].value)
+              return (
+                <g>
+                  <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + innerH} stroke="var(--text-muted)" strokeWidth="0.5" />
+                  <circle cx={x} cy={y} r="4" fill={dotColor} stroke="var(--card-bg)" strokeWidth="2" />
+                </g>
+              )
+            })()}
+          </svg>
+        )}
+
+        {/* Annotated periods */}
+        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {[
+            { label: '2008 GFC', color: '#E24B4A' },
+            { label: '2020 COVID', color: '#BA7517' },
+            { label: '2022 Rate Hikes', color: '#BA7517' },
+          ].map(p => (
+            <span key={p.label} style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-block', width: '20px', height: '1px', background: p.color, borderTop: `1px dashed ${p.color}` }} />
+              {p.label}
+            </span>
+          ))}
+          {indicator?.alertAbove != null && (
+            <span style={{ fontSize: '10px', color: '#E24B4A', fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ display: 'inline-block', width: '20px', borderTop: '1px dashed #E24B4A' }} />
+              Alert threshold
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Percentile bar ────────────────────────────────────────────────────
 function PercentileBar({ percentile, opportunityDirection }: { percentile: number; opportunityDirection?: string }) {
   const isOpportunity = opportunityDirection === 'low-good' && percentile <= 15
   const isDanger = percentile >= 85
-  const barColor = isOpportunity ? '#639922' : isDanger ? '#E24B4A' : percentile >= 65 ? '#BA7517' : '#8A8A84'
-
+  const color = isOpportunity ? '#639922' : isDanger ? '#E24B4A' : percentile >= 65 ? '#BA7517' : '#8A8A84'
   return (
     <div style={{ marginTop: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
@@ -123,23 +227,61 @@ function PercentileBar({ percentile, opportunityDirection }: { percentile: numbe
         <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>30yr range</span>
       </div>
       <div style={{ height: '3px', background: 'var(--border-med)', borderRadius: '2px', position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${percentile}%`, background: barColor, borderRadius: '2px', transition: 'width 0.4s ease' }} />
-        <div style={{ position: 'absolute', top: '-2px', left: `${percentile}%`, transform: 'translateX(-50%)', width: '7px', height: '7px', borderRadius: '50%', background: barColor, border: '1.5px solid var(--card-bg)' }} />
+        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${percentile}%`, background: color, borderRadius: '2px', transition: 'width 0.4s ease' }} />
+        <div style={{ position: 'absolute', top: '-2px', left: `${percentile}%`, transform: 'translateX(-50%)', width: '7px', height: '7px', borderRadius: '50%', background: color, border: '1.5px solid var(--card-bg)' }} />
       </div>
     </div>
   )
 }
 
+// ── Main dashboard ────────────────────────────────────────────────────
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [aiSummary, setAiSummary] = useState<{ text: string; generatedAt: string } | null>(null)
+  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string }>>([])
+  const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
+  const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
 
   useEffect(() => {
     fetch('/api/data')
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
+
+    fetch('/api/summary')
+      .then(r => r.json())
+      .then(d => setAiSummary(d))
+      .catch(() => {})
+
+    fetch('/api/calendar')
+      .then(r => r.json())
+      .then(d => setEvents(d.events || []))
+      .catch(() => {})
+  }, [])
+
+  // Load sparklines for all indicators after data loads
+  useEffect(() => {
+    if (!data) return
+    const keys = INDICATORS.map(i => i.key)
+    keys.forEach(key => {
+      fetch(`/api/history?key=${key}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.series?.length > 1) {
+            // Downsample to ~60 points for sparkline
+            const s: DataPoint[] = d.series
+            const step = Math.max(1, Math.floor(s.length / 60))
+            setSparklines(prev => ({ ...prev, [key]: s.filter((_: DataPoint, i: number) => i % step === 0) }))
+          }
+        })
+        .catch(() => {})
+    })
+  }, [data])
+
+  const handleCardClick = useCallback((key: string, label: string) => {
+    setActiveChart({ key, label })
   }, [])
 
   const allStatuses = data ? INDICATORS.map(ind => {
@@ -150,15 +292,14 @@ export default function Dashboard() {
   const alertCount = allStatuses.filter(s => s === 'alert').length
   const warnCount  = allStatuses.filter(s => s === 'warn').length
   const overallStatus: AlertStatus = alertCount > 0 ? 'alert' : warnCount > 0 ? 'warn' : 'ok'
-  const overallLabel = alertCount > 0 ? `${alertCount} alert${alertCount > 1 ? 's' : ''}` : warnCount > 0 ? `${warnCount} warning${warnCount > 1 ? 's' : ''}` : 'All clear'
+  const overallLabel = alertCount > 0 ? `${alertCount} alert${alertCount > 1 ? 's' : ''}` : warnCount > 0 ? `${warnCount} warning${warnCount > 1 ? 's' : ''}` : 'No — all clear'
   const fetchedTime = data?.fetchedAt ? new Date(data.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET' : ''
-  const summary = data ? getDashboardSummary(data) : null
 
   return (
     <>
       <Head>
-        <title>Macro Monitor</title>
-        <meta name="description" content="Quiet macro dashboard — alerts only when it matters" />
+        <title>Is the World Breaking?</title>
+        <meta name="description" content="A quiet macro dashboard. Alerts only when it matters." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -170,7 +311,7 @@ export default function Dashboard() {
         :root {
           --bg: #F7F6F3; --card-bg: #FFFFFF;
           --text-primary: #1A1A18; --text-secondary: #6B6B67; --text-muted: #9E9E9A;
-          --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.13);
+          --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.15);
           --warn-bg: #FFFBF2; --alert-bg: #FFF5F5;
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
         }
@@ -178,15 +319,18 @@ export default function Dashboard() {
           :root {
             --bg: #111110; --card-bg: #1C1C1A;
             --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
-            --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.12);
+            --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
             --warn-bg: #1E1A10; --alert-bg: #1E1010;
           }
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
         .page { max-width: 700px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-        .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-        .wordmark { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.04em; }
-        .wordmark span { color: var(--text-muted); }
+
+        .topbar { margin-bottom: 0.5rem; }
+        .site-name { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-primary); }
+        .site-tagline { font-size: 12px; color: var(--text-muted); margin-top: 2px; margin-bottom: 1rem; }
+        .topbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
         .pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); display: inline-flex; align-items: center; gap: 5px; }
         .pill-ok { background: #EAF3DE; color: #3B6D11; }
         .pill-warn { background: #FAEEDA; color: #854F0B; }
@@ -195,44 +339,71 @@ export default function Dashboard() {
         .dot-pulse { animation: pulse 1.6s ease-in-out infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
         .meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
-        .summary {
-          padding: 12px 14px; border-radius: 8px; margin-bottom: 1.75rem;
+
+        .summary-box {
+          padding: 14px 16px; border-radius: 8px; margin: 1.25rem 0 1.75rem;
           border: 0.5px solid var(--border); background: var(--card-bg);
-          font-size: 13px; line-height: 1.6; color: var(--text-secondary);
         }
-        .summary.warn { border-color: #EF9F27; background: var(--warn-bg); color: #854F0B; }
-        .summary.alert { border-color: #E24B4A; background: var(--alert-bg); color: #A32D2D; }
-        .summary-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; font-family: var(--mono); }
-        .opportunity-banner {
-          font-size: 11px; padding: 7px 10px; border-radius: 6px; margin-top: 6px;
-          background: #EAF3DE; color: #3B6D11; border: 0.5px solid #B8DCA0;
-          font-family: var(--mono); line-height: 1.5;
-        }
+        .summary-box.warn { border-color: #EF9F27; background: var(--warn-bg); }
+        .summary-box.alert { border-color: #E24B4A; background: var(--alert-bg); }
+        .summary-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; color: var(--text-muted); font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
+        .summary-text { font-size: 13px; line-height: 1.65; color: var(--text-secondary); }
+        .summary-time { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 8px; }
+        .ai-badge { font-size: 9px; background: var(--border); border-radius: 3px; padding: 1px 5px; color: var(--text-muted); font-family: var(--mono); }
+
         .section { margin-bottom: 1.5rem; }
         .section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 6px; }
-        .card { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 12px 14px; transition: border-color 0.2s; }
-        .card:hover { border-color: var(--border-med); }
-        .card-label { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; margin-bottom: 6px; }
+
+        .card {
+          background: var(--card-bg); border: 0.5px solid var(--border);
+          border-radius: 8px; padding: 12px 14px; cursor: pointer;
+          transition: border-color 0.15s, transform 0.1s;
+        }
+        .card:hover { border-color: var(--border-med); transform: translateY(-1px); }
+        .card:active { transform: translateY(0); }
+        .card-label { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .card-label-left { display: flex; align-items: center; gap: 5px; }
+        .card-expand { font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.15s; }
+        .card:hover .card-expand { opacity: 1; }
         .card-value { font-family: var(--mono); font-size: 20px; font-weight: 500; line-height: 1; }
         .card-change { font-size: 11px; margin-top: 3px; font-family: var(--mono); }
         .card-change.pos { color: #3B6D11; }
         .card-change.neg { color: #A32D2D; }
         .card-context { font-size: 11px; margin-top: 7px; padding-top: 7px; border-top: 0.5px solid var(--border); line-height: 1.45; }
         .card-threshold { font-size: 10px; margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); font-family: var(--mono); color: var(--text-muted); }
-        .skeleton { background: var(--border); border-radius: 4px; animation: shimmer 1.4s ease-in-out infinite; }
+        .opportunity-banner { font-size: 11px; padding: 6px 9px; border-radius: 5px; margin-top: 6px; background: #EAF3DE; color: #3B6D11; border: 0.5px solid #B8DCA0; font-family: var(--mono); line-height: 1.5; }
+
+        .calendar-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.75rem; }
+        .event-pill {
+          font-size: 11px; font-family: var(--mono); padding: 4px 10px;
+          border-radius: 20px; border: 0.5px solid var(--border);
+          background: var(--card-bg); color: var(--text-secondary);
+          display: flex; align-items: center; gap: 5px;
+        }
+        .event-pill.soon { border-color: #EF9F27; background: var(--warn-bg); color: #854F0B; }
+        .event-pill.today { border-color: #E24B4A; background: var(--alert-bg); color: #A32D2D; }
         @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.4} }
         .sk-val { height: 20px; width: 60%; margin-bottom: 6px; }
         .sk-sub { height: 11px; width: 40%; }
-        .footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.5px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+
+        .footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 0.5px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+        .footer-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
         .footer-note { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+        .disclaimer { font-size: 10px; color: var(--text-muted); line-height: 1.5; padding-top: 4px; }
+
         @media (max-width: 480px) { .grid { grid-template-columns: 1fr 1fr; } .card-value { font-size: 17px; } }
       `}</style>
 
+      {activeChart && (
+        <HistoryModal indicatorKey={activeChart.key} label={activeChart.label} onClose={() => setActiveChart(null)} />
+      )}
+
       <div className="page">
         <div className="topbar">
-          <div className="wordmark">macro<span>monitor</span></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="site-name">is the world breaking?</div>
+          <div className="site-tagline">a quiet macro dashboard · alerts only when it matters</div>
+          <div className="topbar-row">
             {!loading && !error && (
               <span className={`pill pill-${overallStatus}`}>
                 <span className={`dot ${overallStatus !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: STATUS_STYLES[overallStatus].dot }} />
@@ -243,10 +414,40 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {summary && !loading && (
-          <div className={`summary ${summary.status !== 'ok' ? summary.status : ''}`}>
-            <div className="summary-label">Dashboard summary</div>
-            {summary.text}
+        {/* AI Summary */}
+        <div className={`summary-box ${overallStatus !== 'ok' ? overallStatus : ''}`}>
+          <div className="summary-label">
+            Daily summary <span className="ai-badge">AI</span>
+          </div>
+          {aiSummary ? (
+            <>
+              <div className="summary-text">{aiSummary.text}</div>
+              <div className="summary-time">
+                Generated {new Date(aiSummary.generatedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div className="skeleton" style={{ height: '13px', width: '95%' }} />
+              <div className="skeleton" style={{ height: '13px', width: '88%' }} />
+              <div className="skeleton" style={{ height: '13px', width: '72%' }} />
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming events strip */}
+        {events.length > 0 && (
+          <div className="calendar-strip">
+            {events.slice(0, 5).map((e, i) => {
+              const cls = e.daysUntil === 0 ? 'today' : e.daysUntil <= 3 ? 'soon' : ''
+              const when = e.daysUntil === 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : `in ${e.daysUntil}d`
+              return (
+                <span key={i} className={`event-pill ${cls}`} title={e.description}>
+                  <span style={{ opacity: 0.6 }}>📅</span>
+                  {e.name} <span style={{ opacity: 0.6 }}>·</span> {when}
+                </span>
+              )
+            })}
           </div>
         )}
 
@@ -262,47 +463,42 @@ export default function Dashboard() {
                 const styles = STATUS_STYLES[status]
                 const percentile = value != null ? getPercentile(indicator, value) : null
                 const contextText = value != null ? getContextText(key, value, status) : null
-                const opportunityText = value != null && percentile != null
-                  ? getOpportunityText(key, percentile, value) : null
-                const cardStyle: React.CSSProperties = status !== 'ok'
-                  ? { borderColor: styles.border, background: styles.bg } : {}
-                const thresholdText = indicator.alertAbove != null
-                  ? `alert ↑ ${indicator.alertAbove}${indicator.unit}`
-                  : indicator.alertBelow != null ? `alert ↓ ${indicator.alertBelow}${indicator.unit}` : null
+                const opportunityText = value != null && percentile != null ? getOpportunityText(key, percentile, value) : null
+                const cardStyle: React.CSSProperties = status !== 'ok' ? { borderColor: styles.border, background: styles.bg } : {}
+                const thresholdText = indicator.alertAbove != null ? `alert ↑ ${indicator.alertAbove}${indicator.unit}` : indicator.alertBelow != null ? `alert ↓ ${indicator.alertBelow}${indicator.unit}` : null
+                const sparkSeries = sparklines[key]
 
                 return (
-                  <div className="card" key={key} style={cardStyle}>
+                  <div className="card" key={key} style={cardStyle} onClick={() => handleCardClick(key, indicator.label)}>
                     <div className="card-label">
-                      <span className={`dot ${status !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: styles.dot }} />
-                      {indicator.label}
+                      <span className="card-label-left">
+                        <span className={`dot ${status !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: styles.dot }} />
+                        {indicator.label}
+                      </span>
+                      <span className="card-expand">↗</span>
                     </div>
+
                     {loading ? (
                       <><div className="skeleton sk-val" /><div className="skeleton sk-sub" /></>
                     ) : (
                       <>
-                        <div className="card-value" style={{ color: styles.value }}>{formatValue(key, value)}</div>
-                        {change != null && (
-                          <div className={`card-change ${change >= 0 ? 'pos' : 'neg'}`}>
-                            {change >= 0 ? '+' : ''}{change.toFixed(2)}% today
+                        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '8px' }}>
+                          <div>
+                            <div className="card-value" style={{ color: styles.value }}>{formatValue(key, value)}</div>
+                            {change != null && (
+                              <div className={`card-change ${change >= 0 ? 'pos' : 'neg'}`}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</div>
+                            )}
+                            {key === 'yieldCurve' && value != null && (
+                              <div className="card-change" style={{ color: 'var(--text-muted)' }}>{value < 0 ? 'inverted' : 'normal'}</div>
+                            )}
                           </div>
-                        )}
-                        {key === 'yieldCurve' && value != null && (
-                          <div className="card-change" style={{ color: 'var(--text-muted)' }}>
-                            {value < 0 ? 'inverted' : 'normal'}
-                          </div>
-                        )}
-                        {percentile != null && (
-                          <PercentileBar percentile={percentile} opportunityDirection={indicator.opportunityDirection} />
-                        )}
-                        {contextText && (
-                          <div className="card-context" style={{ color: styles.note }}>{contextText}</div>
-                        )}
-                        {opportunityText && !contextText && (
-                          <div className="opportunity-banner">{opportunityText}</div>
-                        )}
-                        {!contextText && !opportunityText && thresholdText && (
-                          <div className="card-threshold">{thresholdText}</div>
-                        )}
+                          {sparkSeries && <Sparkline series={sparkSeries} status={status} />}
+                        </div>
+
+                        {percentile != null && <PercentileBar percentile={percentile} opportunityDirection={indicator.opportunityDirection} />}
+                        {contextText && <div className="card-context" style={{ color: styles.note }}>{contextText}</div>}
+                        {opportunityText && !contextText && <div className="opportunity-banner">{opportunityText}</div>}
+                        {!contextText && !opportunityText && thresholdText && <div className="card-threshold">{thresholdText}</div>}
                       </>
                     )}
                   </div>
@@ -313,8 +509,14 @@ export default function Dashboard() {
         ))}
 
         <div className="footer">
-          <span className="footer-note">Data: FRED API · Yahoo Finance · Updates every 15 min</span>
-          <span className="footer-note">Alerts: email · SMS · in-app</span>
+          <div className="footer-row">
+            <span className="footer-note">Data: FRED API · Yahoo Finance · refreshes every 15 min</span>
+            <span className="footer-note">Alerts: email · SMS · in-app</span>
+          </div>
+          <p className="disclaimer">
+            For informational purposes only. Not financial advice. Historical context is descriptive, not predictive.
+            Consult a licensed financial advisor before making any investment decisions.
+          </p>
         </div>
       </div>
     </>
