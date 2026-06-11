@@ -1,205 +1,135 @@
 // lib/stressIndex.ts
-// Computes a 0–100 stress index from current macro data.
-// Each category contributes stress up to its weight ceiling, scaled by how
-// stressed its indicators currently are (percentile-based, direction-aware).
+// Break Meter — a 0–100 "is the system breaking?" gauge.
+//
+// Why a redesign: a crisis is CONCENTRATED, not broad-based at the same instant,
+// so averaging subsystem stress (the old model) structurally never reads as a
+// break — 2008 and COVID only reached ~60. This is a WORST-OF + contagion model:
+// the meter tracks the single most-broken subsystem, escalated when several
+// break together. Each subsystem is scored on ABSOLUTE danger thresholds
+// (calm / warn / break), so a real break — HY spreads >10%, VIX >50, claims
+// >550k, deep curve inversion, a home-price crash — pegs its subsystem near 100
+// no matter how calm everything else is.
 
 import type { MacroData } from './fetchData'
-import { INDICATORS } from './thresholds'
 
-// ── Danger profiles ──────────────────────────────────────────────────
-// 'high-bad'     → stress rises as value rises (VIX, spreads, inflation, claims)
-// 'low-bad'      → stress rises as value falls (yield curve inversion)
-// 'extremes-bad' → stress rises as value moves away from historical median
-//                  in EITHER direction (rates near zero OR very high = stress)
-type DangerProfile = 'high-bad' | 'low-bad' | 'extremes-bad'
+type Dir = 'high' | 'low'
+type Signal = { key: string; dir: Dir; calm: number; warn: number; brk: number; note: string }
+type Subsystem = { key: string; label: string; signals: Signal[] }
 
-type CategoryDef = {
-  key: string
-  label: string
-  weight: number           // max stress contribution
-  indicators: { key: string; profile: DangerProfile }[]
-}
-
-// Weights sum to 100
-export const CATEGORIES: CategoryDef[] = [
-  {
-    key: 'bonds',
-    label: 'Bond Market',
-    weight: 25,
-    indicators: [
-      { key: 'treasury10y', profile: 'extremes-bad' },  // danger at both ends
-      { key: 'yieldCurve',  profile: 'low-bad' },        // inversion = danger
-    ],
-  },
-  {
-    key: 'housing',
-    label: 'Housing',
-    weight: 20,
-    // 30-year mortgage rate drives housing affordability. extremes-bad:
-    // very high rates choke affordability; very low rates signal crisis-era
-    // emergency policy (2021's record lows preceded a frozen market).
-    indicators: [
-      { key: 'mortgage30', profile: 'extremes-bad' },
-    ],
-  },
-  {
-    key: 'labor',
-    label: 'Labor',
-    weight: 20,
-    indicators: [
-      { key: 'joblessClaims', profile: 'high-bad' },
-    ],
-  },
-  {
-    key: 'credit',
-    label: 'Credit',
-    weight: 15,
-    indicators: [
-      { key: 'hySpread', profile: 'high-bad' },
-      { key: 'igSpread', profile: 'high-bad' },
-    ],
-  },
-  {
-    key: 'inflation',
-    label: 'Inflation',
-    weight: 10,
-    indicators: [
-      { key: 'cpi', profile: 'extremes-bad' },  // deflation AND high inflation are both bad
-    ],
-  },
-  {
-    key: 'stocks',
-    label: 'Stocks & Volatility',
-    weight: 10,
-    indicators: [
-      { key: 'vix', profile: 'high-bad' },
-    ],
-  },
+export const SUBSYSTEMS: Subsystem[] = [
+  { key: 'credit', label: 'Credit', signals: [
+    { key: 'hySpread', dir: 'high', calm: 3.5, warn: 6, brk: 10, note: 'High-yield spreads' },
+    { key: 'igSpread', dir: 'high', calm: 1.5, warn: 2.5, brk: 4, note: 'Investment-grade spreads' },
+  ] },
+  { key: 'volatility', label: 'Volatility', signals: [
+    { key: 'vix', dir: 'high', calm: 16, warn: 28, brk: 50, note: 'VIX' },
+  ] },
+  { key: 'labor', label: 'Labor', signals: [
+    { key: 'joblessClaims', dir: 'high', calm: 250, warn: 375, brk: 550, note: 'Jobless claims (k)' },
+  ] },
+  { key: 'bonds', label: 'Bonds & Rates', signals: [
+    { key: 'treasury10y', dir: 'high', calm: 4, warn: 5.5, brk: 7, note: '10-year yield' },
+    { key: 'yieldCurve', dir: 'low', calm: 0, warn: -0.5, brk: -1.5, note: 'Curve inversion' },
+  ] },
+  { key: 'housing', label: 'Housing', signals: [
+    { key: 'mortgage30', dir: 'high', calm: 5, warn: 7.5, brk: 9.5, note: 'Mortgage rate' },
+    { key: 'homePriceYoY', dir: 'low', calm: 0, warn: -3, brk: -12, note: 'Home-price crash' },
+  ] },
+  { key: 'inflation', label: 'Inflation', signals: [
+    { key: 'cpi', dir: 'high', calm: 3, warn: 5, brk: 9, note: 'High inflation' },
+    { key: 'cpi', dir: 'low', calm: 1, warn: 0, brk: -2, note: 'Deflation' },
+  ] },
 ]
 
-function getValueForKey(data: MacroData, key: string): number | null {
+// Indicator keys the meter reads — used by the historical backfill.
+export const BREAK_KEYS: string[] = Array.from(new Set(SUBSYSTEMS.flatMap(s => s.signals.map(g => g.key))))
+
+const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
+
+// Map a value to 0–100 stress against calm/warn/break anchors (higher = worse).
+// calm→~15, warn→50, break→90, beyond break→100.
+function stressHigh(v: number, calm: number, warn: number, brk: number): number {
+  const a = warn - calm, b = brk - warn
+  if (v <= calm) return clamp(15 - (calm - v) / a * 15, 0, 15)
+  if (v <= warn) return 15 + (v - calm) / a * 35
+  if (v <= brk)  return 50 + (v - warn) / b * 40
+  return clamp(90 + (v - brk) / b * 10, 90, 100)
+}
+function signalStress(sig: Signal, v: number): number {
+  // 'low' direction: more-negative is worse — mirror through zero
+  return sig.dir === 'high'
+    ? stressHigh(v, sig.calm, sig.warn, sig.brk)
+    : stressHigh(-v, -sig.calm, -sig.warn, -sig.brk)
+}
+
+export type SubsystemStress = {
+  key: string
+  label: string
+  stress: number          // 0–100
+  status: 'calm' | 'watch' | 'elevated' | 'stressed' | 'breaking'
+  driver: string          // worst signal's label
+}
+function subStatus(s: number): SubsystemStress['status'] {
+  if (s >= 85) return 'breaking'
+  if (s >= 65) return 'stressed'
+  if (s >= 45) return 'elevated'
+  if (s >= 25) return 'watch'
+  return 'calm'
+}
+
+export type StressResult = {
+  total: number
+  level: 'calm' | 'guarded' | 'elevated' | 'high' | 'severe'
+  verdict: string
+  categories: SubsystemStress[]   // each subsystem's 0–100 stress, worst first
+}
+function indexLevel(total: number): { level: StressResult['level']; verdict: string } {
+  if (total < 25) return { level: 'calm', verdict: 'No — conditions are calm' }
+  if (total < 45) return { level: 'guarded', verdict: 'No — but worth watching' }
+  if (total < 65) return { level: 'elevated', verdict: 'Not yet — a subsystem is under stress' }
+  if (total < 85) return { level: 'high', verdict: 'Close — a subsystem is breaking' }
+  return { level: 'severe', verdict: 'Yes — systemic stress' }
+}
+
+// Core: score every subsystem (worst signal within), then worst-of + contagion.
+function computeFrom(getVal: (key: string) => number | null): { total: number; subsystems: SubsystemStress[] } {
+  const subsystems: SubsystemStress[] = SUBSYSTEMS.map(sub => {
+    let stress = 0, driver = ''
+    for (const sig of sub.signals) {
+      const v = getVal(sig.key)
+      if (v == null) continue
+      const s = signalStress(sig, v)
+      if (s > stress) { stress = s; driver = sig.note }
+    }
+    const r = Math.round(stress)
+    return { key: sub.key, label: sub.label, stress: r, status: subStatus(r), driver }
+  })
+
+  const stresses = subsystems.map(s => s.stress)
+  const peak = stresses.length ? Math.max(...stresses) : 0
+  const breadth = stresses.filter(s => s >= 50).length         // subsystems simultaneously breaking
+  const contagion = breadth >= 2 ? (breadth - 1) * 6 : 0       // peak-dominant + modest contagion bump
+  const total = Math.round(Math.min(100, peak + contagion))
+  return { total, subsystems }
+}
+
+function valueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
-    vix: data.vix, treasury10y: data.treasury10y, fedfunds: data.fedfunds,
-    cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
-    hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
-    dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
-    mortgage30: data.mortgage30,
+    vix: data.vix, treasury10y: data.treasury10y, yieldCurve: data.yieldCurve,
+    cpi: data.cpi, joblessClaims: data.joblessClaims, hySpread: data.hySpread,
+    igSpread: data.igSpread, mortgage30: data.mortgage30, homePriceYoY: data.homePriceYoY,
   }
   return map[key] ?? null
 }
 
-// Returns a 0–1 stress fraction for a single indicator given its danger profile
-export function indicatorStress(key: string, value: number, profile: DangerProfile): number {
-  const ind = INDICATORS.find(i => i.key === key)
-  if (!ind?.history) return 0
-  const [min, low10, median, high90, max] = ind.history
-
-  // Normalize value to 0–1 across full historical range
-  const norm = Math.max(0, Math.min(1, (value - min) / (max - min || 1)))
-
-  switch (profile) {
-    case 'high-bad':
-      // Linear: bottom of range = 0 stress, top = full stress
-      return norm
-    case 'low-bad':
-      // Inverted: bottom of range = full stress, top = 0 stress
-      return 1 - norm
-    case 'extremes-bad': {
-      // U-shaped: stress = distance from median, scaled to each side
-      if (value <= median) {
-        // Below median — how far toward the low extreme
-        const span = median - min || 1
-        return Math.max(0, Math.min(1, (median - value) / span))
-      } else {
-        // Above median — how far toward the high extreme
-        const span = max - median || 1
-        return Math.max(0, Math.min(1, (value - median) / span))
-      }
-    }
-  }
-}
-
-export type CategoryStress = {
-  key: string
-  label: string
-  weight: number
-  contribution: number    // actual points contributed (0 to weight)
-  fillPct: number         // contribution / weight, as 0–100
-  shareOfTotal: number    // contribution / index total, as 0–100 (Drivers panel)
-  status: 'calm' | 'elevated' | 'stressed' | 'breaking'
-}
-
-export type StressResult = {
-  total: number           // 0–100
-  level: 'calm' | 'guarded' | 'elevated' | 'high' | 'severe'
-  verdict: string
-  categories: CategoryStress[]
-}
-
-function categoryStatus(fillPct: number): CategoryStress['status'] {
-  if (fillPct >= 75) return 'breaking'
-  if (fillPct >= 50) return 'stressed'
-  if (fillPct >= 25) return 'elevated'
-  return 'calm'
-}
-
-function indexLevel(total: number): { level: StressResult['level']; verdict: string } {
-  if (total < 20) return { level: 'calm', verdict: 'No — conditions are calm' }
-  if (total < 35) return { level: 'guarded', verdict: 'No — but worth watching' }
-  if (total < 50) return { level: 'elevated', verdict: 'Not yet — stress is building' }
-  if (total < 70) return { level: 'high', verdict: 'Getting close — multiple stress points' }
-  return { level: 'severe', verdict: 'Yes — broad systemic stress' }
-}
-
-// Compute just the total stress (0–100) from a plain map of indicator values.
-// Used by the historical backfill, which reconstructs the index for past dates.
-export function computeStressFromValues(values: Record<string, number | null>): number {
-  let total = 0
-  for (const cat of CATEGORIES) {
-    const stresses: number[] = []
-    for (const ind of cat.indicators) {
-      const value = values[ind.key]
-      if (value != null) stresses.push(indicatorStress(ind.key, value, ind.profile))
-    }
-    const avgStress = stresses.length ? stresses.reduce((a, b) => a + b, 0) / stresses.length : 0
-    total += avgStress * cat.weight
-  }
-  return Math.round(total)
-}
-
 export function computeStressIndex(data: MacroData): StressResult {
-  const categories: CategoryStress[] = CATEGORIES.map(cat => {
-    // Average the stress across the category's indicators
-    const stresses: number[] = []
-    for (const ind of cat.indicators) {
-      const value = getValueForKey(data, ind.key)
-      if (value != null) stresses.push(indicatorStress(ind.key, value, ind.profile))
-    }
-    const avgStress = stresses.length ? stresses.reduce((a, b) => a + b, 0) / stresses.length : 0
-    const contribution = parseFloat((avgStress * cat.weight).toFixed(1))
-    const fillPct = parseFloat((avgStress * 100).toFixed(0))
-    return {
-      key: cat.key,
-      label: cat.label,
-      weight: cat.weight,
-      contribution,
-      fillPct,
-      shareOfTotal: 0, // filled in below once total is known
-      status: categoryStatus(fillPct),
-    }
-  })
-
-  const rawTotal = categories.reduce((sum, c) => sum + c.contribution, 0)
-  const total = Math.round(rawTotal)
-
-  // Share of total — each category's slice of the current stress (Drivers panel)
-  for (const c of categories) {
-    c.shareOfTotal = rawTotal > 0 ? Math.round((c.contribution / rawTotal) * 100) : 0
-  }
-  // Sort so biggest drivers come first
-  categories.sort((a, b) => b.contribution - a.contribution)
-
+  const { total, subsystems } = computeFrom(k => valueForKey(data, k))
+  subsystems.sort((a, b) => b.stress - a.stress)
   const { level, verdict } = indexLevel(total)
+  return { total, level, verdict, categories: subsystems }
+}
 
-  return { total, level, verdict, categories }
+// Reconstruct the meter from a plain map of historical values (the backfill).
+export function computeStressFromValues(values: Record<string, number | null>): number {
+  return computeFrom(k => values[k] ?? null).total
 }

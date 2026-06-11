@@ -1,17 +1,15 @@
 // lib/backfill.ts
-// Reconstructs the Break Meter index over 20 years of history by running the
-// current stress formula backward over historical indicator values.
+// Reconstructs the Break Meter over 10 years of history by running the current
+// stress formula backward over historical indicator values.
 
 import { fetchAllHistory, type DataPoint } from './fetchHistory'
-import { computeStressFromValues, CATEGORIES } from './stressIndex'
+import { computeStressFromValues, BREAK_KEYS } from './stressIndex'
 
 export type BreakMeterPoint = { date: string; value: number }
 
-// Keys the stress index actually needs (from CATEGORIES)
+// Keys the Break Meter actually reads
 function neededKeys(): string[] {
-  const keys = new Set<string>()
-  for (const cat of CATEGORIES) for (const ind of cat.indicators) keys.add(ind.key)
-  return Array.from(keys)
+  return BREAK_KEYS
 }
 
 // Build a date→value lookup for a series, forward-filling gaps so monthly

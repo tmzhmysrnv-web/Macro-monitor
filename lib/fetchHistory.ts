@@ -9,7 +9,7 @@ const FRED_KEY = process.env.FRED_API_KEY
 
 export type DataPoint = { date: string; value: number }
 
-async function fetchFredHistory(seriesId: string, years = 20): Promise<DataPoint[]> {
+async function fetchFredHistory(seriesId: string, years = 10): Promise<DataPoint[]> {
   try {
     const start = new Date()
     start.setFullYear(start.getFullYear() - years)
@@ -26,7 +26,7 @@ async function fetchFredHistory(seriesId: string, years = 20): Promise<DataPoint
   } catch { return [] }
 }
 
-async function fetchYahooHistory(symbol: string, years = 20): Promise<DataPoint[]> {
+async function fetchYahooHistory(symbol: string, years = 10): Promise<DataPoint[]> {
   try {
     const range = `${years}y`
     const encoded = encodeURIComponent(symbol)
@@ -46,7 +46,7 @@ async function fetchYahooHistory(symbol: string, years = 20): Promise<DataPoint[
   } catch { return [] }
 }
 
-async function fetchFredYoYHistory(seriesId: string, years = 20): Promise<DataPoint[]> {
+async function fetchFredYoYHistory(seriesId: string, years = 10): Promise<DataPoint[]> {
   // Fetch extra year so we can compute YoY
   const raw = await fetchFredHistory(seriesId, years + 1)
   if (raw.length < 13) return raw
@@ -57,12 +57,12 @@ async function fetchFredYoYHistory(seriesId: string, years = 20): Promise<DataPo
   }))
 }
 
-async function fetchJoblessHistory(years = 20): Promise<DataPoint[]> {
+async function fetchJoblessHistory(years = 10): Promise<DataPoint[]> {
   const raw = await fetchFredHistory('ICSA', years)
   return raw.map(d => ({ date: d.date, value: parseFloat((d.value / 1000).toFixed(1)) }))
 }
 
-async function fetchYieldCurveHistory(years = 20): Promise<DataPoint[]> {
+async function fetchYieldCurveHistory(years = 10): Promise<DataPoint[]> {
   const [t10, t2] = await Promise.all([
     fetchFredHistory('DGS10', years),
     fetchFredHistory('DGS2', years),
@@ -77,7 +77,7 @@ async function fetchYieldCurveHistory(years = 20): Promise<DataPoint[]> {
 export type HistoryMap = Record<string, DataPoint[]>
 
 export async function fetchAllHistory(): Promise<HistoryMap> {
-  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30] =
+  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY] =
     await Promise.all([
       fetchYahooHistory('^VIX'),
       fetchFredHistory('DGS10'),
@@ -93,7 +93,8 @@ export async function fetchAllHistory(): Promise<HistoryMap> {
       fetchYahooHistory('CL=F'),
       fetchYahooHistory('HG=F'),
       fetchFredHistory('MORTGAGE30US'),
+      fetchFredYoYHistory('CSUSHPINSA'),  // home-price YoY (crash signal for the Break Meter)
     ])
 
-  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30 }
+  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY }
 }

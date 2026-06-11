@@ -5,7 +5,6 @@
 import type { MacroData } from './fetchData'
 import { fetchAllHistory } from './fetchHistory'
 import { INDICATORS } from './thresholds'
-import { CATEGORIES } from './stressIndex'
 
 export type ChangeRow = {
   key: string
@@ -51,12 +50,14 @@ function getValueForKey(data: MacroData, key: string): number | null {
   return map[key] ?? null
 }
 
-// Category weight lookup for significance ranking
+// Per-indicator importance for ranking the biggest weekly movers
+const IMPORTANCE: Record<string, number> = {
+  hySpread: 25, igSpread: 22, vix: 22, joblessClaims: 20, treasury10y: 18,
+  yieldCurve: 18, cpi: 16, mortgage30: 15, sp500: 12, oil: 10, dxy: 10,
+  fedfunds: 12, gold: 8, copper: 8,
+}
 function weightForKey(key: string): number {
-  for (const cat of CATEGORIES) {
-    if (cat.indicators.some(i => i.key === key)) return cat.weight
-  }
-  return 8 // default for indicators not in the meter (gold, sp500, etc.)
+  return IMPORTANCE[key] ?? 8
 }
 
 export async function buildWhatChanged(data: MacroData): Promise<ChangeRow[]> {

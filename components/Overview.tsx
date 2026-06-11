@@ -2,7 +2,7 @@
 // The Overview tab: Break Meter gauge + 20yr trend, What Changed This Week, Drivers of Stress
 import { useEffect, useState } from 'react'
 
-type Driver = { key: string; label: string; weight: number; contribution: number; fillPct: number; shareOfTotal: number; status: string }
+type Driver = { key: string; label: string; stress: number; status: string; driver: string }
 type ChangeRow = { key: string; label: string; why: string; current: number; weekAgo: number; unit: string; direction: string; significance: number }
 type BreakMeter = {
   total: number; level: string; verdict: string
@@ -15,7 +15,7 @@ const LEVEL_COLORS: Record<string, string> = {
   calm: '#639922', guarded: '#8FA31E', elevated: '#BA7517', high: '#D9622B', severe: '#E24B4A',
 }
 const CAT_COLORS: Record<string, string> = {
-  calm: '#639922', elevated: '#BA7517', stressed: '#D9622B', breaking: '#E24B4A',
+  calm: '#639922', watch: '#8FA31E', elevated: '#BA7517', stressed: '#D9622B', breaking: '#E24B4A',
 }
 
 function fmt(key: string, v: number): string {
@@ -69,7 +69,7 @@ function BreakMeterTrend({ history, color }: { history: { date: string; value: n
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
-        <span style={{ fontSize: '10px', fontWeight: 500, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>20-year trend</span>
+        <span style={{ fontSize: '10px', fontWeight: 500, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>10-year trend</span>
         {hv && (
           <span style={{ fontFamily: 'var(--mono)', fontSize: '12px' }}>
             <span style={{ color, fontWeight: 500 }}>{hv.value}</span>
@@ -139,7 +139,7 @@ export default function Overview() {
             <text x={CX} y={CY-6} textAnchor="middle" fontSize="32" fontWeight="500" fontFamily="var(--mono)" fill="var(--text-primary)">{bm ? bm.total : '—'}</text>
             <text x={CX} y={CY+11} textAnchor="middle" fontSize="9" fontFamily="var(--mono)" fill="var(--text-muted)">/ 100</text>
           </svg>
-          <div className="bm-label">The Break Meter</div>
+          <div className="bm-label">Break Meter</div>
           {bm && <div className="bm-verdict" style={{ color }}>{bm.verdict}</div>}
         </div>
         <div className="bm-trend">
@@ -178,15 +178,15 @@ export default function Overview() {
           {bm && bm.drivers.map(d => (
             <div className="driver-row" key={d.key}>
               <div className="driver-head">
-                <span className="driver-label">{d.label}</span>
-                <span className="driver-pct" style={{ color: CAT_COLORS[d.status] }}>{d.shareOfTotal}%</span>
+                <span className="driver-label">{d.label}{d.driver ? <span className="driver-sub"> · {d.driver}</span> : null}</span>
+                <span className="driver-pct" style={{ color: CAT_COLORS[d.status] }}>{d.stress}</span>
               </div>
               <div className="driver-bar">
-                <div className="driver-fill" style={{ width: `${d.shareOfTotal}%`, background: CAT_COLORS[d.status] }} />
+                <div className="driver-fill" style={{ width: `${d.stress}%`, background: CAT_COLORS[d.status] }} />
               </div>
             </div>
           ))}
-          {bm && <div className="driver-note">Share of current Break Meter reading. Biggest pressure sources first.</div>}
+          {bm && <div className="driver-note">Each subsystem scored 0–100 by how close it is to breaking. The meter tracks the worst one, nudged up when several break at once.</div>}
         </div>
       </div>
 
@@ -213,6 +213,7 @@ export default function Overview() {
         .driver-row { margin-bottom: 11px; }
         .driver-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
         .driver-label { font-size: 12px; color: var(--text-secondary); }
+        .driver-sub { color: var(--text-muted); font-size: 11px; }
         .driver-pct { font-size: 12px; font-family: var(--mono); font-weight: 500; }
         .driver-bar { height: 6px; background: var(--border-med); border-radius: 3px; overflow: hidden; }
         .driver-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
