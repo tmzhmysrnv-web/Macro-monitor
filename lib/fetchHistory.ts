@@ -2,6 +2,8 @@
 // Fetches multi-year historical time series from FRED + Yahoo Finance
 // Used for the interactive chart on each card
 
+import { fredFetch } from './fred'
+
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
 
@@ -15,8 +17,8 @@ async function fetchFredHistory(seriesId: string, years = 20): Promise<DataPoint
     // limit=100000 (FRED max): daily series have ~5200 obs over 20yrs; the
     // previous limit=1000 with asc sort truncated them to the oldest ~4 years.
     const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=100000`
-    const res = await fetch(url, { next: { revalidate: 86400 } }) // cache 24h
-    if (!res.ok) return []
+    const res = await fredFetch(url, { next: { revalidate: 86400 } }) // cache 24h
+    if (!res || !res.ok) return []
     const data = await res.json()
     return (data.observations || [])
       .filter((o: { value: string; date: string }) => o.value !== '.' && o.value !== '')

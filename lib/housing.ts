@@ -11,6 +11,8 @@
 //   Foreclosure rate       -> mortgage delinquency (DRSFRMACBS)
 //   Payment-to-income      -> NAR Housing Affordability Index (FIXHAI)
 
+import { fredFetch } from './fred'
+
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
 
@@ -19,8 +21,8 @@ export type Obs = { date: string; value: number }
 async function fredSeries(seriesId: string, limit: number, units = 'lin'): Promise<Obs[]> {
   try {
     const url = `${FRED_BASE}?series_id=${seriesId}&units=${units}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=${limit}`
-    const res = await fetch(url, { next: { revalidate: 3600 } }) // cache 1h
-    if (!res.ok) return []
+    const res = await fredFetch(url, { next: { revalidate: 3600 } }) // cache 1h
+    if (!res || !res.ok) return []
     const data = await res.json()
     return (data.observations || [])
       .filter((o: { value: string }) => o.value !== '.' && o.value !== '')

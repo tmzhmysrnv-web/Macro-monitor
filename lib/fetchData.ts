@@ -1,4 +1,6 @@
 // lib/fetchData.ts
+import { fredFetch } from './fred'
+
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
 
@@ -16,8 +18,8 @@ const FRED_SERIES = {
 async function fetchFredSeries(seriesId: string, units = 'lin', limit = 5): Promise<number | null> {
   try {
     const url = `${FRED_BASE}?series_id=${seriesId}&units=${units}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=${limit}`
-    const res = await fetch(url, { next: { revalidate: 900 } })
-    if (!res.ok) return null
+    const res = await fredFetch(url, { next: { revalidate: 900 } })
+    if (!res || !res.ok) return null
     const data = await res.json()
     for (const o of (data.observations || [])) {
       if (o.value !== '.' && o.value !== '') return parseFloat(o.value)
