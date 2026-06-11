@@ -160,10 +160,17 @@ export type Tone = 'good' | 'neutral' | 'warn' | 'bad'
 export type Category = {
   key: string
   label: string
-  status: string          // human label per spec (Healthy / Constrained / ...)
+  status: string          // meaningful state label (Pressured / Tight / Strong / ...)
   tone: Tone
+  fill: number            // 0..1 health for the progress bar (1 = healthiest)
   signals: string[]       // plain-English evidence lines shown in the UI
   metrics: MetricCard[]   // underlying metric values, shown as cards on expand
+}
+
+// Tone → progress-bar fill (higher = healthier)
+const TONE_FILL: Record<Tone, number> = { good: 0.9, neutral: 0.5, warn: 0.42, bad: 0.18 }
+function withFill(c: Omit<Category, 'fill'>): Category {
+  return { ...c, fill: TONE_FILL[c.tone] }
 }
 
 // +1 favorable, -1 unfavorable, 0 neutral/unknown
@@ -172,7 +179,7 @@ function sig(cond: boolean | null, favorable: boolean): number {
   return favorable ? 1 : -1
 }
 
-function scoreAffordability(d: HousingData): Category {
+function scoreAffordability(d: HousingData): Omit<Category, 'fill'> {
   const signals: string[] = []
   // Level-aware: the ABSOLUTE state of affordability drives the score, with
   // recent direction as a secondary modifier. (A flat trend at a punishing
@@ -208,8 +215,8 @@ function scoreAffordability(d: HousingData): Category {
     else if (gap <= -0.5) { level -= 1; signals.push(`Home prices growing ${Math.abs(gap)}pp faster than wages — the gap is still widening`) }
   }
 
-  const status = level >= 2 ? 'Healthy' : level >= 0 ? 'Moderate' : level >= -2 ? 'Stretched' : 'Poor'
-  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Moderate' ? 'neutral' : status === 'Stretched' ? 'warn' : 'bad'
+  const status = level >= 1 ? 'Improving' : level <= -2 ? 'Deteriorating' : 'Pressured'
+  const tone: Tone = status === 'Improving' ? 'good' : status === 'Pressured' ? 'warn' : 'bad'
   const metrics: MetricCard[] = [
     { label: '30Y Mortgage Rate', value: fPct(rate), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
     { label: 'Affordability Index', value: fIndex(idx), sub: subYoY(d.affordabilityIndex) ?? (d.affordabilityIndex.chg3m != null ? `${d.affordabilityIndex.chg3m >= 0 ? '+' : ''}${d.affordabilityIndex.chg3m} 3mo` : undefined) },
@@ -220,7 +227,7 @@ function scoreAffordability(d: HousingData): Category {
   return { key: 'affordability', label: 'Affordability', status, tone, signals, metrics }
 }
 
-function scoreSupply(d: HousingData): Category {
+function scoreSupply(d: HousingData): Omit<Category, 'fill'> {
   const signals: string[] = []
   let score = 0
   score += sig(d.activeListings.yoyPct != null && d.activeListings.yoyPct >= 5, true)
@@ -235,8 +242,8 @@ function scoreSupply(d: HousingData): Category {
   score += sig(d.permits.yoyPct != null && d.permits.yoyPct >= 3, true)
   score += sig(d.permits.yoyPct != null && d.permits.yoyPct <= -3, false)
   if (d.permits.yoyPct != null) signals.push(`Building permits ${d.permits.yoyPct >= 0 ? '+' : ''}${d.permits.yoyPct}% YoY`)
-  const status = score >= 2 ? 'Healthy' : score <= -2 ? 'Constrained' : 'Neutral'
-  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Constrained' ? 'warn' : 'neutral'
+  const status = score >= 2 ? 'Expanding' : score <= -2 ? 'Tight' : 'Healthy'
+  const tone: Tone = status === 'Tight' ? 'warn' : 'good' // Expanding & Healthy both green
   const metrics: MetricCard[] = [
     { label: 'Active Listings', value: fCount(d.activeListings.latest), sub: subYoY(d.activeListings) },
     { label: 'New Listings', value: fCount(d.newListings.latest), sub: subYoY(d.newListings) },
@@ -247,7 +254,7 @@ function scoreSupply(d: HousingData): Category {
   return { key: 'supply', label: 'Supply', status, tone, signals, metrics }
 }
 
-function scoreDemand(d: HousingData): Category {
+function scoreDemand(d: HousingData): Omit<Category, 'fill'> {
   const signals: string[] = []
   let score = 0
   score += sig(d.existingSales.yoyPct != null && d.existingSales.yoyPct >= 3, true)
@@ -265,7 +272,7 @@ function scoreDemand(d: HousingData): Category {
   return { key: 'demand', label: 'Demand', status, tone, signals, metrics }
 }
 
-function scoreHeat(d: HousingData): Category {
+function scoreHeat(d: HousingData): Omit<Category, 'fill'> {
   const signals: string[] = []
   let score = 0
   let severe = 0
@@ -301,7 +308,7 @@ function scoreHeat(d: HousingData): Category {
   return { key: 'heat', label: 'Market Heat', status, tone, signals, metrics }
 }
 
-function scoreStress(d: HousingData): Category {
+function scoreStress(d: HousingData): Omit<Category, 'fill'> {
   const signals: string[] = []
   const mYoY = d.mortgageDelinq.yoyPct
   const cYoY = d.ccDelinq.yoyPct
@@ -309,10 +316,10 @@ function scoreStress(d: HousingData): Category {
   if (mLevel != null) signals.push(`Mortgage delinquencies at ${mLevel}%${mYoY != null ? ` (${mYoY >= 0 ? '+' : ''}${mYoY}% YoY)` : ''}`)
   if (d.ccDelinq.latest != null) signals.push(`Card delinquencies at ${d.ccDelinq.latest}%${cYoY != null ? ` (${cYoY >= 0 ? '+' : ''}${cYoY}% YoY)` : ''}`)
   if (d.debtService.latest != null) signals.push(`Household debt service at ${d.debtService.latest.toFixed(1)}% of income`)
-  let status: string = 'Stable'
+  let status: string = 'Low'
   if ((mYoY != null && mYoY >= 30) || (mLevel != null && mLevel >= 5)) status = 'Stressed'
   else if ((mYoY != null && mYoY >= 10) || (cYoY != null && cYoY >= 10)) status = 'Elevated'
-  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good' // Stable = green
+  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good' // Low = green
   const metrics: MetricCard[] = [
     { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), sub: subYoY(d.mortgageDelinq) },
     { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), sub: subYoY(d.ccDelinq) },
@@ -331,10 +338,10 @@ function overallStatus(c: Record<string, Category>): HousingStatus {
     return { emoji: '🚨', label: 'Housing Correction', tone: 'crisis' }
   if (str === 'Stressed') return { emoji: '🔴', label: 'Financial Stress', tone: 'bad' }
   if (dem === 'Weakening' && heat === 'Frozen') return { emoji: '🔴', label: 'Demand Shock', tone: 'bad' }
-  if ((aff === 'Poor' || aff === 'Stretched') && dem !== 'Strong') return { emoji: '🟠', label: 'Affordability Crunch', tone: 'warn' }
-  if (heat === 'Cooling' || dem === 'Weakening' || sup === 'Constrained')
+  if ((aff === 'Deteriorating' || aff === 'Pressured') && dem !== 'Strong') return { emoji: '🟠', label: 'Affordability Crunch', tone: 'warn' }
+  if (heat === 'Cooling' || dem === 'Weakening' || sup === 'Tight')
     return { emoji: '🟠', label: 'Recovery Cooling', tone: 'warn' }
-  if (aff === 'Healthy' && dem === 'Strong') return { emoji: '🟢', label: 'Healthy Expansion', tone: 'good' }
+  if (aff === 'Improving' && dem === 'Strong') return { emoji: '🟢', label: 'Healthy Expansion', tone: 'good' }
   return { emoji: '🟢', label: 'Balanced Market', tone: 'good' }
 }
 
@@ -462,27 +469,119 @@ function buildWatching(d: HousingData, alerts: HousingAlert[]): WatchItem[] {
   return items.sort((a, b) => b.proximity - a.proximity)
 }
 
+// ── Biggest risk / biggest stabilizer ─────────────────────────────────
+const RISK_PHRASE: Record<string, string> = {
+  'affordability:Deteriorating': 'Affordability deteriorating — rates and prices keep outpacing wages.',
+  'affordability:Pressured': 'Stretched affordability is holding buyers back.',
+  'supply:Tight': 'Tightening inventory is pushing prices up.',
+  'demand:Weakening': 'Buyer demand is pulling back.',
+  'heat:Cooling': 'The market is cooling — homes are sitting longer.',
+  'heat:Frozen': 'Sales activity is freezing up.',
+  'stress:Elevated': 'Mortgage delinquencies are creeping higher.',
+  'stress:Stressed': 'Household financial stress is rising.',
+}
+const STABILIZER_PHRASE: Record<string, string> = {
+  'stress:Low': 'Low delinquencies — household balance sheets are healthy.',
+  'demand:Strong': 'Strong buyer demand.',
+  'demand:Stable': 'Steady buyer demand.',
+  'supply:Expanding': 'Growing inventory is easing competition.',
+  'supply:Healthy': 'Adequate for-sale inventory.',
+  'heat:Hot': 'A brisk sales pace.',
+  'heat:Balanced': 'Balanced negotiating conditions.',
+  'affordability:Improving': 'Affordability is improving.',
+}
+const TONE_RANK: Record<Tone, number> = { good: 0, neutral: 1, warn: 2, bad: 3 }
+// Preference order when several categories tie as the top stabilizer
+const STABILIZER_PREF = ['stress', 'demand', 'supply', 'heat', 'affordability']
+
+function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: string; stabilizer: string } {
+  const worst = [...cats].sort((a, b) => TONE_RANK[b.tone] - TONE_RANK[a.tone])[0]
+  const risk = worst && TONE_RANK[worst.tone] >= 2
+    ? (RISK_PHRASE[`${worst.key}:${worst.status}`] ?? `${worst.label} is under pressure.`)
+    : watching[0]
+      ? `${watching[0].label} approaching its alert — ${watching[0].text}.`
+      : 'No major risks building right now.'
+
+  const goods = cats.filter(c => c.tone === 'good')
+  const pool = goods.length ? goods : [...cats].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])
+  const best = pool.sort((a, b) => STABILIZER_PREF.indexOf(a.key) - STABILIZER_PREF.indexOf(b.key))[0]
+  const stabilizer = best
+    ? (STABILIZER_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`)
+    : 'No clear stabilizers right now.'
+  return { risk, stabilizer }
+}
+
+// Most recent housing alert event (for "Last alert" when none are active).
+// Uses the 30Y rate crossing 7% — the headline housing alert with weekly history.
+function buildLastAlert(d: HousingData): string | null {
+  for (const o of d.mortgage30.history) {
+    if (o.value >= 7) {
+      const when = new Date(o.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      return `Mortgage rates above 7% — last seen ${when}.`
+    }
+  }
+  return null
+}
+
 // ── Public entry point ────────────────────────────────────────────────
 export type HousingModel = {
+  available: boolean      // false when core FRED series are missing (rate-limited / down)
   status: HousingStatus
+  subtitle: string        // one-line plain-English explanation of the status
+  risk: string            // biggest risk callout
+  stabilizer: string      // biggest stabilizer callout
   categories: Category[]
   alerts: HousingAlert[]
+  lastAlert: string | null
   watching: WatchItem[]
   data: HousingData
 }
 
+const SUBTITLES: Record<string, string> = {
+  'Healthy Expansion': 'Sales and construction are rising with affordability intact.',
+  'Balanced Market': 'Supply and demand remain in equilibrium.',
+  'Recovery Cooling': 'Sales are weakening under elevated mortgage rates.',
+  'Affordability Crunch': 'Home prices and rates continue to outpace wages.',
+  'Demand Shock': 'Buyers are pulling back sharply across the market.',
+  'Financial Stress': 'Mortgage delinquencies are climbing toward danger.',
+  'Housing Correction': 'Multiple parts of the market are breaking down at once.',
+  'Data Unavailable': 'Live housing data is temporarily unavailable.',
+}
+
 export async function buildHousingModel(): Promise<HousingModel> {
   const data = await fetchHousingData()
+
+  // Data-unavailable guard: the 30Y rate is the keystone series. If it's
+  // missing (FRED rate-limited or down), don't fabricate a reassuring status.
+  if (data.mortgage30.latest == null) {
+    return {
+      available: false,
+      status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
+      subtitle: SUBTITLES['Data Unavailable'],
+      risk: '', stabilizer: '',
+      categories: [], alerts: [], lastAlert: null, watching: [], data,
+    }
+  }
+
   const categories = [
     scoreAffordability(data),
     scoreSupply(data),
     scoreDemand(data),
     scoreHeat(data),
     scoreStress(data),
-  ]
+  ].map(withFill)
   const byKey = Object.fromEntries(categories.map(c => [c.key, c]))
   const status = overallStatus(byKey as Record<string, Category>)
   const alerts = buildAlerts(data)
   const watching = buildWatching(data, alerts)
-  return { status, categories, alerts, watching, data }
+  const { risk, stabilizer } = riskAndStabilizer(categories, watching)
+  return {
+    available: true,
+    status,
+    subtitle: SUBTITLES[status.label] ?? '',
+    risk, stabilizer,
+    categories, alerts,
+    lastAlert: buildLastAlert(data),
+    watching, data,
+  }
 }

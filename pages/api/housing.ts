@@ -10,13 +10,9 @@ const SUMMARY_TTL = 60 * 60 * 1000 // 1h
 // Deterministic fallback summary assembled from the computed statuses —
 // used when no ANTHROPIC_API_KEY is set or the API call fails.
 function fallbackSummary(m: HousingModel): string {
-  const by = Object.fromEntries(m.categories.map(c => [c.key, c]))
-  const lead = `Housing is in a "${m.status.label}" state.`
-  const aff = by.affordability.signals[0] ? ` ${by.affordability.signals[0]}.` : ''
-  const dem = by.demand.signals[0] ? ` ${by.demand.signals[0]}.` : ''
-  const sup = by.supply.signals[0] ? ` ${by.supply.signals[0]}.` : ''
-  const risk = m.watching[0] ? ` Closest trigger: ${m.watching[0].label.toLowerCase()} — ${m.watching[0].text}.` : ''
-  return `${lead}${aff}${dem}${sup}${risk}`
+  if (!m.available) return 'Live housing data is temporarily unavailable. Check back shortly.'
+  // Two short sentences: the verdict, then the single biggest driver.
+  return `${m.subtitle} ${m.risk}`.trim()
 }
 
 async function generateHousingSummary(m: HousingModel): Promise<string> {
@@ -42,7 +38,7 @@ ${alertText}
 Approaching thresholds:
 ${watchText}
 
-Write a 100-150 word plain-English summary that explains: what changed recently, why it matters, the key risks, and the key stabilizers. Be direct and honest — not alarmist, not falsely reassuring. Flowing prose only, no bullet points, no headers. No investment advice. Do not repeat the status label verbatim more than once.`
+Write a SHORT summary — 2 to 4 sentences, under 55 words total — that a reader can absorb in under 10 seconds. Lead with the bottom line (is housing healthy and why), then the single most important driver to watch. Be direct and honest — not alarmist, not falsely reassuring. Plain English, flowing prose, no bullet points, no headers, no preamble. No investment advice. Do not repeat the status label verbatim.`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -53,7 +49,7 @@ Write a 100-150 word plain-English summary that explains: what changed recently,
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      max_tokens: 200,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -71,7 +67,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const model = await buildHousingModel()
 
     let summary: string
-    if (cachedSummary && Date.now() - cachedSummary.at < SUMMARY_TTL) {
+    if (!model.available) {
+      summary = fallbackSummary(model)
+    } else if (cachedSummary && Date.now() - cachedSummary.at < SUMMARY_TTL) {
       summary = cachedSummary.text
     } else {
       try {
@@ -85,10 +83,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
     res.status(200).json({
+      available: model.available,
       status: model.status,
+      subtitle: model.subtitle,
       summary,
+      risk: model.risk,
+      stabilizer: model.stabilizer,
       categories: model.categories,
       alerts: model.alerts,
+      lastAlert: model.lastAlert,
       watching: model.watching,
       fetchedAt: new Date().toISOString(),
     })
