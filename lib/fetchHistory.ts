@@ -12,7 +12,9 @@ async function fetchFredHistory(seriesId: string, years = 20): Promise<DataPoint
     const start = new Date()
     start.setFullYear(start.getFullYear() - years)
     const startStr = start.toISOString().split('T')[0]
-    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=1000`
+    // limit=100000 (FRED max): daily series have ~5200 obs over 20yrs; the
+    // previous limit=1000 with asc sort truncated them to the oldest ~4 years.
+    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=100000`
     const res = await fetch(url, { next: { revalidate: 86400 } }) // cache 24h
     if (!res.ok) return []
     const data = await res.json()
@@ -73,7 +75,7 @@ async function fetchYieldCurveHistory(years = 20): Promise<DataPoint[]> {
 export type HistoryMap = Record<string, DataPoint[]>
 
 export async function fetchAllHistory(): Promise<HistoryMap> {
-  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper] =
+  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30] =
     await Promise.all([
       fetchYahooHistory('^VIX'),
       fetchFredHistory('DGS10'),
@@ -88,7 +90,8 @@ export async function fetchAllHistory(): Promise<HistoryMap> {
       fetchYahooHistory('GC=F'),
       fetchYahooHistory('CL=F'),
       fetchYahooHistory('HG=F'),
+      fetchFredHistory('MORTGAGE30US'),
     ])
 
-  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper }
+  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30 }
 }

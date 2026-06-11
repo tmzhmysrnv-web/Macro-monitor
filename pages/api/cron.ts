@@ -6,6 +6,7 @@ import { fetchAllData, MacroData } from '../../lib/fetchData'
 import { INDICATORS, getStatus } from '../../lib/thresholds'
 import { sendAllAlerts, AlertPayload } from '../../lib/sendAlert'
 import { generateSummary } from './summary'
+import { computeStressIndex } from '../../lib/stressIndex'
 
 const lastAlerted: Record<string, number> = {}
 const ALERT_COOLDOWN_MS = 20 * 60 * 60 * 1000 // 20 hours
@@ -16,6 +17,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
     dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
+    mortgage30: data.mortgage30,
   }
   return map[key] ?? null
 }

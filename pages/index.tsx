@@ -4,6 +4,7 @@ import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
 import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus } from '../lib/thresholds'
 import type { DataPoint } from '../lib/fetchHistory'
+import Overview from '../components/Overview'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -11,6 +12,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
     dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
+    mortgage30: data.mortgage30,
   }
   return map[key] ?? null
 }
@@ -32,7 +34,7 @@ function formatValue(key: string, value: number | null): string {
   if (key === 'dxy') return value.toFixed(2)
   if (key === 'joblessClaims') return `${value.toFixed(0)}k`
   if (key === 'yieldCurve') return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
-  if (['treasury10y', 'fedfunds', 'cpi', 'hySpread', 'igSpread'].includes(key)) return `${value.toFixed(2)}%`
+  if (['treasury10y', 'fedfunds', 'cpi', 'hySpread', 'igSpread', 'mortgage30'].includes(key)) return `${value.toFixed(2)}%`
   return value.toFixed(1)
 }
 
@@ -44,10 +46,23 @@ const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: s
 
 const SECTIONS = [
   { label: 'Volatility & Risk',    keys: ['vix', 'hySpread', 'igSpread'] },
-  { label: 'Rates & Yield Curve',  keys: ['treasury10y', 'fedfunds', 'yieldCurve'] },
+  { label: 'Rates & Housing',      keys: ['treasury10y', 'fedfunds', 'yieldCurve', 'mortgage30'] },
   { label: 'Inflation & Labor',    keys: ['cpi', 'joblessClaims'] },
   { label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'oil', 'copper'] },
   { label: 'Markets',              keys: ['sp500'] },
+]
+
+// Tab definitions — Overview is special; the rest filter the card sections
+const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'bonds',     label: 'Bonds',     sections: [{ label: 'Rates & Yield Curve', keys: ['treasury10y', 'fedfunds', 'yieldCurve'] }] },
+  { id: 'housing',   label: 'Housing',   sections: [{ label: 'Housing', keys: ['mortgage30', 'treasury10y'] }] },
+  { id: 'credit',    label: 'Credit',    sections: [{ label: 'Credit Spreads', keys: ['hySpread', 'igSpread'] }] },
+  { id: 'inflation', label: 'Inflation', sections: [{ label: 'Inflation', keys: ['cpi', 'oil'] }] },
+  { id: 'labor',     label: 'Labor',     sections: [{ label: 'Labor Market', keys: ['joblessClaims'] }] },
+  { id: 'markets',   label: 'Markets',   sections: [{ label: 'Equities & Volatility', keys: ['sp500', 'vix'] }] },
+  { id: 'global',    label: 'Global',    sections: [{ label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'oil', 'copper'] }] },
+  { id: 'all',       label: 'All Data',  sections: SECTIONS },
 ]
 
 // ── Mini sparkline SVG ────────────────────────────────────────────────
@@ -234,7 +249,7 @@ function PercentileBar({ percentile, opportunityDirection }: { percentile: numbe
   )
 }
 
-// ── Main dashboard ────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -243,6 +258,7 @@ export default function Dashboard() {
   const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string }>>([])
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
+  const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
     fetch('/api/data')
@@ -373,7 +389,26 @@ export default function Dashboard() {
         .card-threshold { font-size: 10px; margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); font-family: var(--mono); color: var(--text-muted); }
         .opportunity-banner { font-size: 11px; padding: 6px 9px; border-radius: 5px; margin-top: 6px; background: #EAF3DE; color: #3B6D11; border: 0.5px solid #B8DCA0; font-family: var(--mono); line-height: 1.5; }
 
+        .stress-box { border: 0.5px solid var(--border); background: var(--card-bg); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.75rem; }
+        .stress-grid { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+        .stress-gauge-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .stress-verdict { font-size: 13px; font-weight: 500; text-align: center; }
+        .stress-change { font-size: 11px; font-family: var(--mono); }
+        .stress-trend-col { flex: 1; min-width: 180px; }
+        .stress-trend-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-bottom: 8px; }
+        .stress-trend-empty { font-size: 11px; color: var(--text-muted); font-family: var(--mono); padding: 1rem 0; }
+        .stress-cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 16px; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 0.5px solid var(--border); }
+        .stress-cat-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+        .stress-cat-label { font-size: 11px; color: var(--text-secondary); }
+        .stress-cat-pts { font-size: 11px; font-family: var(--mono); font-weight: 500; }
+        .stress-cat-bar { height: 4px; background: var(--border-med); border-radius: 2px; overflow: hidden; }
+        .stress-cat-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
         .calendar-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.75rem; }
+        .tabbar { display: flex; gap: 2px; overflow-x: auto; margin-bottom: 1.5rem; border-bottom: 0.5px solid var(--border); padding-bottom: 0; -webkit-overflow-scrolling: touch; }
+        .tab { font-family: var(--sans); font-size: 13px; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
+        .tab:hover { color: var(--text-secondary); }
+        .tab.active { color: var(--text-primary); border-bottom-color: var(--text-primary); font-weight: 500; }
         .event-pill {
           font-size: 11px; font-family: var(--mono); padding: 4px 10px;
           border-radius: 20px; border: 0.5px solid var(--border);
@@ -413,44 +448,65 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Summary */}
-        <div className={`summary-box ${overallStatus !== 'ok' ? overallStatus : ''}`}>
-          <div className="summary-label">
-            Summary
-          </div>
-          {aiSummary ? (
-            <>
-              <div className="summary-text">{aiSummary.text}</div>
-              <div className="summary-time">
-                Generated {new Date(aiSummary.generatedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div className="skeleton" style={{ height: '13px', width: '95%' }} />
-              <div className="skeleton" style={{ height: '13px', width: '88%' }} />
-              <div className="skeleton" style={{ height: '13px', width: '72%' }} />
-            </div>
-          )}
+        {/* Tab navigation */}
+        <div className="tabbar">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Upcoming events strip */}
-        {events.length > 0 && (
-          <div className="calendar-strip">
-            {events.slice(0, 5).map((e, i) => {
-              const cls = e.daysUntil === 0 ? 'today' : e.daysUntil <= 3 ? 'soon' : ''
-              const when = e.daysUntil === 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : `in ${e.daysUntil}d`
-              return (
-                <span key={i} className={`event-pill ${cls}`} title={e.description}>
-                  <span style={{ opacity: 0.6 }}>📅</span>
-                  {e.name} <span style={{ opacity: 0.6 }}>·</span> {when}
-                </span>
-              )
-            })}
-          </div>
+        {/* ── OVERVIEW TAB ── */}
+        {activeTab === 'overview' && (
+          <>
+            <Overview />
+
+            {/* Summary */}
+            <div className={`summary-box ${overallStatus !== 'ok' ? overallStatus : ''}`}>
+              <div className="summary-label">
+                Summary
+              </div>
+              {aiSummary ? (
+                <>
+                  <div className="summary-text">{aiSummary.text}</div>
+                  <div className="summary-time">
+                    Generated {new Date(aiSummary.generatedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div className="skeleton" style={{ height: '13px', width: '95%' }} />
+                  <div className="skeleton" style={{ height: '13px', width: '88%' }} />
+                  <div className="skeleton" style={{ height: '13px', width: '72%' }} />
+                </div>
+              )}
+            </div>
+
+            {/* Upcoming events strip */}
+            {events.length > 0 && (
+              <div className="calendar-strip">
+                {events.slice(0, 5).map((e, i) => {
+                  const cls = e.daysUntil === 0 ? 'today' : e.daysUntil <= 3 ? 'soon' : ''
+                  const when = e.daysUntil === 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : `in ${e.daysUntil}d`
+                  return (
+                    <span key={i} className={`event-pill ${cls}`} title={e.description}>
+                      <span style={{ opacity: 0.6 }}>📅</span>
+                      {e.name} <span style={{ opacity: 0.6 }}>·</span> {when}
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+          </>
         )}
 
-        {SECTIONS.map(section => (
+        {/* ── CATEGORY TABS — filtered card sections ── */}
+        {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (
           <div className="section" key={section.label}>
             <div className="section-label">{section.label}</div>
             <div className="grid">

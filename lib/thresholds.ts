@@ -153,6 +153,17 @@ export const INDICATORS: Indicator[] = [
     history: [0.6, 2.0, 3.2, 4.2, 5.1],
     opportunityDirection: 'high-good',
   },
+  {
+    key: 'mortgage30',
+    label: '30Y Mortgage',
+    unit: '%',
+    unitPosition: 'suffix',
+    alertAbove: 8.0,
+    warnBuffer: 0.1,
+    description: '30-year fixed mortgage rate — housing affordability gauge',
+    history: [2.65, 3.5, 5.0, 7.0, 8.5],
+    opportunityDirection: 'low-good',
+  },
 ]
 
 export type AlertStatus = 'ok' | 'warn' | 'alert'

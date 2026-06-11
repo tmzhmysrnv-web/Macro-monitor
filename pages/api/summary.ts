@@ -13,6 +13,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
     dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
+    mortgage30: data.mortgage30,
   }
   return map[key] ?? null
 }

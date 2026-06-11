@@ -10,6 +10,7 @@ const FRED_SERIES = {
   joblessClaims:'ICSA',
   hySpread:     'BAMLH0A0HYM2',
   igSpread:     'BAMLC0A0CM',
+  mortgage30:   'MORTGAGE30US',   // 30-year fixed mortgage rate (housing affordability)
 }
 
 async function fetchFredSeries(seriesId: string, units = 'lin', limit = 5): Promise<number | null> {
@@ -64,11 +65,12 @@ export type MacroData = {
   oilChange:     number | null
   copper:        number | null
   copperChange:  number | null
+  mortgage30:    number | null
   fetchedAt:     string
 }
 
 export async function fetchAllData(): Promise<MacroData> {
-  const [t10y, t2y, ff, cpi, claims, hy, ig, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
+  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
@@ -76,6 +78,7 @@ export async function fetchAllData(): Promise<MacroData> {
     fetchFredSeries(FRED_SERIES.joblessClaims),
     fetchFredSeries(FRED_SERIES.hySpread),
     fetchFredSeries(FRED_SERIES.igSpread),
+    fetchFredSeries(FRED_SERIES.mortgage30),
     fetchYahoo('^VIX'),
     fetchYahoo('^GSPC'),
     fetchYahoo('DX-Y.NYB'),
@@ -104,6 +107,7 @@ export async function fetchAllData(): Promise<MacroData> {
     oilChange:     oilR?.change ?? null,
     copper:        copperR != null ? parseFloat(copperR.value.toFixed(3)) : null,
     copperChange:  copperR?.change ?? null,
+    mortgage30:    mort,
     fetchedAt:     new Date().toISOString(),
   }
 }
