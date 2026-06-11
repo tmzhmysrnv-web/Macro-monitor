@@ -5,6 +5,7 @@ import type { MacroData } from '../lib/fetchData'
 import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus } from '../lib/thresholds'
 import type { DataPoint } from '../lib/fetchHistory'
 import Overview from '../components/Overview'
+import Housing from '../components/Housing'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -56,7 +57,7 @@ const SECTIONS = [
 const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'bonds',     label: 'Bonds',     sections: [{ label: 'Rates & Yield Curve', keys: ['treasury10y', 'fedfunds', 'yieldCurve'] }] },
-  { id: 'housing',   label: 'Housing',   sections: [{ label: 'Housing', keys: ['mortgage30', 'treasury10y'] }] },
+  { id: 'housing',   label: 'Housing' }, // renders the <Housing /> status model, not indicator cards
   { id: 'credit',    label: 'Credit',    sections: [{ label: 'Credit Spreads', keys: ['hySpread', 'igSpread'] }] },
   { id: 'inflation', label: 'Inflation', sections: [{ label: 'Inflation', keys: ['cpi', 'oil'] }] },
   { id: 'labor',     label: 'Labor',     sections: [{ label: 'Labor Market', keys: ['joblessClaims'] }] },
@@ -504,6 +505,9 @@ export default function Dashboard() {
             )}
           </>
         )}
+
+        {/* ── HOUSING TAB — status model, not a dashboard ── */}
+        {activeTab === 'housing' && <Housing />}
 
         {/* ── CATEGORY TABS — filtered card sections ── */}
         {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (
