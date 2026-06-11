@@ -139,7 +139,9 @@ export async function fetchHousingData(): Promise<HousingData> {
 }
 
 // ── Category scoring ──────────────────────────────────────────────────
-export type Tone = 'good' | 'warn' | 'bad'
+// good=favorable (green), neutral=middle/no signal (gray),
+// warn=deteriorating (orange), bad=severe (red)
+export type Tone = 'good' | 'neutral' | 'warn' | 'bad'
 export type Category = {
   key: string
   label: string
@@ -179,7 +181,7 @@ function scoreAffordability(d: HousingData): Category {
     else signals.push('Affordability index stable over 3 months')
   }
   const status = score >= 2 ? 'Healthy' : score <= -2 ? 'Deteriorating' : 'Neutral'
-  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Deteriorating' ? 'bad' : 'warn'
+  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Deteriorating' ? 'warn' : 'neutral'
   return { key: 'affordability', label: 'Affordability', status, tone, signals }
 }
 
@@ -199,7 +201,7 @@ function scoreSupply(d: HousingData): Category {
   score += sig(d.permits.yoyPct != null && d.permits.yoyPct <= -3, false)
   if (d.permits.yoyPct != null) signals.push(`Building permits ${d.permits.yoyPct >= 0 ? '+' : ''}${d.permits.yoyPct}% YoY`)
   const status = score >= 2 ? 'Healthy' : score <= -2 ? 'Constrained' : 'Neutral'
-  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Constrained' ? 'bad' : 'warn'
+  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Constrained' ? 'warn' : 'neutral'
   return { key: 'supply', label: 'Supply', status, tone, signals }
 }
 
@@ -213,7 +215,7 @@ function scoreDemand(d: HousingData): Category {
   score += sig(d.newSales.yoyPct != null && d.newSales.yoyPct <= -3, false)
   if (d.newSales.yoyPct != null) signals.push(`New home sales ${d.newSales.yoyPct >= 0 ? '+' : ''}${d.newSales.yoyPct}% YoY`)
   const status = score >= 2 ? 'Strong' : score <= -2 ? 'Weakening' : 'Stable'
-  const tone: Tone = status === 'Strong' ? 'good' : status === 'Weakening' ? 'bad' : 'warn'
+  const tone: Tone = status === 'Strong' ? 'good' : status === 'Weakening' ? 'warn' : 'neutral'
   return { key: 'demand', label: 'Demand', status, tone, signals }
 }
 
@@ -244,7 +246,7 @@ function scoreHeat(d: HousingData): Category {
   else if (score <= -2 && severe >= 1) status = 'Frozen'
   else if (score <= -1) status = 'Cooling'
   else status = 'Balanced'
-  const tone: Tone = status === 'Frozen' ? 'bad' : status === 'Cooling' ? 'warn' : 'good'
+  const tone: Tone = status === 'Frozen' ? 'bad' : status === 'Cooling' ? 'warn' : status === 'Hot' ? 'good' : 'neutral'
   return { key: 'heat', label: 'Market Heat', status, tone, signals }
 }
 
@@ -259,7 +261,7 @@ function scoreStress(d: HousingData): Category {
   let status: string = 'Stable'
   if ((mYoY != null && mYoY >= 30) || (mLevel != null && mLevel >= 5)) status = 'Stressed'
   else if ((mYoY != null && mYoY >= 10) || (cYoY != null && cYoY >= 10)) status = 'Elevated'
-  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good'
+  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'neutral'
   return { key: 'stress', label: 'Financial Stress', status, tone, signals }
 }
 

@@ -4,7 +4,7 @@
 // Middle: active housing alerts. Bottom: "watching closely" proximity list.
 import { useEffect, useState } from 'react'
 
-type Tone = 'good' | 'warn' | 'bad' | 'crisis'
+type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
 type Category = { key: string; label: string; status: string; tone: Tone; signals: string[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
@@ -19,12 +19,13 @@ type HousingResponse = {
 
 const TONE_COLORS: Record<Tone, string> = {
   good: '#639922',
+  neutral: 'var(--text-muted)',
   warn: '#BA7517',
   bad: '#E24B4A',
   crisis: '#A32D2D',
 }
 const TONE_DOT: Record<Tone, string> = {
-  good: '🟢', warn: '🟠', bad: '🔴', crisis: '🚨',
+  good: '🟢', neutral: '⚪', warn: '🟠', bad: '🔴', crisis: '🚨',
 }
 
 export default function Housing() {
