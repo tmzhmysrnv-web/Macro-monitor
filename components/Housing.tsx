@@ -5,7 +5,8 @@
 import { useEffect, useState } from 'react'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
-type Category = { key: string; label: string; status: string; tone: Tone; signals: string[] }
+type MetricCard = { label: string; value: string; sub?: string }
+type Category = { key: string; label: string; status: string; tone: Tone; signals: string[]; metrics: MetricCard[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
 type HousingResponse = {
@@ -72,18 +73,32 @@ export default function Housing() {
             key={c.key}
             className="hs-driver"
             onClick={() => setOpenCat(openCat === c.key ? null : c.key)}
-            title="Click for the evidence behind this status"
+            title="Click for the underlying metrics"
           >
             <div className="hs-driver-top">
-              <span className="hs-driver-label">{c.label}</span>
+              <span className="hs-driver-label">
+                {c.label}
+                <span className="hs-driver-caret">{openCat === c.key ? '▾' : '▸'}</span>
+              </span>
               <span className="hs-driver-status" style={{ color: TONE_COLORS[c.tone] }}>
                 {TONE_DOT[c.tone]} {c.status}
               </span>
             </div>
             {openCat === c.key && (
-              <ul className="hs-driver-signals">
-                {c.signals.map((s, i) => <li key={i}>{s}</li>)}
-              </ul>
+              <div className="hs-driver-detail">
+                <div className="hs-metric-grid">
+                  {c.metrics.map((m, i) => (
+                    <div className="hs-metric" key={i}>
+                      <div className="hs-metric-label">{m.label}</div>
+                      <div className="hs-metric-value">{m.value}</div>
+                      {m.sub && <div className="hs-metric-sub">{m.sub}</div>}
+                    </div>
+                  ))}
+                </div>
+                <ul className="hs-driver-signals">
+                  {c.signals.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
             )}
           </button>
         ))}
@@ -149,9 +164,16 @@ export default function Housing() {
         .hs-driver { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 14px; text-align: left; cursor: pointer; font: inherit; color: inherit; width: 100%; transition: border-color 0.15s; }
         .hs-driver:hover { border-color: var(--border-med); }
         .hs-driver-top { display: flex; justify-content: space-between; align-items: center; }
-        .hs-driver-label { font-size: 13px; color: var(--text-primary); }
+        .hs-driver-label { font-size: 13px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 7px; }
+        .hs-driver-caret { font-size: 9px; color: var(--text-muted); }
         .hs-driver-status { font-size: 12px; font-weight: 500; font-family: var(--mono); }
-        .hs-driver-signals { margin: 10px 0 2px; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+        .hs-driver-detail { margin-top: 12px; }
+        .hs-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; }
+        .hs-metric { background: var(--bg); border: 0.5px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+        .hs-metric-label { font-size: 10px; color: var(--text-muted); margin-bottom: 3px; line-height: 1.3; }
+        .hs-metric-value { font-size: 16px; font-weight: 500; font-family: var(--mono); color: var(--text-primary); line-height: 1.1; }
+        .hs-metric-sub { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+        .hs-driver-signals { margin: 12px 0 2px; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
 
         .hs-empty { font-size: 12.5px; color: var(--text-muted); font-family: var(--mono); padding: 10px 2px; }
         .hs-alert { background: var(--card-bg); border: 0.5px solid #EF9F27; border-radius: 8px; padding: 13px 15px; margin-bottom: 8px; }

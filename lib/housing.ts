@@ -61,9 +61,22 @@ function metric(obs: Obs[]): Metric {
   }
 }
 
+// ── Metric-card formatting (for the expandable driver cards) ───────────
+export type MetricCard = { label: string; value: string; sub?: string }
+
+const fMoney = (v: number | null) => v == null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`
+const fPct = (v: number | null, d = 2) => v == null ? '—' : `${v.toFixed(d)}%`
+const fIndex = (v: number | null) => v == null ? '—' : v.toFixed(0)
+// Raw counts (listings, existing sales): 1.06M / 475K
+const fCount = (v: number | null) => v == null ? '—' : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : `${Math.round(v / 1e3)}K`
+// Series already expressed in thousands (starts, permits, new sales): 1.47M / 622K
+const fThou = (v: number | null) => v == null ? '—' : v >= 1000 ? `${(v / 1000).toFixed(2)}M` : `${Math.round(v)}K`
+const subYoY = (m: Metric): string | undefined => m.yoyPct == null ? undefined : `${m.yoyPct >= 0 ? '+' : ''}${m.yoyPct}% YoY`
+
 export type HousingData = {
   mortgage30: Metric & { history: Obs[] }
   affordabilityIndex: Metric
+  medianPrice: Metric           // MSPUS median sales price ($)
   homePriceYoY: number | null   // Case-Shiller YoY %
   wageYoY: number | null        // Avg hourly earnings YoY %
   activeListings: Metric
@@ -82,11 +95,12 @@ export type HousingData = {
 
 export async function fetchHousingData(): Promise<HousingData> {
   const [
-    mort, hai, cs, wages, act, newl, msup, starts, permits,
+    mort, hai, mspus, cs, wages, act, newl, msup, starts, permits,
     exSales, newSales, dom, priceRed, mDelinq, ccDel, tdsp,
   ] = await Promise.all([
     fredSeries('MORTGAGE30US', 340),         // weekly, ~6.5yrs (alert context lookback)
     fredSeries('FIXHAI', 22),                // monthly; extra window — series has gap months ('.')
+    fredSeries('MSPUS', 8),                  // median sales price, quarterly
     fredSeries('CSUSHPINSA', 15, 'pc1'),     // Case-Shiller, YoY % directly
     fredSeries('CES0500000003', 15, 'pc1'),  // wages, YoY % directly
     fredSeries('ACTLISCOUUS', 15),
@@ -121,6 +135,7 @@ export async function fetchHousingData(): Promise<HousingData> {
   return {
     mortgage30: { ...metric(mort), history: mort },
     affordabilityIndex: metric(hai),
+    medianPrice: metric(mspus),
     homePriceYoY: cs[0]?.value ?? null,
     wageYoY: wages[0]?.value ?? null,
     activeListings: metric(act),
@@ -148,6 +163,7 @@ export type Category = {
   status: string          // human label per spec (Healthy / Constrained / ...)
   tone: Tone
   signals: string[]       // plain-English evidence lines shown in the UI
+  metrics: MetricCard[]   // underlying metric values, shown as cards on expand
 }
 
 // +1 favorable, -1 unfavorable, 0 neutral/unknown
@@ -158,31 +174,50 @@ function sig(cond: boolean | null, favorable: boolean): number {
 
 function scoreAffordability(d: HousingData): Category {
   const signals: string[] = []
-  let score = 0
+  // Level-aware: the ABSOLUTE state of affordability drives the score, with
+  // recent direction as a secondary modifier. (A flat trend at a punishing
+  // level is still "poor" — this is the lived "can't afford a home" reality.)
+  let level = 0  // higher = more affordable
+
+  // Absolute affordability index (NAR: 100 = median family exactly qualifies)
+  const idx = d.affordabilityIndex.latest
+  if (idx != null) {
+    if (idx >= 150) { level += 2; signals.push(`Affordability index ${idx.toFixed(0)} — comfortable (100 = a median-income family exactly qualifies for a median home)`) }
+    else if (idx >= 125) { level += 1; signals.push(`Affordability index ${idx.toFixed(0)} — moderate (100 = a median-income family exactly qualifies)`) }
+    else if (idx >= 110) { signals.push(`Affordability index ${idx.toFixed(0)} — stretched; barely above the 100 line where a median family only just qualifies`) }
+    else { level -= 2; signals.push(`Affordability index ${idx.toFixed(0)} — poor; near the weakest on record, with a median-income family unable to comfortably afford a median home`) }
+  }
+
+  // Absolute mortgage-rate level vs the 3–4% norm of the 2010s
+  const rate = d.mortgage30.latest
+  if (rate != null) {
+    if (rate >= 7) { level -= 2; signals.push(`Mortgage rate ${rate}% — very high; monthly payments far above the 3–4% era most buyers anchor to`) }
+    else if (rate >= 6) { level -= 1; signals.push(`Mortgage rate ${rate}% — elevated; well above the 3–4% of the 2010s, adding hundreds to a typical payment`) }
+    else if (rate < 4) { level += 1; signals.push(`Mortgage rate ${rate}% — low`) }
+    else signals.push(`Mortgage rate ${rate}%`)
+  }
+
+  // Direction of travel (secondary)
   if (d.mortgage30.chg3m != null) {
-    if (d.mortgage30.chg3m <= -0.1) { score++; signals.push(`Mortgage rates down ${Math.abs(d.mortgage30.chg3m)}pp over 3 months`) }
-    else if (d.mortgage30.chg3m >= 0.15) { score--; signals.push(`Mortgage rates up ${d.mortgage30.chg3m}pp over 3 months`) }
-    else signals.push('Mortgage rates roughly flat over 3 months')
+    if (d.mortgage30.chg3m <= -0.1) { level += 1; signals.push(`Rates easing — down ${Math.abs(d.mortgage30.chg3m)}pp over 3 months`) }
+    else if (d.mortgage30.chg3m >= 0.15) { level -= 1; signals.push(`Rates rising — up ${d.mortgage30.chg3m}pp over 3 months`) }
   }
   if (d.wageYoY != null && d.homePriceYoY != null) {
     const gap = parseFloat((d.wageYoY - d.homePriceYoY).toFixed(1))
-    if (gap >= 0.5) { score++; signals.push(`Wages growing ${gap}pp faster than home prices`) }
-    else if (gap <= -0.5) { score--; signals.push(`Home prices growing ${Math.abs(gap)}pp faster than wages`) }
-    else signals.push('Wage and home-price growth roughly matched')
+    if (gap >= 0.5) { level += 1; signals.push(`Wages growing ${gap}pp faster than home prices — slowly chipping away at the gap`) }
+    else if (gap <= -0.5) { level -= 1; signals.push(`Home prices growing ${Math.abs(gap)}pp faster than wages — the gap is still widening`) }
   }
-  if (d.affordabilityIndex.yoyPct != null) {
-    if (d.affordabilityIndex.yoyPct >= 2) { score++; signals.push(`Affordability index up ${d.affordabilityIndex.yoyPct}% YoY`) }
-    else if (d.affordabilityIndex.yoyPct <= -2) { score--; signals.push(`Affordability index down ${Math.abs(d.affordabilityIndex.yoyPct)}% YoY`) }
-    else signals.push('Affordability index stable YoY')
-  } else if (d.affordabilityIndex.chg3m != null) {
-    // FIXHAI is a young series (starts 2025-04) — use 3-month change until YoY exists
-    if (d.affordabilityIndex.chg3m >= 2) { score++; signals.push(`Affordability index up ${d.affordabilityIndex.chg3m} points over 3 months`) }
-    else if (d.affordabilityIndex.chg3m <= -2) { score--; signals.push(`Affordability index down ${Math.abs(d.affordabilityIndex.chg3m)} points over 3 months`) }
-    else signals.push('Affordability index stable over 3 months')
-  }
-  const status = score >= 2 ? 'Healthy' : score <= -2 ? 'Deteriorating' : 'Neutral'
-  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Deteriorating' ? 'warn' : 'neutral'
-  return { key: 'affordability', label: 'Affordability', status, tone, signals }
+
+  const status = level >= 2 ? 'Healthy' : level >= 0 ? 'Moderate' : level >= -2 ? 'Stretched' : 'Poor'
+  const tone: Tone = status === 'Healthy' ? 'good' : status === 'Moderate' ? 'neutral' : status === 'Stretched' ? 'warn' : 'bad'
+  const metrics: MetricCard[] = [
+    { label: '30Y Mortgage Rate', value: fPct(rate), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
+    { label: 'Affordability Index', value: fIndex(idx), sub: subYoY(d.affordabilityIndex) ?? (d.affordabilityIndex.chg3m != null ? `${d.affordabilityIndex.chg3m >= 0 ? '+' : ''}${d.affordabilityIndex.chg3m} 3mo` : undefined) },
+    { label: 'Median Home Price', value: fMoney(d.medianPrice.latest), sub: subYoY(d.medianPrice) },
+    { label: 'Home Price Growth', value: fPct(d.homePriceYoY, 1), sub: 'YoY' },
+    { label: 'Wage Growth', value: fPct(d.wageYoY, 1), sub: 'YoY' },
+  ]
+  return { key: 'affordability', label: 'Affordability', status, tone, signals, metrics }
 }
 
 function scoreSupply(d: HousingData): Category {
@@ -202,7 +237,14 @@ function scoreSupply(d: HousingData): Category {
   if (d.permits.yoyPct != null) signals.push(`Building permits ${d.permits.yoyPct >= 0 ? '+' : ''}${d.permits.yoyPct}% YoY`)
   const status = score >= 2 ? 'Healthy' : score <= -2 ? 'Constrained' : 'Neutral'
   const tone: Tone = status === 'Healthy' ? 'good' : status === 'Constrained' ? 'warn' : 'neutral'
-  return { key: 'supply', label: 'Supply', status, tone, signals }
+  const metrics: MetricCard[] = [
+    { label: 'Active Listings', value: fCount(d.activeListings.latest), sub: subYoY(d.activeListings) },
+    { label: 'New Listings', value: fCount(d.newListings.latest), sub: subYoY(d.newListings) },
+    { label: 'Months of Supply', value: d.monthsSupply.latest != null ? `${d.monthsSupply.latest.toFixed(1)} mo` : '—', sub: subYoY(d.monthsSupply) },
+    { label: 'Housing Starts', value: fThou(d.housingStarts.latest), sub: subYoY(d.housingStarts) },
+    { label: 'Building Permits', value: fThou(d.permits.latest), sub: subYoY(d.permits) },
+  ]
+  return { key: 'supply', label: 'Supply', status, tone, signals, metrics }
 }
 
 function scoreDemand(d: HousingData): Category {
@@ -215,8 +257,12 @@ function scoreDemand(d: HousingData): Category {
   score += sig(d.newSales.yoyPct != null && d.newSales.yoyPct <= -3, false)
   if (d.newSales.yoyPct != null) signals.push(`New home sales ${d.newSales.yoyPct >= 0 ? '+' : ''}${d.newSales.yoyPct}% YoY`)
   const status = score >= 2 ? 'Strong' : score <= -2 ? 'Weakening' : 'Stable'
-  const tone: Tone = status === 'Strong' ? 'good' : status === 'Weakening' ? 'warn' : 'neutral'
-  return { key: 'demand', label: 'Demand', status, tone, signals }
+  const tone: Tone = status === 'Weakening' ? 'warn' : 'good' // Strong & Stable both green
+  const metrics: MetricCard[] = [
+    { label: 'Existing Home Sales', value: fCount(d.existingSales.latest), sub: subYoY(d.existingSales) },
+    { label: 'New Home Sales', value: fThou(d.newSales.latest), sub: subYoY(d.newSales) },
+  ]
+  return { key: 'demand', label: 'Demand', status, tone, signals, metrics }
 }
 
 function scoreHeat(d: HousingData): Category {
@@ -246,8 +292,13 @@ function scoreHeat(d: HousingData): Category {
   else if (score <= -2 && severe >= 1) status = 'Frozen'
   else if (score <= -1) status = 'Cooling'
   else status = 'Balanced'
-  const tone: Tone = status === 'Frozen' ? 'bad' : status === 'Cooling' ? 'warn' : status === 'Hot' ? 'good' : 'neutral'
-  return { key: 'heat', label: 'Market Heat', status, tone, signals }
+  // Hot & Balanced both green; Cooling orange; Frozen red
+  const tone: Tone = status === 'Frozen' ? 'bad' : status === 'Cooling' ? 'warn' : 'good'
+  const metrics: MetricCard[] = [
+    { label: 'Days on Market', value: d.daysOnMarket.latest != null ? `${Math.round(d.daysOnMarket.latest)} days` : '—', sub: subYoY(d.daysOnMarket) },
+    { label: 'Price-Cut Share', value: d.priceCutShare.latest != null ? `${d.priceCutShare.latest}%` : '—', sub: d.priceCutShare.yearAgo != null ? `${d.priceCutShare.yearAgo}% yr ago` : undefined },
+  ]
+  return { key: 'heat', label: 'Market Heat', status, tone, signals, metrics }
 }
 
 function scoreStress(d: HousingData): Category {
@@ -261,8 +312,13 @@ function scoreStress(d: HousingData): Category {
   let status: string = 'Stable'
   if ((mYoY != null && mYoY >= 30) || (mLevel != null && mLevel >= 5)) status = 'Stressed'
   else if ((mYoY != null && mYoY >= 10) || (cYoY != null && cYoY >= 10)) status = 'Elevated'
-  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'neutral'
-  return { key: 'stress', label: 'Financial Stress', status, tone, signals }
+  const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good' // Stable = green
+  const metrics: MetricCard[] = [
+    { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), sub: subYoY(d.mortgageDelinq) },
+    { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), sub: subYoY(d.ccDelinq) },
+    { label: 'Debt Service Ratio', value: d.debtService.latest != null ? `${d.debtService.latest.toFixed(1)}%` : '—', sub: 'of income' },
+  ]
+  return { key: 'stress', label: 'Financial Stress', status, tone, signals, metrics }
 }
 
 // ── Overall status engine ─────────────────────────────────────────────
@@ -275,7 +331,7 @@ function overallStatus(c: Record<string, Category>): HousingStatus {
     return { emoji: '🚨', label: 'Housing Correction', tone: 'crisis' }
   if (str === 'Stressed') return { emoji: '🔴', label: 'Financial Stress', tone: 'bad' }
   if (dem === 'Weakening' && heat === 'Frozen') return { emoji: '🔴', label: 'Demand Shock', tone: 'bad' }
-  if (aff === 'Deteriorating' && dem !== 'Strong') return { emoji: '🟠', label: 'Affordability Crunch', tone: 'warn' }
+  if ((aff === 'Poor' || aff === 'Stretched') && dem !== 'Strong') return { emoji: '🟠', label: 'Affordability Crunch', tone: 'warn' }
   if (heat === 'Cooling' || dem === 'Weakening' || sup === 'Constrained')
     return { emoji: '🟠', label: 'Recovery Cooling', tone: 'warn' }
   if (aff === 'Healthy' && dem === 'Strong') return { emoji: '🟢', label: 'Healthy Expansion', tone: 'good' }
