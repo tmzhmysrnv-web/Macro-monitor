@@ -409,16 +409,21 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           {loading && <div className="panel-loading">Loading…</div>}
           {bm && bm.whatChanged.length === 0 && <div className="panel-empty">Quiet week — no major moves.</div>}
           {bm && bm.whatChanged.map(row => {
-            const c = row.direction === 'toward-danger' ? '#A32D2D' : row.direction === 'toward-safety' ? '#3B6D11' : 'var(--text-secondary)'
+            // Color reflects meaning, not sign: toward-danger = red, toward-safety = green.
+            const c = row.direction === 'toward-danger' ? '#A32D2D' : row.direction === 'toward-safety' ? '#3B6D11' : 'var(--text-muted)'
+            const base = Math.abs(row.weekAgo) > 1e-6 ? Math.abs(row.weekAgo) : null
+            const pct = base ? ((row.current - row.weekAgo) / base) * 100 : null
+            const pctStr = pct == null ? '—' : `${pct >= 0 ? '+' : ''}${Math.abs(pct) >= 100 ? pct.toFixed(0) : pct.toFixed(1)}%`
             return (
               <div className="change-row" key={row.key}>
                 <div className="change-main">
                   <span className="change-label">{row.label}</span>
                   <span className="change-why">{row.why}</span>
                 </div>
-                <div className="change-vals" style={{ color: c }}>
-                  {fmt(row.key, row.weekAgo)}{row.unit} <span style={{ opacity: 0.5 }}>→</span> <strong>{fmt(row.key, row.current)}{row.unit}</strong>
+                <div className="change-vals">
+                  {fmt(row.key, row.weekAgo)}{row.unit} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}{row.unit}
                 </div>
+                <div className="change-pct" style={{ color: c }}>{pctStr}</div>
               </div>
             )
           })}
@@ -537,12 +542,13 @@ const ovStyles = `
   .wc-label { font-size: 13px; color: var(--text-primary); flex: 1; }
   .wc-dist { font-size: 11px; color: var(--text-secondary); font-family: var(--mono); white-space: nowrap; }
 
-  .change-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); gap: 10px; }
+  .change-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); gap: 12px; }
   .change-row:last-child { border-bottom: none; padding-bottom: 0; }
-  .change-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .change-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
   .change-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .change-why { font-size: 11px; color: var(--text-muted); }
-  .change-vals { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .change-vals { font-family: var(--mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .change-pct { font-family: var(--mono); font-size: 13px; font-weight: 500; white-space: nowrap; min-width: 50px; text-align: right; }
 
   .driver-row { margin-bottom: 11px; }
   .driver-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 8px; }
