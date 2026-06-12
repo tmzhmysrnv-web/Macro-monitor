@@ -29,6 +29,25 @@ async function fetchFredSeries(seriesId: string, units = 'lin', limit = 5): Prom
   } catch { return null }
 }
 
+// Non-farm payrolls: latest month-over-month change + recent ~6mo average pace
+// (both in thousands of jobs). PAYEMS is the level; we diff it month-over-month.
+async function fetchPayrolls(): Promise<{ change: number | null; avg: number | null }> {
+  try {
+    const url = `${FRED_BASE}?series_id=PAYEMS&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=8`
+    const res = await fredFetch(url, { next: { revalidate: 900 } })
+    if (!res || !res.ok) return { change: null, avg: null }
+    const data = await res.json()
+    const vals: number[] = (data.observations || [])
+      .filter((o: { value: string }) => o.value !== '.' && o.value !== '')
+      .map((o: { value: string }) => parseFloat(o.value))
+    if (vals.length < 2) return { change: null, avg: null }
+    const changes: number[] = []
+    for (let i = 0; i < vals.length - 1; i++) changes.push(Math.round(vals[i] - vals[i + 1]))
+    const recent = changes.slice(0, 6)
+    return { change: changes[0], avg: Math.round(recent.reduce((a, b) => a + b, 0) / recent.length) }
+  } catch { return { change: null, avg: null } }
+}
+
 async function fetchYahoo(symbol: string): Promise<{ value: number; change: number } | null> {
   try {
     const encoded = encodeURIComponent(symbol)
@@ -70,6 +89,8 @@ export type MacroData = {
   copperChange:  number | null
   mortgage30:    number | null
   homePriceYoY:  number | null   // Case-Shiller YoY % (home-price crash signal)
+  payrolls:      number | null   // latest non-farm payrolls month change (thousands)
+  payrollsAvg:   number | null   // recent ~6mo average monthly change (thousands)
   fetchedAt:     string
 }
 
@@ -88,7 +109,7 @@ export function fetchAllData(): Promise<MacroData> {
 }
 
 async function _fetchAllData(): Promise<MacroData> {
-  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
+  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
@@ -98,6 +119,7 @@ async function _fetchAllData(): Promise<MacroData> {
     fetchFredSeries(FRED_SERIES.igSpread),
     fetchFredSeries(FRED_SERIES.mortgage30),
     fetchFredSeries(FRED_SERIES.homePriceYoY, 'pc1'),  // units=pc1 -> YoY %
+    fetchPayrolls(),
     fetchYahoo('^VIX'),
     fetchYahoo('^GSPC'),
     fetchYahoo('DX-Y.NYB'),
@@ -128,6 +150,8 @@ async function _fetchAllData(): Promise<MacroData> {
     copperChange:  copperR?.change ?? null,
     mortgage30:    mort,
     homePriceYoY:  hpi != null ? parseFloat(hpi.toFixed(1)) : null,
+    payrolls:      payroll.change,
+    payrollsAvg:   payroll.avg,
     fetchedAt:     new Date().toISOString(),
   }
 }

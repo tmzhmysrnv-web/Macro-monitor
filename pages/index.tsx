@@ -49,6 +49,16 @@ function outcomeLine(ind: Indicator, value: number): string {
   return `${ind.label} now ${formatValue(ind.key, value)} — ${note}`
 }
 
+// Non-farm payrolls outcome — vs the recent monthly pace (no free consensus source).
+function jobsOutcome(payrolls: number, avg: number | null): string {
+  const headline = `${payrolls >= 0 ? '+' : ''}${payrolls}k jobs`
+  if (avg == null) return `${headline} added`
+  const cmp = payrolls >= avg + 25 ? `above the recent ~${avg}k/mo pace`
+    : payrolls <= avg - 25 ? `below the recent ~${avg}k/mo pace`
+    : `about the recent ~${avg}k/mo pace`
+  return `${headline} added — ${cmp}`
+}
+
 const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: string; bg: string; note: string }> = {
   ok:    { dot: '#639922', value: 'inherit',  border: 'var(--border)',    bg: 'var(--card-bg)',  note: '#888' },
   warn:  { dot: '#BA7517', value: '#854F0B',  border: '#EF9F27',          bg: 'var(--warn-bg)', note: '#BA7517' },
@@ -371,8 +381,8 @@ export default function Dashboard() {
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
         .topbar { margin-bottom: 0.5rem; }
-        .site-name { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: 0.02em; color: var(--term); text-shadow: 0 0 7px color-mix(in srgb, var(--term) 42%, transparent); }
-        .term-cursor { display: inline-block; width: 0.55em; height: 1em; margin-left: 4px; vertical-align: -0.12em; background: var(--term); box-shadow: 0 0 9px color-mix(in srgb, var(--term) 55%, transparent); animation: termblink 1.06s steps(1, end) infinite; }
+        .site-name { font-family: var(--mono); font-size: 15px; font-weight: 400; letter-spacing: 0.01em; color: var(--term); }
+        .term-cursor { display: inline-block; width: 0.5em; height: 0.95em; margin-left: 3px; vertical-align: -0.1em; background: var(--term); animation: termblink 1.06s steps(1, end) infinite; }
         @keyframes termblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
         .site-tagline { font-size: 12px; color: var(--text-muted); margin-top: 2px; margin-bottom: 1rem; }
         .topbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -523,22 +533,25 @@ export default function Dashboard() {
                     {past.map((e, i) => {
                       const ind = e.metricKey ? INDICATORS.find(x => x.key === e.metricKey) : undefined
                       const val = ind && data ? getValueForKey(data, ind.key) : null
-                      const clickable = !!(ind && val != null)
+                      let outcome: string | null = null
+                      let onClick: (() => void) | undefined
+                      if (ind && val != null) { outcome = outcomeLine(ind, val); onClick = () => setActiveChart({ key: ind.key, label: ind.label }) }
+                      else if (e.name === 'Jobs Report' && data?.payrolls != null) { outcome = jobsOutcome(data.payrolls, data.payrollsAvg) }
                       const ago = e.daysUntil === 0 ? 'today' : e.daysUntil === -1 ? 'yesterday' : `${-e.daysUntil}d ago`
                       return (
                         <div
                           key={i}
-                          className={`cal-row ${clickable ? 'is-click' : ''}`}
-                          onClick={clickable ? () => setActiveChart({ key: ind!.key, label: ind!.label }) : undefined}
-                          role={clickable ? 'button' : undefined}
-                          tabIndex={clickable ? 0 : undefined}
+                          className={`cal-row ${onClick ? 'is-click' : ''}`}
+                          onClick={onClick}
+                          role={onClick ? 'button' : undefined}
+                          tabIndex={onClick ? 0 : undefined}
                         >
                           <div className="cal-row-top">
                             <span className="cal-name">{e.name}</span>
                             <span className="cal-when">{ago}</span>
                           </div>
-                          {clickable
-                            ? <div className="cal-outcome">{outcomeLine(ind!, val!)} <span className="cal-go">↗</span></div>
+                          {outcome
+                            ? <div className="cal-outcome">{outcome}{onClick && <> <span className="cal-go">↗</span></>}</div>
                             : <div className="cal-desc">{e.description}</div>}
                         </div>
                       )
