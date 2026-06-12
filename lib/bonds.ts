@@ -71,7 +71,31 @@ function spark(obs: Obs[], max = 48): { date: string; value: number }[] | undefi
   return asc.filter((_, i) => i % step === 0 || i === asc.length - 1).map(o => ({ date: o.date, value: o.value }))
 }
 
-export type MetricCard = { label: string; value: string; sub?: string; unit?: string; points?: { date: string; value: number }[] }
+export type MetricCard = {
+  label: string; value: string; sub?: string; unit?: string
+  points?: { date: string; value: number }[]
+  pctl?: number; histLabel?: string
+  alertText?: string; alertProximity?: number
+}
+
+// Where the latest value sits within its own fetched history → "historically …".
+function hist(obs: Obs[]): { pctl?: number; histLabel?: string } {
+  if (!obs || obs.length < 8) return {}
+  const vals = obs.map(o => o.value)
+  const min = Math.min(...vals), max = Math.max(...vals)
+  if (max === min) return {}
+  const pctl = Math.round((obs[0].value - min) / (max - min) * 100)
+  const histLabel = pctl <= 20 ? 'historically low' : pctl < 40 ? 'below normal'
+    : pctl <= 60 ? 'historically normal' : pctl < 80 ? 'above normal' : 'historically high'
+  return { pctl, histLabel }
+}
+
+// Distance to an upper alert threshold (for metrics that can trip an alert).
+function alertAbove(value: number | null, threshold: number, unit = '%'): { alertText?: string; alertProximity?: number } {
+  if (value == null || value >= threshold) return {}
+  return { alertText: `${(threshold - value).toFixed(2)}${unit} from ${threshold}${unit} alert`, alertProximity: Math.max(0, Math.min(1, value / threshold)) }
+}
+
 const fPct = (v: number | null, d = 2) => v == null ? '—' : `${v.toFixed(d)}%`
 const fSpread = (v: number | null) => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
 
@@ -101,14 +125,14 @@ export type BondData = {
 
 export async function fetchBondData(): Promise<BondData> {
   const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt] = await Promise.all([
-    fredSeries('DGS10', 520),     // ~2y daily — vol, trend, alert lookback, sparkline
+    fredSeries('DGS10', 1300),    // ~5y daily — vol, trend, alert lookback, sparkline, percentile
     fredSeries('DGS30', 9000),    // long window for the multi-decade-high check
-    fredSeries('DGS2', 260),
+    fredSeries('DGS2', 1300),
     fredSeries('DGS3MO', 5),
-    fredSeries('DFII10', 260),    // 10Y real yield (TIPS)
-    fredSeries('FEDFUNDS', 60),
-    fredSeries('T10Y2Y', 260),
-    fredSeries('T10Y3M', 400),    // spread + history for uninversion
+    fredSeries('DFII10', 1300),   // 10Y real yield (TIPS)
+    fredSeries('FEDFUNDS', 240),  // ~20y monthly
+    fredSeries('T10Y2Y', 1300),
+    fredSeries('T10Y3M', 1300),   // spread + history for uninversion + percentile
     fredSeries('GFDEGDQ188S', 44), // public debt as % of GDP (quarterly)
   ])
 
@@ -177,10 +201,10 @@ function scoreGrowth(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Growth'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '2Y–10Y Spread', value: fSpread(s210), unit: '%', points: spark(d.spread2_10Obs), sub: s210 != null && s210 < 0 ? 'inverted' : 'normal' },
-    { label: '3M–10Y Spread', value: fSpread(s310), unit: '%', points: spark(d.spread3m10History), sub: s310 != null && s310 < 0 ? 'inverted' : 'normal' },
-    { label: '10Y Yield', value: fPct(d.tenY), unit: '%', points: spark(d.tenYHistory), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
-    { label: '2Y Yield', value: fPct(d.twoY), unit: '%', points: spark(d.twoYObs) },
+    { label: '2Y–10Y Spread', value: fSpread(s210), unit: '%', points: spark(d.spread2_10Obs), ...hist(d.spread2_10Obs), sub: s210 != null && s210 < 0 ? 'inverted' : undefined },
+    { label: '3M–10Y Spread', value: fSpread(s310), unit: '%', points: spark(d.spread3m10History), ...hist(d.spread3m10History), sub: s310 != null && s310 < 0 ? 'inverted' : undefined },
+    { label: '10Y Yield', value: fPct(d.tenY), unit: '%', points: spark(d.tenYHistory), ...hist(d.tenYHistory), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
+    { label: '2Y Yield', value: fPct(d.twoY), unit: '%', points: spark(d.twoYObs), ...hist(d.twoYObs) },
   ]
   return { key: 'growth', label: 'Growth Expectations', status, tone, signals, metrics }
 }
@@ -201,10 +225,10 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Neutral'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '10Y Treasury', value: fPct(ten), unit: '%', points: spark(d.tenYHistory) },
-    { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', points: spark(d.thirtYObs) },
-    { label: '10Y Real Yield', value: fPct(ry), unit: '%', points: spark(d.realYieldObs), sub: 'TIPS' },
-    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs) },
+    { label: '10Y Treasury', value: fPct(ten), unit: '%', points: spark(d.tenYHistory), ...hist(d.tenYHistory), ...alertAbove(ten, 5) },
+    { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(d.thirtY, 6) },
+    { label: '10Y Real Yield', value: fPct(ry), unit: '%', points: spark(d.realYieldObs), ...hist(d.realYieldObs), sub: 'TIPS' },
+    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
   ]
   return { key: 'rates', label: 'Interest Rate Environment', status, tone, signals, metrics }
 }
@@ -228,8 +252,8 @@ function scoreFinancing(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Financing'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: '30Y Treasury', value: fPct(t30), unit: '%', points: spark(d.thirtYObs), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
-    { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—', unit: '%', points: spark(d.debtObs) },
+    { label: '30Y Treasury', value: fPct(t30), unit: '%', points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(t30, 6), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
+    { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—', unit: '%', points: spark(d.debtObs), ...hist(d.debtObs) },
     { label: '30Y Record High', value: fPct(d.thirtYMax), sub: nearMultiDecadeHigh ? 'at/near it now' : 'in 30+ yr record' },
   ]
   return { key: 'financing', label: 'Government Financing', status, tone, signals, metrics }

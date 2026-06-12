@@ -9,7 +9,7 @@ import { computeStressIndex } from '../../lib/stressIndex'
 import { buildWhatChanged } from '../../lib/whatChanged'
 import { backfillBreakMeter } from '../../lib/backfill'
 import { fetchAllHistory } from '../../lib/fetchHistory'
-import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections, buildMeterChange } from '../../lib/overview'
+import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections, buildMeterChange, buildDriverTrends } from '../../lib/overview'
 
 const BREAK_INPUTS = ['vix', 'treasury10y', 'yieldCurve', 'cpi', 'joblessClaims', 'hySpread', 'igSpread', 'mortgage30', 'homePriceYoY'] as const
 
@@ -37,14 +37,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const recentTrend = await backfillBreakMeter(history)
 
     // Enrich drivers with a weekly trend arrow + rough contribution share.
+    // Trend = each subsystem's actual stress move over the SAME 7-day window as
+    // the headline delta, so an arrow only appears where a subsystem moved (no
+    // arrows when the meter is flat week-over-week).
     // A subsystem whose driver is in active alert is floored to "elevated" so
     // it never renders as calm/green while a red alert is firing.
     const RANK = { calm: 0, watch: 1, elevated: 2, stressed: 3, breaking: 4 } as const
-    const changeByKey = new Map(whatChanged.map(r => [r.key, r.direction]))
+    // Only attribute arrows when the meter actually moved over the week — if the
+    // headline says "no change this week", show no driver arrows.
+    const meterMoved = weekChange != null && weekChange !== 0
+    const driverTrends = meterMoved ? buildDriverTrends(history, 7) : {}
     const sumStress = current.categories.reduce((a, c) => a + c.stress, 0) || 1
     const drivers = current.categories.map(c => {
-      const dir = changeByKey.get(c.driverKey)
-      const trend: 'up' | 'down' | 'flat' = dir === 'toward-danger' ? 'up' : dir === 'toward-safety' ? 'down' : 'flat'
+      const trend = driverTrends[c.key] ?? 'flat'
       const status = alertKeys.has(c.driverKey) && RANK[c.status] < RANK.elevated ? 'elevated' : c.status
       return { ...c, status, trend, share: Math.round((c.stress / sumStress) * 100) }
     })

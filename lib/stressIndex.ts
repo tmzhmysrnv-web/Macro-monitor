@@ -134,3 +134,9 @@ export function computeStressIndex(data: MacroData): StressResult {
 export function computeStressFromValues(values: Record<string, number | null>): number {
   return computeFrom(k => values[k] ?? null).total
 }
+
+// Per-subsystem stresses from a plain values map — used to measure how each
+// subsystem moved over a window (driver trend arrows).
+export function computeSubsystemsFromValues(values: Record<string, number | null>): SubsystemStress[] {
+  return computeFrom(k => values[k] ?? null).subsystems
+}

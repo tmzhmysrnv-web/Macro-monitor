@@ -73,7 +73,21 @@ export type MacroData = {
   fetchedAt:     string
 }
 
-export async function fetchAllData(): Promise<MacroData> {
+// In-process de-dup: /api/data and /api/breakmeter both call this on the same
+// request wave. Share one in-flight result (and memo it briefly) so a warm
+// instance doesn't fetch the same ~15 series twice.
+let _dataCache: { at: number; p: Promise<MacroData> } | null = null
+const DATA_MEMO_MS = 30_000
+
+export function fetchAllData(): Promise<MacroData> {
+  if (_dataCache && Date.now() - _dataCache.at < DATA_MEMO_MS) return _dataCache.p
+  const p = _fetchAllData()
+  _dataCache = { at: Date.now(), p }
+  p.catch(() => { if (_dataCache?.p === p) _dataCache = null }) // let failures retry
+  return p
+}
+
+async function _fetchAllData(): Promise<MacroData> {
   const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),

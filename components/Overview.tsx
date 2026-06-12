@@ -407,7 +407,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
               </div>
             )
           })}
-          {bm && <div className="driver-note">Share of the current stress picture. Color shows how close each subsystem is to breaking; arrows show this week's direction.</div>}
+          {bm && <div className="driver-note">Share of the current stress picture. Color shows how close each subsystem is to breaking; arrows mark subsystems that moved over the past week (no arrow = unchanged).</div>}
         </div>
 
         <div className="panel">

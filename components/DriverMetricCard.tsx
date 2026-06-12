@@ -10,6 +10,10 @@ export type MetricCardData = {
   sub?: string
   unit?: string
   points?: { date: string; value: number }[] // oldest → newest
+  pctl?: number          // 0..100 position of the latest value in its history
+  histLabel?: string     // "historically low" / "historically normal" / …
+  alertText?: string     // distance to alert, for metrics that have a threshold
+  alertProximity?: number // 0..1, 1 = at the alert
 }
 
 function Sparkline({ vals }: { vals: number[] }) {
@@ -101,6 +105,25 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
         </div>
         {pts && !open && <Sparkline vals={pts.map(p => p.value)} />}
       </div>
+
+      {m.pctl != null && (
+        <div className="dc-pctl">
+          <div className="dc-pctl-top">
+            <span>{m.histLabel ?? `${m.pctl}th pct`}</span>
+            <span>range</span>
+          </div>
+          <div className="dc-pctl-track">
+            <div className="dc-pctl-fill" style={{ width: `${m.pctl}%` }} />
+            <div className="dc-pctl-dot" style={{ left: `${m.pctl}%` }} />
+          </div>
+        </div>
+      )}
+      {m.alertText && (
+        <div className="dc-alert" style={{ color: (m.alertProximity ?? 0) > 0.85 ? '#A32D2D' : (m.alertProximity ?? 0) > 0.6 ? '#BA7517' : 'var(--text-muted)' }}>
+          {(m.alertProximity ?? 0) > 0.7 ? '🔥' : '⚠️'} {m.alertText}
+        </div>
+      )}
+
       {pts && open && <ExpandedChart points={pts} unit={m.unit} />}
 
       <style>{`
@@ -114,6 +137,12 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
         .dc-mid { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }
         .dc-value { font-size: 17px; font-weight: 500; font-family: var(--mono); color: var(--text-primary); line-height: 1.05; }
         .dc-sub { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+        .dc-pctl { margin-top: 8px; }
+        .dc-pctl-top { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-family: var(--mono); margin-bottom: 3px; }
+        .dc-pctl-track { position: relative; height: 3px; background: var(--border-med); border-radius: 2px; }
+        .dc-pctl-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--text-secondary); opacity: 0.45; border-radius: 2px; }
+        .dc-pctl-dot { position: absolute; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); border: 1.5px solid var(--bg); transform: translateX(-50%); }
+        .dc-alert { margin-top: 7px; font-size: 10.5px; font-family: var(--mono); }
         .dc-chart { margin-top: 10px; }
         .dc-chart-read { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); margin-bottom: 4px; }
         .dc-chart-v { font-size: 12px; font-weight: 500; color: var(--text-primary); }

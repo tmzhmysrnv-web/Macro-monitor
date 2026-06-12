@@ -8,7 +8,7 @@
 
 import type { MacroData } from './fetchData'
 import { INDICATORS, getStatus, getContextText, type Indicator } from './thresholds'
-import { computeStressFromValues, BREAK_KEYS, type StressResult } from './stressIndex'
+import { computeStressFromValues, computeSubsystemsFromValues, BREAK_KEYS, type StressResult } from './stressIndex'
 import type { HistoryMap } from './fetchHistory'
 
 // ── shared helpers ────────────────────────────────────────────────────
@@ -228,9 +228,9 @@ export function buildTrendDirections(
   return out
 }
 
-// Reconstruct the Break Meter total as of a point in time, forward-filling the
-// last known value for each input (so monthly/weekly series stay aligned).
-function totalAsOf(history: HistoryMap, asOf: number): number | null {
+// Forward-filled Break Meter input values as of a point in time (so
+// monthly/weekly series stay aligned). Returns null if too sparse to score.
+function valuesAsOf(history: HistoryMap, asOf: number): Record<string, number | null> | null {
   const vals: Record<string, number | null> = {}
   let have = 0
   for (const key of BREAK_KEYS) {
@@ -244,18 +244,37 @@ function totalAsOf(history: HistoryMap, asOf: number): number | null {
     vals[key] = v
     if (v != null) have++
   }
-  if (have < Math.ceil(BREAK_KEYS.length * 0.6)) return null
-  return computeStressFromValues(vals)
+  return have < Math.ceil(BREAK_KEYS.length * 0.6) ? null : vals
 }
 
 // How much the Break Meter has moved over the last `days` — same for everyone,
 // reconstructed from the daily history. Positive = things got worse.
 export function buildMeterChange(history: HistoryMap, days = 7): number | null {
   const now = Date.now()
-  const cur = totalAsOf(history, now)
-  const prev = totalAsOf(history, now - days * 86400000)
-  if (cur == null || prev == null) return null
-  return cur - prev
+  const cur = valuesAsOf(history, now)
+  const prev = valuesAsOf(history, now - days * 86400000)
+  if (!cur || !prev) return null
+  return computeStressFromValues(cur) - computeStressFromValues(prev)
+}
+
+// Per-subsystem movement over the last `days`. Only subsystems that actually
+// moved (>= `minDelta` stress points) get an arrow — so when the meter is flat
+// week-over-week, no arrows appear. Keyed by subsystem key.
+export function buildDriverTrends(history: HistoryMap, days = 7, minDelta = 2): Record<string, 'up' | 'down' | 'flat'> {
+  const now = Date.now()
+  const cur = valuesAsOf(history, now)
+  const prev = valuesAsOf(history, now - days * 86400000)
+  const out: Record<string, 'up' | 'down' | 'flat'> = {}
+  if (!cur || !prev) return out
+  const subsNow = computeSubsystemsFromValues(cur)
+  const subsPrev = new Map(computeSubsystemsFromValues(prev).map(s => [s.key, s.stress]))
+  for (const s of subsNow) {
+    const before = subsPrev.get(s.key)
+    if (before == null) { out[s.key] = 'flat'; continue }
+    const delta = s.stress - before
+    out[s.key] = delta >= minDelta ? 'up' : delta <= -minDelta ? 'down' : 'flat'
+  }
+  return out
 }
 
 export function buildBriefing(stress: StressResult, alertKeys: Set<string> = new Set()): Briefing {
