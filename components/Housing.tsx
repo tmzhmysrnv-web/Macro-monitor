@@ -4,10 +4,10 @@
 //   2. Why?                  → short summary + biggest risk / stabilizer + key drivers
 //   3. What to watch next?   → recent alerts + watching-closely thresholds
 import { useEffect, useState } from 'react'
+import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
-type MetricCard = { label: string; value: string; sub?: string }
-type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCard[] }
+type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCardData[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
 type HousingResponse = {
@@ -103,10 +103,13 @@ export default function Housing() {
       <div className="hs-section-label">Key drivers</div>
       <div className="hs-drivers">
         {(h?.categories || []).map(c => (
-          <button
+          <div
             key={c.key}
             className="hs-driver"
+            role="button"
+            tabIndex={0}
             onClick={() => setOpenCat(openCat === c.key ? null : c.key)}
+            onKeyDown={e => { if (e.key === 'Enter') setOpenCat(openCat === c.key ? null : c.key) }}
             title="Click for the underlying metrics"
           >
             <div className="hs-driver-top">
@@ -125,21 +128,15 @@ export default function Housing() {
             </div>
             {openCat === c.key && (
               <div className="hs-driver-detail">
-                <div className="hs-metric-grid">
-                  {c.metrics.map((m, i) => (
-                    <div className="hs-metric" key={i}>
-                      <div className="hs-metric-label">{m.label}</div>
-                      <div className="hs-metric-value">{m.value}</div>
-                      {m.sub && <div className="hs-metric-sub">{m.sub}</div>}
-                    </div>
-                  ))}
+                <div className="hs-metric-grid" onClick={e => e.stopPropagation()}>
+                  {c.metrics.map((m, i) => <DriverMetricCard key={i} m={m} />)}
                 </div>
                 <ul className="hs-driver-signals">
                   {c.signals.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </div>
             )}
-          </button>
+          </div>
         ))}
         {loading && [1, 2, 3, 4, 5].map(i => (
           <div key={i} className="hs-driver"><div className="skeleton" style={{ height: 16, width: '80%' }} /></div>

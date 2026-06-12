@@ -61,7 +61,17 @@ function realizedVolBp(obs: Obs[], n = 21): number | null {
   return parseFloat(Math.sqrt(variance).toFixed(1))
 }
 
-export type MetricCard = { label: string; value: string; sub?: string }
+// Downsample newest-first obs → oldest→newest series (~max points) for the
+// interactive driver-card sparkline + expand chart.
+function spark(obs: Obs[], max = 48): { date: string; value: number }[] | undefined {
+  if (!obs || obs.length < 2) return undefined
+  const asc = [...obs].reverse()
+  if (asc.length <= max) return asc.map(o => ({ date: o.date, value: o.value }))
+  const step = Math.ceil(asc.length / max)
+  return asc.filter((_, i) => i % step === 0 || i === asc.length - 1).map(o => ({ date: o.date, value: o.value }))
+}
+
+export type MetricCard = { label: string; value: string; sub?: string; unit?: string; points?: { date: string; value: number }[] }
 const fPct = (v: number | null, d = 2) => v == null ? '—' : `${v.toFixed(d)}%`
 const fSpread = (v: number | null) => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
 
@@ -79,21 +89,27 @@ export type BondData = {
   volBp: number | null           // realized 10Y vol (bp)
   debtToGDP: number | null
   thirtYMax: number | null       // max 30Y over the long window (multi-decade high)
-  spread3m10History: Obs[]       // for uninversion detection
-  tenYHistory: Obs[]             // for the 5% alert lookback
+  spread3m10History: Obs[]       // for uninversion detection + sparkline
+  tenYHistory: Obs[]             // for the 5% alert lookback + sparkline
+  twoYObs: Obs[]
+  thirtYObs: Obs[]
+  realYieldObs: Obs[]
+  fedFundsObs: Obs[]
+  spread2_10Obs: Obs[]
+  debtObs: Obs[]
 }
 
 export async function fetchBondData(): Promise<BondData> {
   const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt] = await Promise.all([
-    fredSeries('DGS10', 520),     // ~2y daily — vol, trend, alert lookback
+    fredSeries('DGS10', 520),     // ~2y daily — vol, trend, alert lookback, sparkline
     fredSeries('DGS30', 9000),    // long window for the multi-decade-high check
-    fredSeries('DGS2', 5),
+    fredSeries('DGS2', 260),
     fredSeries('DGS3MO', 5),
-    fredSeries('DFII10', 5),      // 10Y real yield (TIPS)
-    fredSeries('FEDFUNDS', 5),
-    fredSeries('T10Y2Y', 5),
+    fredSeries('DFII10', 260),    // 10Y real yield (TIPS)
+    fredSeries('FEDFUNDS', 60),
+    fredSeries('T10Y2Y', 260),
     fredSeries('T10Y3M', 400),    // spread + history for uninversion
-    fredSeries('GFDEGDQ188S', 5), // public debt as % of GDP (quarterly)
+    fredSeries('GFDEGDQ188S', 44), // public debt as % of GDP (quarterly)
   ])
 
   return {
@@ -112,6 +128,12 @@ export async function fetchBondData(): Promise<BondData> {
     thirtYMax: dgs30.length ? Math.max(...dgs30.map(o => o.value)) : null,
     spread3m10History: t10y3m,
     tenYHistory: dgs10,
+    twoYObs: dgs2,
+    thirtYObs: dgs30,
+    realYieldObs: dfii10,
+    fedFundsObs: ff,
+    spread2_10Obs: t10y2y,
+    debtObs: debt,
   }
 }
 
@@ -155,10 +177,10 @@ function scoreGrowth(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Growth'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '2Y–10Y Spread', value: fSpread(s210), sub: s210 != null && s210 < 0 ? 'inverted' : 'normal' },
-    { label: '3M–10Y Spread', value: fSpread(s310), sub: s310 != null && s310 < 0 ? 'inverted' : 'normal' },
-    { label: '10Y Yield', value: fPct(d.tenY), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
-    { label: '2Y Yield', value: fPct(d.twoY) },
+    { label: '2Y–10Y Spread', value: fSpread(s210), unit: '%', points: spark(d.spread2_10Obs), sub: s210 != null && s210 < 0 ? 'inverted' : 'normal' },
+    { label: '3M–10Y Spread', value: fSpread(s310), unit: '%', points: spark(d.spread3m10History), sub: s310 != null && s310 < 0 ? 'inverted' : 'normal' },
+    { label: '10Y Yield', value: fPct(d.tenY), unit: '%', points: spark(d.tenYHistory), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
+    { label: '2Y Yield', value: fPct(d.twoY), unit: '%', points: spark(d.twoYObs) },
   ]
   return { key: 'growth', label: 'Growth Expectations', status, tone, signals, metrics }
 }
@@ -179,10 +201,10 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Neutral'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '10Y Treasury', value: fPct(ten) },
-    { label: '30Y Treasury', value: fPct(d.thirtY) },
-    { label: '10Y Real Yield', value: fPct(ry), sub: 'TIPS' },
-    { label: 'Fed Funds', value: fPct(d.fedFunds) },
+    { label: '10Y Treasury', value: fPct(ten), unit: '%', points: spark(d.tenYHistory) },
+    { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', points: spark(d.thirtYObs) },
+    { label: '10Y Real Yield', value: fPct(ry), unit: '%', points: spark(d.realYieldObs), sub: 'TIPS' },
+    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs) },
   ]
   return { key: 'rates', label: 'Interest Rate Environment', status, tone, signals, metrics }
 }
@@ -206,8 +228,8 @@ function scoreFinancing(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Financing'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: '30Y Treasury', value: fPct(t30), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
-    { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—' },
+    { label: '30Y Treasury', value: fPct(t30), unit: '%', points: spark(d.thirtYObs), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
+    { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—', unit: '%', points: spark(d.debtObs) },
     { label: '30Y Record High', value: fPct(d.thirtYMax), sub: nearMultiDecadeHigh ? 'at/near it now' : 'in 30+ yr record' },
   ]
   return { key: 'financing', label: 'Government Financing', status, tone, signals, metrics }

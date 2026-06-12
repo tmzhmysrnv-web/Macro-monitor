@@ -46,10 +46,21 @@ function pctChange(latest: number | null, past: number | null): number | null {
   return parseFloat(((latest - past) / Math.abs(past) * 100).toFixed(1))
 }
 
+// Downsample newest-first obs to an oldest→newest series (~`max` points) for the
+// interactive driver-card sparkline + expand chart.
+export function spark(obs: Obs[], max = 48): { date: string; value: number }[] | undefined {
+  if (!obs || obs.length < 2) return undefined
+  const asc = [...obs].reverse()
+  if (asc.length <= max) return asc.map(o => ({ date: o.date, value: o.value }))
+  const step = Math.ceil(asc.length / max)
+  return asc.filter((_, i) => i % step === 0 || i === asc.length - 1).map(o => ({ date: o.date, value: o.value }))
+}
+
 export type Metric = {
   latest: number | null
   yoyPct: number | null    // % change vs ~12 months ago
   chg3m: number | null     // raw change vs ~3 months ago (same unit as series)
+  obs: Obs[]               // source observations (newest-first) for sparklines
 }
 
 function metric(obs: Obs[]): Metric {
@@ -60,11 +71,12 @@ function metric(obs: Obs[]): Metric {
     chg3m: latest != null && valueAt(obs, 3) != null
       ? parseFloat((latest - (valueAt(obs, 3) as number)).toFixed(2))
       : null,
+    obs,
   }
 }
 
 // ── Metric-card formatting (for the expandable driver cards) ───────────
-export type MetricCard = { label: string; value: string; sub?: string }
+export type MetricCard = { label: string; value: string; sub?: string; unit?: string; points?: { date: string; value: number }[] }
 
 const fMoney = (v: number | null) => v == null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`
 const fPct = (v: number | null, d = 2) => v == null ? '—' : `${v.toFixed(d)}%`
@@ -80,7 +92,9 @@ export type HousingData = {
   affordabilityIndex: Metric
   medianPrice: Metric           // MSPUS median sales price ($)
   homePriceYoY: number | null   // Case-Shiller YoY %
+  homePriceYoYObs: Obs[]
   wageYoY: number | null        // Avg hourly earnings YoY %
+  wageYoYObs: Obs[]
   activeListings: Metric
   newListings: Metric
   monthsSupply: Metric
@@ -139,7 +153,9 @@ export async function fetchHousingData(): Promise<HousingData> {
     affordabilityIndex: metric(hai),
     medianPrice: metric(mspus),
     homePriceYoY: cs[0]?.value ?? null,
+    homePriceYoYObs: cs,
     wageYoY: wages[0]?.value ?? null,
+    wageYoYObs: wages,
     activeListings: metric(act),
     newListings: metric(newl),
     monthsSupply: metric(msup),
@@ -220,11 +236,11 @@ function scoreAffordability(d: HousingData): Omit<Category, 'fill'> {
   const status = level >= 1 ? 'Improving' : level <= -2 ? 'Deteriorating' : 'Pressured'
   const tone: Tone = status === 'Improving' ? 'good' : status === 'Pressured' ? 'warn' : 'bad'
   const metrics: MetricCard[] = [
-    { label: '30Y Mortgage Rate', value: fPct(rate), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
-    { label: 'Affordability Index', value: fIndex(idx), sub: subYoY(d.affordabilityIndex) ?? (d.affordabilityIndex.chg3m != null ? `${d.affordabilityIndex.chg3m >= 0 ? '+' : ''}${d.affordabilityIndex.chg3m} 3mo` : undefined) },
-    { label: 'Median Home Price', value: fMoney(d.medianPrice.latest), sub: subYoY(d.medianPrice) },
-    { label: 'Home Price Growth', value: fPct(d.homePriceYoY, 1), sub: 'YoY' },
-    { label: 'Wage Growth', value: fPct(d.wageYoY, 1), sub: 'YoY' },
+    { label: '30Y Mortgage Rate', value: fPct(rate), unit: '%', points: spark(d.mortgage30.obs), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
+    { label: 'Affordability Index', value: fIndex(idx), points: spark(d.affordabilityIndex.obs), sub: subYoY(d.affordabilityIndex) ?? (d.affordabilityIndex.chg3m != null ? `${d.affordabilityIndex.chg3m >= 0 ? '+' : ''}${d.affordabilityIndex.chg3m} 3mo` : undefined) },
+    { label: 'Median Home Price', value: fMoney(d.medianPrice.latest), points: spark(d.medianPrice.obs), sub: subYoY(d.medianPrice) },
+    { label: 'Home Price Growth', value: fPct(d.homePriceYoY, 1), unit: '%', points: spark(d.homePriceYoYObs), sub: 'YoY' },
+    { label: 'Wage Growth', value: fPct(d.wageYoY, 1), unit: '%', points: spark(d.wageYoYObs), sub: 'YoY' },
   ]
   return { key: 'affordability', label: 'Affordability', status, tone, signals, metrics }
 }
@@ -247,11 +263,11 @@ function scoreSupply(d: HousingData): Omit<Category, 'fill'> {
   const status = score >= 2 ? 'Expanding' : score <= -2 ? 'Tight' : 'Healthy'
   const tone: Tone = status === 'Tight' ? 'warn' : 'good' // Expanding & Healthy both green
   const metrics: MetricCard[] = [
-    { label: 'Active Listings', value: fCount(d.activeListings.latest), sub: subYoY(d.activeListings) },
-    { label: 'New Listings', value: fCount(d.newListings.latest), sub: subYoY(d.newListings) },
-    { label: 'Months of Supply', value: d.monthsSupply.latest != null ? `${d.monthsSupply.latest.toFixed(1)} mo` : '—', sub: subYoY(d.monthsSupply) },
-    { label: 'Housing Starts', value: fThou(d.housingStarts.latest), sub: subYoY(d.housingStarts) },
-    { label: 'Building Permits', value: fThou(d.permits.latest), sub: subYoY(d.permits) },
+    { label: 'Active Listings', value: fCount(d.activeListings.latest), points: spark(d.activeListings.obs), sub: subYoY(d.activeListings) },
+    { label: 'New Listings', value: fCount(d.newListings.latest), points: spark(d.newListings.obs), sub: subYoY(d.newListings) },
+    { label: 'Months of Supply', value: d.monthsSupply.latest != null ? `${d.monthsSupply.latest.toFixed(1)} mo` : '—', points: spark(d.monthsSupply.obs), sub: subYoY(d.monthsSupply) },
+    { label: 'Housing Starts', value: fThou(d.housingStarts.latest), points: spark(d.housingStarts.obs), sub: subYoY(d.housingStarts) },
+    { label: 'Building Permits', value: fThou(d.permits.latest), points: spark(d.permits.obs), sub: subYoY(d.permits) },
   ]
   return { key: 'supply', label: 'Supply', status, tone, signals, metrics }
 }
@@ -268,8 +284,8 @@ function scoreDemand(d: HousingData): Omit<Category, 'fill'> {
   const status = score >= 2 ? 'Strong' : score <= -2 ? 'Weakening' : 'Stable'
   const tone: Tone = status === 'Weakening' ? 'warn' : 'good' // Strong & Stable both green
   const metrics: MetricCard[] = [
-    { label: 'Existing Home Sales', value: fCount(d.existingSales.latest), sub: subYoY(d.existingSales) },
-    { label: 'New Home Sales', value: fThou(d.newSales.latest), sub: subYoY(d.newSales) },
+    { label: 'Existing Home Sales', value: fCount(d.existingSales.latest), points: spark(d.existingSales.obs), sub: subYoY(d.existingSales) },
+    { label: 'New Home Sales', value: fThou(d.newSales.latest), points: spark(d.newSales.obs), sub: subYoY(d.newSales) },
   ]
   return { key: 'demand', label: 'Demand', status, tone, signals, metrics }
 }
@@ -304,7 +320,7 @@ function scoreHeat(d: HousingData): Omit<Category, 'fill'> {
   // Hot & Balanced both green; Cooling orange; Frozen red
   const tone: Tone = status === 'Frozen' ? 'bad' : status === 'Cooling' ? 'warn' : 'good'
   const metrics: MetricCard[] = [
-    { label: 'Days on Market', value: d.daysOnMarket.latest != null ? `${Math.round(d.daysOnMarket.latest)} days` : '—', sub: subYoY(d.daysOnMarket) },
+    { label: 'Days on Market', value: d.daysOnMarket.latest != null ? `${Math.round(d.daysOnMarket.latest)} days` : '—', points: spark(d.daysOnMarket.obs), sub: subYoY(d.daysOnMarket) },
     { label: 'Price-Cut Share', value: d.priceCutShare.latest != null ? `${d.priceCutShare.latest}%` : '—', sub: d.priceCutShare.yearAgo != null ? `${d.priceCutShare.yearAgo}% yr ago` : undefined },
   ]
   return { key: 'heat', label: 'Market Heat', status, tone, signals, metrics }
@@ -323,9 +339,9 @@ function scoreStress(d: HousingData): Omit<Category, 'fill'> {
   else if ((mYoY != null && mYoY >= 10) || (cYoY != null && cYoY >= 10)) status = 'Elevated'
   const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good' // Low = green
   const metrics: MetricCard[] = [
-    { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), sub: subYoY(d.mortgageDelinq) },
-    { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), sub: subYoY(d.ccDelinq) },
-    { label: 'Debt Service Ratio', value: d.debtService.latest != null ? `${d.debtService.latest.toFixed(1)}%` : '—', sub: 'of income' },
+    { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), unit: '%', points: spark(d.mortgageDelinq.obs), sub: subYoY(d.mortgageDelinq) },
+    { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), unit: '%', points: spark(d.ccDelinq.obs), sub: subYoY(d.ccDelinq) },
+    { label: 'Debt Service Ratio', value: d.debtService.latest != null ? `${d.debtService.latest.toFixed(1)}%` : '—', unit: '%', points: spark(d.debtService.obs), sub: 'of income' },
   ]
   return { key: 'stress', label: 'Financial Stress', status, tone, signals, metrics }
 }

@@ -3,10 +3,10 @@
 // trading terminal. Answers "what are bond investors telling us?" via:
 //   Status → Summary → Biggest Risk/Stabilizer → Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
-type MetricCard = { label: string; value: string; sub?: string }
-type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCard[] }
+type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCardData[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
 type BondResponse = {
@@ -102,10 +102,13 @@ export default function Bonds() {
       <div className="bn-section-label">Key drivers</div>
       <div className="bn-drivers">
         {(b?.categories || []).map(c => (
-          <button
+          <div
             key={c.key}
             className="bn-driver"
+            role="button"
+            tabIndex={0}
             onClick={() => setOpenCat(openCat === c.key ? null : c.key)}
+            onKeyDown={e => { if (e.key === 'Enter') setOpenCat(openCat === c.key ? null : c.key) }}
             title="Click for the underlying metrics"
           >
             <div className="bn-driver-top">
@@ -121,21 +124,15 @@ export default function Bonds() {
             </div>
             {openCat === c.key && (
               <div className="bn-driver-detail">
-                <div className="bn-metric-grid">
-                  {c.metrics.map((m, i) => (
-                    <div className="bn-metric" key={i}>
-                      <div className="bn-metric-label">{m.label}</div>
-                      <div className="bn-metric-value">{m.value}</div>
-                      {m.sub && <div className="bn-metric-sub">{m.sub}</div>}
-                    </div>
-                  ))}
+                <div className="bn-metric-grid" onClick={e => e.stopPropagation()}>
+                  {c.metrics.map((m, i) => <DriverMetricCard key={i} m={m} />)}
                 </div>
                 <ul className="bn-driver-signals">
                   {c.signals.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </div>
             )}
-          </button>
+          </div>
         ))}
         {loading && [1, 2, 3, 4].map(i => (
           <div key={i} className="bn-driver"><div className="skeleton" style={{ height: 16, width: '80%' }} /></div>
