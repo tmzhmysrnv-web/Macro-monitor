@@ -6,6 +6,7 @@ import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityTex
 import type { DataPoint } from '../lib/fetchHistory'
 import Overview from '../components/Overview'
 import Housing from '../components/Housing'
+import Bonds from '../components/Bonds'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -56,7 +57,7 @@ const SECTIONS = [
 // Tab definitions — Overview is special; the rest filter the card sections
 const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'bonds',     label: 'Bonds',     sections: [{ label: 'Rates & Yield Curve', keys: ['treasury10y', 'fedfunds', 'yieldCurve'] }] },
+  { id: 'bonds',     label: 'Bonds' },   // renders the <Bonds /> intelligence model, not indicator cards
   { id: 'housing',   label: 'Housing' }, // renders the <Housing /> status model, not indicator cards
   { id: 'credit',    label: 'Credit',    sections: [{ label: 'Credit Spreads', keys: ['hySpread', 'igSpread'] }] },
   { id: 'inflation', label: 'Inflation', sections: [{ label: 'Inflation', keys: ['cpi', 'oil'] }] },
@@ -488,6 +489,9 @@ export default function Dashboard() {
             )}
           </>
         )}
+
+        {/* ── BONDS TAB — bond-market intelligence model, not cards ── */}
+        {activeTab === 'bonds' && <Bonds />}
 
         {/* ── HOUSING TAB — status model, not a dashboard ── */}
         {activeTab === 'housing' && <Housing />}
