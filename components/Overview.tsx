@@ -22,6 +22,7 @@ type BreakMeter = {
   watching: WatchItem[]
   recentBreaks: BreakEvent[]
   briefing: Briefing
+  directions?: Record<string, 'up' | 'down' | 'flat'>
   concern: { label: string; detail: string } | null
 }
 
@@ -29,13 +30,24 @@ const CAT_COLORS: Record<string, string> = {
   calm: '#639922', watch: '#8FA31E', elevated: '#BA7517', stressed: '#D9622B', breaking: '#E24B4A',
 }
 
-// Spec severity scale — drives the prominent status label on the meter
+// Spec severity scale — drives the prominent status label and the legend.
+const SEVERITY_BANDS = [
+  { lo: 0, hi: 20, label: 'Healthy', color: '#639922' },
+  { lo: 21, hi: 40, label: 'Worth Watching', color: '#8FA31E' },
+  { lo: 41, hi: 60, label: 'Elevated', color: '#BA7517' },
+  { lo: 61, hi: 80, label: 'High Risk', color: '#D9622B' },
+  { lo: 81, hi: 100, label: 'Breaking', color: '#E24B4A' },
+]
 function severity(total: number): { label: string; color: string } {
-  if (total <= 20) return { label: 'Healthy', color: '#639922' }
-  if (total <= 40) return { label: 'Worth Watching', color: '#8FA31E' }
-  if (total <= 60) return { label: 'Elevated', color: '#BA7517' }
-  if (total <= 80) return { label: 'High Risk', color: '#D9622B' }
-  return { label: 'Breaking', color: '#E24B4A' }
+  const b = SEVERITY_BANDS.find(b => total >= b.lo && total <= b.hi) ?? SEVERITY_BANDS[0]
+  return { label: b.label, color: b.color }
+}
+
+// Short labels for the clickable Recent Breaks rows → metric-card modal title
+const RB_LABEL: Record<string, string> = {
+  mortgage30: '30Y Mortgage', treasury10y: '10Y Treasury', cpi: 'CPI (YoY)', vix: 'VIX',
+  oil: 'WTI Crude', hySpread: 'HY Bond Spread', igSpread: 'IG Credit Spread',
+  joblessClaims: 'Jobless Claims', yieldCurve: '2Y–10Y Spread',
 }
 
 function fmt(key: string, v: number): string {
@@ -216,8 +228,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
   // Alerts are derived from the SAME data the top-bar pill uses, so the two can
   // never disagree. Trend (Rising/Cooling) + triggered date come from the meter
   // payload when it's loaded, but the alert list itself does not depend on it.
-  const directions: Record<string, 'up' | 'down' | 'flat'> = {}
-  for (const r of bm?.whatChanged ?? []) directions[r.key] = r.direction === 'toward-danger' ? 'up' : r.direction === 'toward-safety' ? 'down' : 'flat'
+  const directions: Record<string, 'up' | 'down' | 'flat'> = bm?.directions ?? {}
   const triggered: Record<string, string> = {}
   for (const e of bm?.recentBreaks ?? []) if (!triggered[e.key]) triggered[e.key] = e.date
   const alertCards: AlertCard[] = data ? buildAlertCards(data, { directions, triggered }) : []
@@ -286,6 +297,20 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           {primaryRisks.length > 0 && (
             <div className="bm-risks">Primary risks: {primaryRisks.join(', ')}</div>
           )}
+          {bm && (
+            <div className="bm-scale" aria-label="Severity scale">
+              {SEVERITY_BANDS.map(b => {
+                const active = bm.total >= b.lo && bm.total <= b.hi
+                return (
+                  <div className={`bm-scale-row ${active ? 'is-active' : ''}`} key={b.label}>
+                    <span className="bm-scale-dot" style={{ background: b.color }} />
+                    <span className="bm-scale-range">{b.lo}–{b.hi}</span>
+                    <span className="bm-scale-label">{b.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
         <div className="bm-trend">
           <BreakMeterTrend history={trendLine} color={color} />
@@ -299,10 +324,18 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           {loading && <div className="panel-loading">Loading…</div>}
           {bm && bm.recentBreaks.length === 0 && <div className="panel-empty">No notable thresholds crossed recently.</div>}
           {bm && bm.recentBreaks.map((e, i) => (
-            <div className="rb-row" key={i}>
+            <div
+              className={`rb-row ${onViewCard ? 'is-click' : ''}`}
+              key={i}
+              onClick={onViewCard ? () => onViewCard(e.key, RB_LABEL[e.key] ?? e.key) : undefined}
+              role={onViewCard ? 'button' : undefined}
+              tabIndex={onViewCard ? 0 : undefined}
+              onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
+            >
               <span className="rb-dot" style={{ background: e.tone === 'bad' ? '#E24B4A' : '#639922' }} />
               <span className="rb-text">{e.text}</span>
               <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
+              {onViewCard && <span className="rb-go">↗</span>}
             </div>
           ))}
         </div>
@@ -449,8 +482,17 @@ const ovStyles = `
   .bm-gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 160px; }
   .bm-sev { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
   .bm-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
-  .bm-risks { font-size: 11px; color: var(--text-secondary); text-align: center; margin-top: 6px; max-width: 180px; }
-  .bm-trend { flex: 1; min-width: 260px; }
+  .bm-risks { font-size: 11px; color: var(--text-secondary); text-align: center; margin-top: 6px; max-width: 200px; }
+  /* Severity legend under the gauge */
+  .bm-scale { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; width: 100%; max-width: 200px; }
+  .bm-scale-row { display: flex; align-items: center; gap: 7px; padding: 2px 6px; border-radius: 5px; opacity: 0.5; }
+  .bm-scale-row.is-active { opacity: 1; background: var(--border); }
+  .bm-scale-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .bm-scale-range { font-size: 10px; font-family: var(--mono); color: var(--text-muted); width: 42px; }
+  .bm-scale-label { font-size: 11px; color: var(--text-secondary); }
+  .bm-scale-row.is-active .bm-scale-label { color: var(--text-primary); font-weight: 500; }
+  /* The trend is context, not a focal point — keep it modest, not full-bleed */
+  .bm-trend { flex: 1 1 320px; min-width: 240px; max-width: 460px; }
 
   .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
   @media (max-width: 640px) { .panels { grid-template-columns: 1fr; } .bm-hero { justify-content: center; } }
@@ -460,9 +502,13 @@ const ovStyles = `
 
   .rb-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
   .rb-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .rb-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
+  .rb-row.is-click:hover { background: var(--border); }
   .rb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .rb-text { font-size: 13px; color: var(--text-primary); flex: 1; }
   .rb-ago { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+  .rb-go { font-size: 11px; color: var(--text-muted); opacity: 0; transition: opacity 0.12s; }
+  .rb-row.is-click:hover .rb-go { opacity: 1; }
 
   .wc-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
   .wc-row:last-child { border-bottom: none; padding-bottom: 0; }

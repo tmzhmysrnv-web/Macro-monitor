@@ -201,6 +201,33 @@ function headlineFor(total: number): string {
   return 'Breaking — systemic stress'
 }
 
+// Direction of each indicator over the last ~`days`, with a deadband so small
+// wiggles read as "flat" rather than flipping Rising/Cooling. A single noisy
+// week (or a stale monthly print) shouldn't claim inflation is "cooling".
+export function buildTrendDirections(
+  data: MacroData,
+  history: HistoryMap,
+  days = 90,
+  deadband = 0.05,
+): Record<string, 'up' | 'down' | 'flat'> {
+  const now = Date.now()
+  const out: Record<string, 'up' | 'down' | 'flat'> = {}
+  for (const ind of INDICATORS) {
+    const cur = valueForKey(data, ind.key)
+    const series = history[ind.key]
+    if (cur == null || !series || series.length < 2) continue
+    let past: number | null = null
+    for (let i = series.length - 1; i >= 0; i--) {
+      const ago = (now - new Date(series[i].date).getTime()) / 86400000
+      if (ago >= days) { past = series[i].value; break }
+    }
+    if (past == null) past = series[0].value
+    const move = (cur - past) / (Math.abs(past) || 1)
+    out[ind.key] = Math.abs(move) < deadband ? 'flat' : move > 0 ? 'up' : 'down'
+  }
+  return out
+}
+
 export function buildBriefing(stress: StressResult, alertKeys: Set<string> = new Set()): Briefing {
   const cats = stress.categories // already sorted worst-first
   const top = cats[0]

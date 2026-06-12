@@ -8,7 +8,7 @@ import { fetchAllData } from '../../lib/fetchData'
 import { computeStressIndex } from '../../lib/stressIndex'
 import { buildWhatChanged } from '../../lib/whatChanged'
 import { fetchAllHistory } from '../../lib/fetchHistory'
-import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing } from '../../lib/overview'
+import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections } from '../../lib/overview'
 
 const BREAK_INPUTS = ['vix', 'treasury10y', 'yieldCurve', 'cpi', 'joblessClaims', 'hySpread', 'igSpread', 'mortgage30', 'homePriceYoY'] as const
 
@@ -28,6 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const watching = buildWatching(data)
     const recentBreaks = buildRecentBreaks(history)
     const briefing = buildBriefing(current, alertKeys)
+    const directions = buildTrendDirections(data, history)
 
     // Enrich drivers with a weekly trend arrow + rough contribution share.
     // A subsystem whose driver is in active alert is floored to "elevated" so
@@ -54,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       watching,
       recentBreaks,
       briefing,
+      directions,
       concern: briefing.concern,
     })
   } catch (err) {
