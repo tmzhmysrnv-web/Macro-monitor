@@ -209,8 +209,6 @@ function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: strin
 export default function Overview({ data = null, events = [], onViewCard }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [full, setFull] = useState<string | null>(null)
-  const [showFull, setShowFull] = useState(false)
   const [showAlerts, setShowAlerts] = useState(true)
 
   useEffect(() => {
@@ -219,10 +217,6 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
       .then(r => r.json())
       .then(d => { setBm(d); setLoading(false) })
       .catch(() => setLoading(false))
-    fetch('/api/summary')
-      .then(r => r.json())
-      .then(d => setFull(d?.text ?? null))
-      .catch(() => {})
   }, [])
 
   // Shared "past 7 days" delta, reconstructed server-side — same for everyone.
@@ -452,14 +446,6 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
                 <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span></> : 'No major releases scheduled'}</div>
               </div>
             </div>
-            {full && (
-              <div className="ts-full-wrap">
-                <button className="ts-toggle" onClick={() => setShowFull(s => !s)}>
-                  {showFull ? 'Hide full analysis' : 'Read full analysis'} <span style={{ opacity: 0.6 }}>{showFull ? '▲' : '▼'}</span>
-                </button>
-                {showFull && <div className="ts-full">{full}</div>}
-              </div>
-            )}
           </>
         )}
       </div>

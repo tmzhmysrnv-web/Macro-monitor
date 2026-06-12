@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
-import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus } from '../lib/thresholds'
+import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus, type Indicator } from '../lib/thresholds'
 import type { DataPoint } from '../lib/fetchHistory'
 import Overview from '../components/Overview'
 import Housing from '../components/Housing'
@@ -38,6 +38,15 @@ function formatValue(key: string, value: number | null): string {
   if (key === 'yieldCurve') return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
   if (['treasury10y', 'fedfunds', 'cpi', 'hySpread', 'igSpread', 'mortgage30'].includes(key)) return `${value.toFixed(2)}%`
   return value.toFixed(1)
+}
+
+// One-line "what the release came in at" for a past calendar event.
+function outcomeLine(ind: Indicator, value: number): string {
+  const status = getStatus(ind, value)
+  const note = status === 'alert'
+    ? `above its ${ind.alertAbove ?? ind.alertBelow}${ind.unit} alert`
+    : status === 'warn' ? 'near its alert threshold' : 'within its normal range'
+  return `${ind.label} now ${formatValue(ind.key, value)} — ${note}`
 }
 
 const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: string; bg: string; note: string }> = {
@@ -256,7 +265,7 @@ export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string }>>([])
+  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string; metricKey?: string }>>([])
   // Prefetched Bonds/Housing payloads so switching to those tabs is instant.
   const [bondsData, setBondsData] = useState<any>(null)
   const [housingData, setHousingData] = useState<any>(null)
@@ -424,6 +433,21 @@ export default function Dashboard() {
         .stress-cat-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
 
         .calendar-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.75rem; }
+        .cal { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem; margin-bottom: 1.75rem; }
+        @media (max-width: 640px) { .cal { grid-template-columns: 1fr; } }
+        .cal-col { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+        .cal-head { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); }
+        .cal-row { padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+        .cal-row:last-child { border-bottom: none; padding-bottom: 0; }
+        .cal-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
+        .cal-row.is-click:hover { background: var(--border); }
+        .cal-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+        .cal-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+        .cal-when { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
+        .cal-when.soon { color: #854F0B; }
+        .cal-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .cal-outcome { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
+        .cal-go { color: var(--text-muted); font-size: 10px; }
         .tabbar { display: flex; gap: 2px; overflow-x: auto; margin-bottom: 1.5rem; border-bottom: 0.5px solid var(--border); padding-bottom: 0; -webkit-overflow-scrolling: touch; }
         .tab { font-family: var(--sans); font-size: 13px; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 12px; cursor: pointer; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
         .tab:hover { color: var(--text-secondary); }
@@ -485,21 +509,58 @@ export default function Dashboard() {
           <>
             <Overview data={data} events={events} onViewCard={handleViewCard} />
 
-            {/* Upcoming events strip */}
-            {events.length > 0 && (
-              <div className="calendar-strip">
-                {events.slice(0, 5).map((e, i) => {
-                  const cls = e.daysUntil === 0 ? 'today' : e.daysUntil <= 3 ? 'soon' : ''
-                  const when = e.daysUntil === 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : `in ${e.daysUntil}d`
-                  return (
-                    <span key={i} className={`event-pill ${cls}`} title={e.description}>
-                      <span style={{ opacity: 0.6 }}>📅</span>
-                      {e.name} <span style={{ opacity: 0.6 }}>·</span> {when}
-                    </span>
-                  )
-                })}
-              </div>
-            )}
+            {/* Economic calendar — recent releases & upcoming */}
+            {events.length > 0 && (() => {
+              const past = events.filter(e => e.daysUntil < 0).sort((a, b) => b.daysUntil - a.daysUntil)
+              const upcoming = events.filter(e => e.daysUntil >= 0)
+              return (
+                <div className="cal">
+                  <div className="cal-col">
+                    <div className="cal-head">Recent releases</div>
+                    {past.length === 0 && <div className="cal-empty">Nothing in the last few weeks.</div>}
+                    {past.map((e, i) => {
+                      const ind = e.metricKey ? INDICATORS.find(x => x.key === e.metricKey) : undefined
+                      const val = ind && data ? getValueForKey(data, ind.key) : null
+                      const clickable = !!(ind && val != null)
+                      const ago = e.daysUntil === 0 ? 'today' : e.daysUntil === -1 ? 'yesterday' : `${-e.daysUntil}d ago`
+                      return (
+                        <div
+                          key={i}
+                          className={`cal-row ${clickable ? 'is-click' : ''}`}
+                          onClick={clickable ? () => setActiveChart({ key: ind!.key, label: ind!.label }) : undefined}
+                          role={clickable ? 'button' : undefined}
+                          tabIndex={clickable ? 0 : undefined}
+                        >
+                          <div className="cal-row-top">
+                            <span className="cal-name">{e.name}</span>
+                            <span className="cal-when">{ago}</span>
+                          </div>
+                          {clickable
+                            ? <div className="cal-outcome">{outcomeLine(ind!, val!)} <span className="cal-go">↗</span></div>
+                            : <div className="cal-desc">{e.description}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="cal-col">
+                    <div className="cal-head">Upcoming</div>
+                    {upcoming.length === 0 && <div className="cal-empty">No major releases in the next 30 days.</div>}
+                    {upcoming.map((e, i) => {
+                      const when = e.daysUntil === 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : `in ${e.daysUntil}d`
+                      return (
+                        <div key={i} className="cal-row">
+                          <div className="cal-row-top">
+                            <span className="cal-name">{e.name}</span>
+                            <span className={`cal-when ${e.daysUntil <= 3 ? 'soon' : ''}`}>{when}</span>
+                          </div>
+                          <div className="cal-desc">{e.description}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
           </>
         )}
 
