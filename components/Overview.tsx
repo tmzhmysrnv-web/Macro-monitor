@@ -418,12 +418,12 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
             const arrow = row.current > row.weekAgo ? '↑' : row.current < row.weekAgo ? '↓' : ''
             return (
               <div className="change-row" key={row.key}>
-                <div className="change-vals">
-                  {fmt(row.key, row.weekAgo)} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}
-                </div>
                 <div className="change-main">
                   <span className="change-label">{row.label}</span>
                   <span className="change-why">{row.why}</span>
+                </div>
+                <div className="change-vals">
+                  {fmt(row.key, row.weekAgo)} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}
                 </div>
                 <div className="change-pct" style={{ color: c }}>
                   {arrow && <span className="change-arrow">{arrow}</span>}{pctStr}
@@ -546,12 +546,14 @@ const ovStyles = `
   .wc-label { font-size: 13px; color: var(--text-primary); flex: 1; }
   .wc-dist { font-size: 11px; color: var(--text-secondary); font-family: var(--mono); white-space: nowrap; }
 
-  .change-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); gap: 14px; }
+  /* label (what changed) | the change (middle) | % — middle col is auto so it
+     never overflows into the label/% columns */
+  .change-row { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(54px,1fr); align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); gap: 14px; }
   .change-row:last-child { border-bottom: none; padding-bottom: 0; }
   .change-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .change-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .change-why { font-size: 11px; color: var(--text-muted); }
-  .change-vals { font-family: var(--mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .change-vals { font-family: var(--mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; text-align: center; }
   .change-pct { font-family: var(--mono); font-size: 13px; font-weight: 500; white-space: nowrap; text-align: right; }
   .change-arrow { margin-right: 2px; }
 
