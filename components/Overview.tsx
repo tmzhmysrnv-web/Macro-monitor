@@ -419,7 +419,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
             return (
               <div className="change-row" key={row.key}>
                 <div className="change-vals">
-                  {fmt(row.key, row.weekAgo)}{row.unit} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}{row.unit}
+                  {fmt(row.key, row.weekAgo)} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}
                 </div>
                 <div className="change-main">
                   <span className="change-label">{row.label}</span>
