@@ -33,18 +33,25 @@ const TONE_BG: Record<Tone, string> = {
 }
 const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '⚪', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
-export default function Housing() {
-  const [h, setH] = useState<HousingResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function Housing({ initialData = null }: { initialData?: HousingResponse | null }) {
+  const [h, setH] = useState<HousingResponse | null>(initialData)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState(false)
   const [openCat, setOpenCat] = useState<string | null>(null)
 
+  // Fetch only if the parent didn't already prefetch this section.
   useEffect(() => {
+    if (h) return
     fetch('/api/housing')
       .then(r => r.json())
       .then(d => { if (d.error) setError(true); else setH(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
-  }, [])
+  }, [h])
+
+  // Pick up prefetched data if it arrives after mount.
+  useEffect(() => {
+    if (initialData && !h) { setH(initialData); setLoading(false) }
+  }, [initialData, h])
 
   if (error) return <div className="hs-error">Could not load housing data. Try refreshing.</div>
 

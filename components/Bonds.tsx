@@ -32,18 +32,25 @@ const TONE_BG: Record<Tone, string> = {
 }
 const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
-export default function Bonds() {
-  const [b, setB] = useState<BondResponse | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function Bonds({ initialData = null }: { initialData?: BondResponse | null }) {
+  const [b, setB] = useState<BondResponse | null>(initialData)
+  const [loading, setLoading] = useState(!initialData)
   const [error, setError] = useState(false)
   const [openCat, setOpenCat] = useState<string | null>(null)
 
+  // Fetch only if the parent didn't already prefetch this section.
   useEffect(() => {
+    if (b) return
     fetch('/api/bonds')
       .then(r => r.json())
       .then(d => { if (d.error) setError(true); else setB(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
-  }, [])
+  }, [b])
+
+  // Pick up prefetched data if it arrives after mount.
+  useEffect(() => {
+    if (initialData && !b) { setB(initialData); setLoading(false) }
+  }, [initialData, b])
 
   if (error) return <div className="bn-error">Could not load bond data. Try refreshing.</div>
 

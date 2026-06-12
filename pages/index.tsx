@@ -257,6 +257,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string }>>([])
+  // Prefetched Bonds/Housing payloads so switching to those tabs is instant.
+  const [bondsData, setBondsData] = useState<any>(null)
+  const [housingData, setHousingData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -271,6 +274,16 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(d => setEvents(d.events || []))
       .catch(() => {})
+  }, [])
+
+  // Warm the Bonds & Housing sections in the background after first paint, so
+  // opening those tabs is instant instead of triggering a fresh fetch on click.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch('/api/bonds').then(r => r.json()).then(d => { if (d && !d.error) setBondsData(d) }).catch(() => {})
+      fetch('/api/housing').then(r => r.json()).then(d => { if (d && !d.error) setHousingData(d) }).catch(() => {})
+    }, 600)
+    return () => clearTimeout(t)
   }, [])
 
   // Load sparklines for all indicators after data loads
@@ -491,10 +504,10 @@ export default function Dashboard() {
         )}
 
         {/* ── BONDS TAB — bond-market intelligence model, not cards ── */}
-        {activeTab === 'bonds' && <Bonds />}
+        {activeTab === 'bonds' && <Bonds initialData={bondsData} />}
 
         {/* ── HOUSING TAB — status model, not a dashboard ── */}
-        {activeTab === 'housing' && <Housing />}
+        {activeTab === 'housing' && <Housing initialData={housingData} />}
 
         {/* ── CATEGORY TABS — filtered card sections ── */}
         {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (
