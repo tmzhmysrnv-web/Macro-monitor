@@ -17,7 +17,6 @@ type BreakMeter = {
   available: boolean
   total: number; level: string; verdict: string
   drivers: Driver[]
-  history: { date: string; value: number }[]
   whatChanged: ChangeRow[]
   alerts: Alert[]
   watching: WatchItem[]
@@ -191,14 +190,21 @@ function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: strin
 export default function Overview({ data = null, events = [], onViewCard }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
+  const [trend, setTrend] = useState<{ date: string; value: number }[] | null>(null)
   const [full, setFull] = useState<string | null>(null)
   const [showFull, setShowFull] = useState(false)
 
   useEffect(() => {
+    // Fast: score + alerts + drivers paint as soon as this returns.
     fetch('/api/breakmeter')
       .then(r => r.json())
       .then(d => { setBm(d); setLoading(false) })
       .catch(() => setLoading(false))
+    // Slow: the 10-year trend streams in separately, so it never blocks the meter.
+    fetch('/api/trend')
+      .then(r => r.json())
+      .then(d => setTrend(d?.history ?? null))
+      .catch(() => {})
     fetch('/api/summary')
       .then(r => r.json())
       .then(d => setFull(d?.text ?? null))
@@ -218,6 +224,12 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
   const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
   const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
+
+  // The 10-year trend (loaded separately) with today's live reading appended.
+  const today = new Date().toISOString().split('T')[0]
+  const trendLine = trend && bm
+    ? [...trend.filter(p => p.date.slice(0, 7) !== today.slice(0, 7)), { date: today, value: bm.total }]
+    : []
 
   // Gauge geometry
   const R = 64, CX = 80, CY = 80
@@ -276,7 +288,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           )}
         </div>
         <div className="bm-trend">
-          {bm && <BreakMeterTrend history={bm.history} color={color} />}
+          <BreakMeterTrend history={trendLine} color={color} />
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 // Reconstructs the Break Meter over 10 years of history by running the current
 // stress formula backward over historical indicator values.
 
-import { fetchAllHistory, type DataPoint } from './fetchHistory'
+import { fetchAllHistory, type DataPoint, type HistoryMap } from './fetchHistory'
 import { computeStressFromValues, BREAK_KEYS } from './stressIndex'
 
 export type BreakMeterPoint = { date: string; value: number }
@@ -23,8 +23,10 @@ function indexByMonth(series: DataPoint[]): Map<string, number> {
   return m
 }
 
-export async function backfillBreakMeter(): Promise<BreakMeterPoint[]> {
-  const history = await fetchAllHistory()
+// Pass a preloaded history to avoid re-fetching; defaults to monthly 10y, which
+// is all the long-range trend needs.
+export async function backfillBreakMeter(preloaded?: HistoryMap): Promise<BreakMeterPoint[]> {
+  const history = preloaded ?? await fetchAllHistory(10, 'm')
   const keys = neededKeys()
 
   // Index each needed series by month

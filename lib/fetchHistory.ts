@@ -9,14 +9,19 @@ const FRED_KEY = process.env.FRED_API_KEY
 
 export type DataPoint = { date: string; value: number }
 
-async function fetchFredHistory(seriesId: string, years = 10): Promise<DataPoint[]> {
+type Freq = 'd' | 'm'
+
+async function fetchFredHistory(seriesId: string, years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
   try {
     const start = new Date()
     start.setFullYear(start.getFullYear() - years)
     const startStr = start.toISOString().split('T')[0]
     // limit=100000 (FRED max): daily series have ~5200 obs over 20yrs; the
     // previous limit=1000 with asc sort truncated them to the oldest ~4 years.
-    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=100000`
+    // freq='m' asks FRED to aggregate to end-of-month — ~12x smaller payloads
+    // for the long-range Break Meter trend, which only needs monthly points.
+    const monthly = freq === 'm' ? '&frequency=m&aggregation_method=eop' : ''
+    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=100000${monthly}`
     const res = await fredFetch(url, { next: { revalidate: 86400 } }) // cache 24h
     if (!res || !res.ok) return []
     const data = await res.json()
@@ -26,11 +31,12 @@ async function fetchFredHistory(seriesId: string, years = 10): Promise<DataPoint
   } catch { return [] }
 }
 
-async function fetchYahooHistory(symbol: string, years = 10): Promise<DataPoint[]> {
+async function fetchYahooHistory(symbol: string, years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
   try {
     const range = `${years}y`
+    const interval = freq === 'm' ? '1mo' : '1wk'
     const encoded = encodeURIComponent(symbol)
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1wk&range=${range}`
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&range=${range}`
     const res = await fetch(url, { next: { revalidate: 86400 } })
     if (!res.ok) return []
     const data = await res.json()
@@ -46,9 +52,10 @@ async function fetchYahooHistory(symbol: string, years = 10): Promise<DataPoint[
   } catch { return [] }
 }
 
-async function fetchFredYoYHistory(seriesId: string, years = 10): Promise<DataPoint[]> {
-  // Fetch extra year so we can compute YoY
-  const raw = await fetchFredHistory(seriesId, years + 1)
+async function fetchFredYoYHistory(seriesId: string, years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
+  // Fetch extra year so we can compute YoY. CSUSHPINSA/CPIAUCSL are monthly
+  // series, so raw[i-12] is 12 months back in either freq mode.
+  const raw = await fetchFredHistory(seriesId, years + 1, freq)
   if (raw.length < 13) return raw
   // Compute YoY % change
   return raw.slice(12).map((point, i) => ({
@@ -57,15 +64,15 @@ async function fetchFredYoYHistory(seriesId: string, years = 10): Promise<DataPo
   }))
 }
 
-async function fetchJoblessHistory(years = 10): Promise<DataPoint[]> {
-  const raw = await fetchFredHistory('ICSA', years)
+async function fetchJoblessHistory(years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
+  const raw = await fetchFredHistory('ICSA', years, freq)
   return raw.map(d => ({ date: d.date, value: parseFloat((d.value / 1000).toFixed(1)) }))
 }
 
-async function fetchYieldCurveHistory(years = 10): Promise<DataPoint[]> {
+async function fetchYieldCurveHistory(years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
   const [t10, t2] = await Promise.all([
-    fetchFredHistory('DGS10', years),
-    fetchFredHistory('DGS2', years),
+    fetchFredHistory('DGS10', years, freq),
+    fetchFredHistory('DGS2', years, freq),
   ])
   // Align by date
   const t2Map = new Map(t2.map(d => [d.date, d.value]))
@@ -76,24 +83,27 @@ async function fetchYieldCurveHistory(years = 10): Promise<DataPoint[]> {
 
 export type HistoryMap = Record<string, DataPoint[]>
 
-export async function fetchAllHistory(): Promise<HistoryMap> {
+// years/freq let callers trade detail for speed: the indicator modal wants the
+// full 10y daily series, but the Overview only needs ~1y for what-changed and
+// monthly points for the long-range trend.
+export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<HistoryMap> {
   const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY] =
     await Promise.all([
-      fetchYahooHistory('^VIX'),
-      fetchFredHistory('DGS10'),
-      fetchFredHistory('FEDFUNDS'),
-      fetchFredYoYHistory('CPIAUCSL'),
-      fetchJoblessHistory(),
-      fetchYieldCurveHistory(),
-      fetchFredHistory('BAMLH0A0HYM2'),
-      fetchFredHistory('BAMLC0A0CM'),
-      fetchYahooHistory('^GSPC'),
-      fetchYahooHistory('DX-Y.NYB'),
-      fetchYahooHistory('GC=F'),
-      fetchYahooHistory('CL=F'),
-      fetchYahooHistory('HG=F'),
-      fetchFredHistory('MORTGAGE30US'),
-      fetchFredYoYHistory('CSUSHPINSA'),  // home-price YoY (crash signal for the Break Meter)
+      fetchYahooHistory('^VIX', years, freq),
+      fetchFredHistory('DGS10', years, freq),
+      fetchFredHistory('FEDFUNDS', years, freq),
+      fetchFredYoYHistory('CPIAUCSL', years, freq),
+      fetchJoblessHistory(years, freq),
+      fetchYieldCurveHistory(years, freq),
+      fetchFredHistory('BAMLH0A0HYM2', years, freq),
+      fetchFredHistory('BAMLC0A0CM', years, freq),
+      fetchYahooHistory('^GSPC', years, freq),
+      fetchYahooHistory('DX-Y.NYB', years, freq),
+      fetchYahooHistory('GC=F', years, freq),
+      fetchYahooHistory('CL=F', years, freq),
+      fetchYahooHistory('HG=F', years, freq),
+      fetchFredHistory('MORTGAGE30US', years, freq),
+      fetchFredYoYHistory('CSUSHPINSA', years, freq),  // home-price YoY (crash signal for the Break Meter)
     ])
 
   return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY }
