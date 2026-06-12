@@ -343,7 +343,7 @@ export default function Dashboard() {
           }
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
-        .page { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 4rem; }
+        .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
