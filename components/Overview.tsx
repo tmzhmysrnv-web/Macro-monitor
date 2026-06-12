@@ -315,6 +315,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
             <text x={CX} y={CY+11} textAnchor="middle" fontSize="9" fontFamily="var(--mono)" fill="var(--text-muted)">/ 100</text>
           </svg>
           <div className="bm-sev" style={{ color }}>{sev.label}</div>
+          <div className="bm-label">Break Meter</div>
           {bm && delta != null && (
             delta === 0
               ? <div className="bm-delta bm-delta-flat">No change this week</div>
@@ -322,7 +323,6 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
                   {delta > 0 ? '↑' : '↓'} {delta > 0 ? '+' : '−'}{Math.abs(delta)} in the past week
                 </div>
           )}
-          <div className="bm-label">Break Meter</div>
           {primaryRisks.length > 0 && (
             <div className="bm-risks">Primary risks: {primaryRisks.join(', ')}</div>
           )}
