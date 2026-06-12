@@ -201,13 +201,16 @@ function headlineFor(total: number): string {
   return 'Breaking — systemic stress'
 }
 
-export function buildBriefing(stress: StressResult): Briefing {
+export function buildBriefing(stress: StressResult, alertKeys: Set<string> = new Set()): Briefing {
   const cats = stress.categories // already sorted worst-first
   const top = cats[0]
-  const bottom = cats[cats.length - 1]
+  // A subsystem with an active alert is never a "stabilizer", even if its
+  // break-distance score is low (e.g. inflation alerts at 4% but only "breaks"
+  // near 9%). Pick the calmest subsystem that isn't currently alerting.
+  const calmest = [...cats].reverse().find(c => !alertKeys.has(c.driverKey))
   return {
     headline: headlineFor(stress.total),
     concern: top && top.stress >= 25 ? { label: top.label, detail: top.driver } : null,
-    stabilizer: bottom && bottom.stress < 25 ? { label: bottom.label, detail: bottom.driver } : null,
+    stabilizer: calmest && calmest.stress < 25 ? { label: calmest.label, detail: calmest.driver } : null,
   }
 }

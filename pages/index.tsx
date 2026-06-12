@@ -295,6 +295,14 @@ export default function Dashboard() {
     setActiveChart({ key, label })
   }, [])
 
+  // Jump from an Overview alert to the indicator's metric card: switch to the
+  // most specific tab that holds it, then open its chart.
+  const handleViewCard = useCallback((key: string, label: string) => {
+    const specific = TABS.find(t => t.id !== 'all' && t.sections?.some(s => s.keys.includes(key)))
+    setActiveTab(specific?.id ?? 'all')
+    setActiveChart({ key, label })
+  }, [])
+
   const allStatuses = data ? INDICATORS.map(ind => {
     const val = getValueForKey(data, ind.key)
     return val != null ? getStatus(ind, val) : 'ok' as AlertStatus
@@ -461,7 +469,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
-            <Overview events={events} />
+            <Overview data={data} events={events} onViewCard={handleViewCard} />
 
             {/* Upcoming events strip */}
             {events.length > 0 && (

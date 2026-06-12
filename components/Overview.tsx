@@ -3,6 +3,8 @@
 // Order answers the page's question fastest: Alerts → Break Meter → Recent
 // Breaks → Watching → Drivers → What Changed → Today's Situation.
 import { useEffect, useState } from 'react'
+import type { MacroData } from '../lib/fetchData'
+import { buildAlertCards, type AlertCard } from '../lib/alertCards'
 
 type Driver = { key: string; label: string; stress: number; status: string; driver: string; driverKey: string; trend: 'up' | 'down' | 'flat'; share: number }
 type ChangeRow = { key: string; label: string; why: string; current: number; weekAgo: number; unit: string; direction: string; significance: number }
@@ -127,7 +129,66 @@ function BreakMeterTrend({ history, color }: { history: { date: string; value: n
   )
 }
 
-export default function Overview({ events = [] }: { events?: EventItem[] }) {
+function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: string, label: string) => void }) {
+  const dirColor = card.direction === 'Rising' ? '#A32D2D' : card.direction === 'Cooling' ? '#3B6D11' : 'var(--text-secondary)'
+  const dirArrow = card.direction === 'Rising' ? '↑' : card.direction === 'Cooling' ? '↓' : '→'
+  return (
+    <div className="ac">
+      {/* Header */}
+      <div className="ac-head">
+        <div className="ac-icon">{card.icon}</div>
+        <div className="ac-head-main">
+          <div className="ac-title">{card.title}</div>
+          <div className="ac-new"><span className="ac-new-dot" /> Active alert</div>
+        </div>
+      </div>
+
+      <div className="ac-body">
+        {/* Left: the numbers */}
+        <div className="ac-stats">
+          <div className="ac-stat"><span className="ac-stat-k">Current value</span><span className="ac-stat-v">{card.current}</span></div>
+          <div className="ac-stat"><span className="ac-stat-k">Threshold</span><span className="ac-stat-v">{card.threshold}</span></div>
+          {card.triggered && <div className="ac-stat"><span className="ac-stat-k">Triggered</span><span className="ac-stat-v">{card.triggered}</span></div>}
+          <div className="ac-stat"><span className="ac-stat-k">Direction</span><span className="ac-stat-v" style={{ color: dirColor }}>{dirArrow} {card.direction}</span></div>
+        </div>
+
+        {/* Why it matters */}
+        <div className="ac-col">
+          <div className="ac-col-h">Why it matters</div>
+          <div className="ac-why">{card.whyItMatters}</div>
+        </div>
+
+        {/* Affected areas */}
+        {card.affectedAreas.length > 0 && (
+          <div className="ac-col">
+            <div className="ac-col-h">Affected areas</div>
+            <div className="ac-areas">
+              {card.affectedAreas.map((a, i) => (
+                <div className="ac-area" key={i}>
+                  <span className="ac-area-icon">{a.icon}</span>
+                  <span className="ac-area-text"><strong>{a.label}</strong>{a.desc ? ` — ${a.desc}` : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Historical context */}
+        <div className="ac-col">
+          <div className="ac-col-h">Historical context</div>
+          {card.historicalContext.map((c, i) => (
+            <div className="ac-ctx" key={i}>{c}</div>
+          ))}
+          {onView && (
+            <button className="ac-view" onClick={() => onView(card.key, card.name)}>{card.viewLabel} →</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function Overview({ data = null, events = [], onViewCard }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
   const [full, setFull] = useState<string | null>(null)
@@ -146,7 +207,15 @@ export default function Overview({ events = [] }: { events?: EventItem[] }) {
 
   const sev = bm ? severity(bm.total) : { label: '', color: '#639922' }
   const color = sev.color
-  const alerts = bm?.alerts ?? []
+  // Alerts are derived from the SAME data the top-bar pill uses, so the two can
+  // never disagree. Trend (Rising/Cooling) + triggered date come from the meter
+  // payload when it's loaded, but the alert list itself does not depend on it.
+  const directions: Record<string, 'up' | 'down' | 'flat'> = {}
+  for (const r of bm?.whatChanged ?? []) directions[r.key] = r.direction === 'toward-danger' ? 'up' : r.direction === 'toward-safety' ? 'down' : 'flat'
+  const triggered: Record<string, string> = {}
+  for (const e of bm?.recentBreaks ?? []) if (!triggered[e.key]) triggered[e.key] = e.date
+  const alertCards: AlertCard[] = data ? buildAlertCards(data, { directions, triggered }) : []
+  const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
   const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
 
@@ -170,29 +239,26 @@ export default function Overview({ events = [] }: { events?: EventItem[] }) {
   return (
     <div>
       {/* ── 1. Active Alerts ── */}
-      <div className={`alerts-box ${alerts.length ? 'is-alert' : 'is-clear'}`}>
+      <div className={`alerts-box ${alertCards.length ? 'is-alert' : 'is-clear'}`}>
         <div className="alerts-head">
-          <span className="alerts-dot" style={{ background: alerts.length ? '#E24B4A' : '#639922' }} />
-          {loading ? 'Checking alerts…'
-            : alerts.length ? `${alerts.length} Active Alert${alerts.length > 1 ? 's' : ''}`
+          <span className={`alerts-dot ${alertCards.length ? 'is-pulse' : ''}`} style={{ background: alertCards.length ? '#E24B4A' : '#639922' }} />
+          {!dataReady ? 'Checking alerts…'
+            : alertCards.length ? `${alertCards.length} Active Alert${alertCards.length > 1 ? 's' : ''}`
             : 'No Active Alerts'}
         </div>
-        {!loading && alerts.length === 0 && (
+        {dataReady && alertCards.length === 0 && (
           <div className="alerts-clear-sub">Nothing important is currently breaking.</div>
         )}
-        {alerts.map(a => (
-          <div className="alert-row" key={a.key}>
-            <span className="alert-label">{a.label}</span>
-            <span className="alert-msg">{a.message}</span>
-          </div>
-        ))}
-        {bm?.concern && (
-          <div className="alerts-concern">
-            <span className="alerts-concern-k">Most significant concern</span>
-            <span className="alerts-concern-v">{bm.concern.label}{bm.concern.detail ? ` · ${bm.concern.detail}` : ''}</span>
+        {dataReady && alertCards.length > 0 && bm?.concern && (
+          <div className="alerts-concern-inline">
+            Most significant concern: <strong>{bm.concern.label}</strong>{bm.concern.detail ? ` · ${bm.concern.detail}` : ''}
           </div>
         )}
       </div>
+
+      {alertCards.map(a => (
+        <AlertCardView key={a.key} card={a} onView={onViewCard} />
+      ))}
 
       {/* ── 2. Break Meter ── */}
       <div className="bm-hero">
@@ -335,13 +401,37 @@ const ovStyles = `
   .alerts-box.is-clear { border-color: #B8DCA0; }
   .alerts-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--text-primary); }
   .alerts-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .alerts-dot.is-pulse { animation: ovpulse 1.6s ease-in-out infinite; }
+  @keyframes ovpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .alerts-clear-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
-  .alert-row { display: flex; flex-direction: column; gap: 1px; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border); }
-  .alert-label { font-size: 13px; font-weight: 500; color: #A32D2D; }
-  .alert-msg { font-size: 12px; color: var(--text-secondary); line-height: 1.5; max-width: 78ch; }
-  .alerts-concern { display: flex; flex-direction: column; gap: 1px; margin-top: 12px; padding-top: 10px; border-top: 0.5px solid var(--border); }
-  .alerts-concern-k { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
-  .alerts-concern-v { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+  .alerts-concern-inline { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+
+  /* Rich alert card */
+  .ac { border: 0.5px solid #E24B4A; border-left: 3px solid #E24B4A; background: var(--card-bg); border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+  .ac-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .ac-icon { font-size: 22px; line-height: 1; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: var(--alert-bg); border-radius: 9px; flex-shrink: 0; }
+  .ac-head-main { display: flex; flex-direction: column; gap: 2px; }
+  .ac-title { font-size: 16px; font-weight: 500; color: var(--text-primary); }
+  .ac-new { font-size: 11px; font-family: var(--mono); color: #A32D2D; display: flex; align-items: center; gap: 5px; }
+  .ac-new-dot { width: 6px; height: 6px; border-radius: 50%; background: #E24B4A; animation: ovpulse 1.6s ease-in-out infinite; }
+  .ac-body { display: grid; grid-template-columns: 160px 1fr 1fr 1fr; gap: 1.25rem; }
+  @media (max-width: 860px) { .ac-body { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .ac-body { grid-template-columns: 1fr; } }
+  .ac-stats { display: flex; flex-direction: column; gap: 8px; }
+  .ac-stat { display: flex; flex-direction: column; gap: 1px; }
+  .ac-stat-k { font-size: 9px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
+  .ac-stat-v { font-size: 14px; font-weight: 500; color: var(--text-primary); font-family: var(--mono); }
+  .ac-col-h { font-size: 9px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-bottom: 7px; }
+  .ac-why { font-size: 12px; line-height: 1.55; color: var(--text-secondary); }
+  .ac-areas { display: flex; flex-direction: column; gap: 7px; }
+  .ac-area { display: flex; gap: 7px; align-items: baseline; }
+  .ac-area-icon { font-size: 12px; flex-shrink: 0; }
+  .ac-area-text { font-size: 11px; line-height: 1.45; color: var(--text-secondary); }
+  .ac-area-text strong { color: var(--text-primary); font-weight: 500; }
+  .ac-ctx { font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 5px; padding-left: 10px; position: relative; }
+  .ac-ctx::before { content: '·'; position: absolute; left: 2px; color: var(--text-muted); }
+  .ac-view { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: #A32D2D; background: none; border: 0.5px solid #E24B4A; border-radius: 6px; padding: 5px 10px; cursor: pointer; transition: background 0.15s; }
+  .ac-view:hover { background: var(--alert-bg); }
 
   .bm-hero { display: flex; gap: 1.75rem; align-items: center; background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .bm-gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 160px; }

@@ -38,17 +38,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const whatChanged = await buildWhatChanged(data, history)
     const alerts = buildAlerts(data)
+    const alertKeys = new Set(alerts.map(a => a.key))
     const watching = buildWatching(data)
     const recentBreaks = buildRecentBreaks(history)
-    const briefing = buildBriefing(current)
+    const briefing = buildBriefing(current, alertKeys)
 
-    // Enrich drivers with a weekly trend arrow + rough contribution share
+    // Enrich drivers with a weekly trend arrow + rough contribution share.
+    // A subsystem whose driver is in active alert is floored to "elevated" so
+    // it never renders as calm/green while a red alert is firing.
+    const RANK = { calm: 0, watch: 1, elevated: 2, stressed: 3, breaking: 4 } as const
     const changeByKey = new Map(whatChanged.map(r => [r.key, r.direction]))
     const sumStress = current.categories.reduce((a, c) => a + c.stress, 0) || 1
     const drivers = current.categories.map(c => {
       const dir = changeByKey.get(c.driverKey)
       const trend: 'up' | 'down' | 'flat' = dir === 'toward-danger' ? 'up' : dir === 'toward-safety' ? 'down' : 'flat'
-      return { ...c, trend, share: Math.round((c.stress / sumStress) * 100) }
+      const status = alertKeys.has(c.driverKey) && RANK[c.status] < RANK.elevated ? 'elevated' : c.status
+      return { ...c, status, trend, share: Math.round((c.stress / sumStress) * 100) }
     })
 
     res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
