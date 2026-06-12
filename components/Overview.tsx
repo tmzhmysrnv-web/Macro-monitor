@@ -210,6 +210,8 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
   const [loading, setLoading] = useState(true)
   const [full, setFull] = useState<string | null>(null)
   const [showFull, setShowFull] = useState(false)
+  const [showAlerts, setShowAlerts] = useState(true)
+  const [delta, setDelta] = useState<number | null>(null)
 
   useEffect(() => {
     // Fast: score + alerts + drivers + the fresh trailing-year trend.
@@ -222,6 +224,21 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
       .then(d => setFull(d?.text ?? null))
       .catch(() => {})
   }, [])
+
+  // "Since last visit" delta: compare the live total to the value stored on the
+  // visitor's last visit, then advance the baseline (but not on quick refreshes,
+  // so the change vs the genuinely-previous visit stays visible).
+  useEffect(() => {
+    if (!bm || typeof bm.total !== 'number') return
+    try {
+      const raw = localStorage.getItem('bm_last')
+      const prev = raw ? JSON.parse(raw) : null
+      if (prev && typeof prev.total === 'number') setDelta(bm.total - prev.total)
+      if (!prev || typeof prev.total !== 'number' || Date.now() - (prev.at || 0) > 30 * 60 * 1000) {
+        localStorage.setItem('bm_last', JSON.stringify({ total: bm.total, at: Date.now() }))
+      }
+    } catch { /* localStorage unavailable — skip */ }
+  }, [bm])
 
   const sev = bm ? severity(bm.total) : { label: '', color: '#639922' }
   const color = sev.color
@@ -266,13 +283,25 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
 
   return (
     <div>
-      {/* ── 1. Active Alerts ── */}
+      {/* ── 1. Active Alerts (click header to expand/collapse) ── */}
       <div className={`alerts-box ${alertCards.length ? 'is-alert' : 'is-clear'}`}>
-        <div className="alerts-head">
+        <div
+          className={`alerts-head ${alertCards.length ? 'is-toggle' : ''}`}
+          onClick={alertCards.length ? () => setShowAlerts(s => !s) : undefined}
+          role={alertCards.length ? 'button' : undefined}
+          tabIndex={alertCards.length ? 0 : undefined}
+          aria-expanded={alertCards.length ? showAlerts : undefined}
+          onKeyDown={alertCards.length ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowAlerts(s => !s) } } : undefined}
+        >
           <span className={`alerts-dot ${alertCards.length ? 'is-pulse' : ''}`} style={{ background: alertCards.length ? '#E24B4A' : '#639922' }} />
-          {!dataReady ? 'Checking alerts…'
-            : alertCards.length ? `${alertCards.length} Active Alert${alertCards.length > 1 ? 's' : ''}`
-            : 'No Active Alerts'}
+          <span className="alerts-head-text">
+            {!dataReady ? 'Checking alerts…'
+              : alertCards.length ? `${alertCards.length} Active Alert${alertCards.length > 1 ? 's' : ''}`
+              : 'No Active Alerts'}
+          </span>
+          {alertCards.length > 0 && (
+            <span className="alerts-chevron">{showAlerts ? 'Hide ▲' : 'Show ▼'}</span>
+          )}
         </div>
         {dataReady && alertCards.length === 0 && (
           <div className="alerts-clear-sub">Nothing important is currently breaking.</div>
@@ -284,7 +313,7 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
         )}
       </div>
 
-      {alertCards.map(a => (
+      {showAlerts && alertCards.map(a => (
         <AlertCardView key={a.key} card={a} onView={onViewCard} />
       ))}
 
@@ -298,6 +327,13 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
             <text x={CX} y={CY+11} textAnchor="middle" fontSize="9" fontFamily="var(--mono)" fill="var(--text-muted)">/ 100</text>
           </svg>
           <div className="bm-sev" style={{ color }}>{sev.label}</div>
+          {bm && delta != null && (
+            delta === 0
+              ? <div className="bm-delta bm-delta-flat">No change since last visit</div>
+              : <div className="bm-delta" style={{ color: delta > 0 ? '#A32D2D' : '#3B6D11' }}>
+                  {delta > 0 ? '↑' : '↓'} {delta > 0 ? '+' : '−'}{Math.abs(delta)} since last visit
+                </div>
+          )}
           <div className="bm-label">Break Meter</div>
           {primaryRisks.length > 0 && (
             <div className="bm-risks">Primary risks: {primaryRisks.join(', ')}</div>
@@ -450,6 +486,10 @@ const ovStyles = `
   .alerts-box.is-alert { border-color: #E24B4A; background: var(--alert-bg); }
   .alerts-box.is-clear { border-color: #B8DCA0; }
   .alerts-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--text-primary); }
+  .alerts-head.is-toggle { cursor: pointer; user-select: none; }
+  .alerts-head-text { flex: 1; }
+  .alerts-chevron { font-size: 11px; font-weight: 500; font-family: var(--mono); color: var(--text-muted); letter-spacing: 0.02em; }
+  .alerts-head.is-toggle:hover .alerts-chevron { color: var(--text-secondary); }
   .alerts-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .alerts-dot.is-pulse { animation: ovpulse 1.6s ease-in-out infinite; }
   @keyframes ovpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -486,6 +526,8 @@ const ovStyles = `
   .bm-hero { display: flex; gap: 1.75rem; align-items: center; background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .bm-gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 160px; }
   .bm-sev { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .bm-delta { font-size: 11px; font-weight: 500; font-family: var(--mono); margin-top: 3px; }
+  .bm-delta-flat { color: var(--text-muted); font-weight: 400; }
   .bm-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
   .bm-risks { font-size: 11px; color: var(--text-secondary); text-align: center; margin-top: 6px; max-width: 200px; }
   /* Severity legend under the gauge */
