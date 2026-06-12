@@ -354,7 +354,7 @@ export default function Dashboard() {
           --bg: #F7F6F3; --card-bg: #FFFFFF;
           --text-primary: #1A1A18; --text-secondary: #6B6B67; --text-muted: #9E9E9A;
           --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.15);
-          --warn-bg: #FFFBF2; --alert-bg: #FFF5F5;
+          --warn-bg: #FFFBF2; --alert-bg: #FFF5F5; --term: #1a9c3c;
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
         }
         @media (prefers-color-scheme: dark) {
@@ -362,7 +362,7 @@ export default function Dashboard() {
             --bg: #111110; --card-bg: #1C1C1A;
             --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
             --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
-            --warn-bg: #1E1A10; --alert-bg: #1E1010;
+            --warn-bg: #1E1A10; --alert-bg: #1E1010; --term: #3ad860;
           }
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
@@ -371,7 +371,9 @@ export default function Dashboard() {
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
         .topbar { margin-bottom: 0.5rem; }
-        .site-name { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-primary); }
+        .site-name { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: 0.02em; color: var(--term); text-shadow: 0 0 7px color-mix(in srgb, var(--term) 42%, transparent); }
+        .term-cursor { display: inline-block; width: 0.55em; height: 1em; margin-left: 4px; vertical-align: -0.12em; background: var(--term); box-shadow: 0 0 9px color-mix(in srgb, var(--term) 55%, transparent); animation: termblink 1.06s steps(1, end) infinite; }
+        @keyframes termblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
         .site-tagline { font-size: 12px; color: var(--text-muted); margin-top: 2px; margin-bottom: 1rem; }
         .topbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -478,7 +480,7 @@ export default function Dashboard() {
 
       <div className="page">
         <div className="topbar">
-          <div className="site-name">is the world breaking?</div>
+          <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
           <div className="site-tagline">a quiet macro dashboard · alerts only when it matters</div>
           <div className="topbar-row">
             {!loading && !error && (

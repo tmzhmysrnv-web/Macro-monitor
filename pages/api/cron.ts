@@ -5,8 +5,6 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchAllData, MacroData } from '../../lib/fetchData'
 import { INDICATORS, getStatus } from '../../lib/thresholds'
 import { sendAllAlerts, AlertPayload } from '../../lib/sendAlert'
-import { generateSummary } from './summary'
-import { computeStressIndex } from '../../lib/stressIndex'
 
 const lastAlerted: Record<string, number> = {}
 const ALERT_COOLDOWN_MS = 20 * 60 * 60 * 1000 // 20 hours
@@ -50,22 +48,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (triggeredAlerts.length > 0) await sendAllAlerts(triggeredAlerts)
 
-    // Regenerate AI summary daily
-    let summaryStatus = 'skipped'
-    try {
-      const summaryText = await generateSummary(data)
-      // Store in the summary module's cache by calling the endpoint internally
-      summaryStatus = summaryText ? 'generated' : 'failed'
-    } catch (e) {
-      summaryStatus = 'error'
-      console.error('Summary generation failed in cron:', e)
-    }
-
     res.status(200).json({
       checked: INDICATORS.length,
       triggered: triggeredAlerts.length,
       alerts: triggeredAlerts.map(a => a.indicator),
-      summary: summaryStatus,
       at: new Date().toISOString(),
     })
   } catch (err) {
