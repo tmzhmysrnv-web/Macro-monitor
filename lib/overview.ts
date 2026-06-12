@@ -8,7 +8,7 @@
 
 import type { MacroData } from './fetchData'
 import { INDICATORS, getStatus, getContextText, type Indicator } from './thresholds'
-import type { StressResult } from './stressIndex'
+import { computeStressFromValues, BREAK_KEYS, type StressResult } from './stressIndex'
 import type { HistoryMap } from './fetchHistory'
 
 // ── shared helpers ────────────────────────────────────────────────────
@@ -226,6 +226,36 @@ export function buildTrendDirections(
     out[ind.key] = Math.abs(move) < deadband ? 'flat' : move > 0 ? 'up' : 'down'
   }
   return out
+}
+
+// Reconstruct the Break Meter total as of a point in time, forward-filling the
+// last known value for each input (so monthly/weekly series stay aligned).
+function totalAsOf(history: HistoryMap, asOf: number): number | null {
+  const vals: Record<string, number | null> = {}
+  let have = 0
+  for (const key of BREAK_KEYS) {
+    const series = history[key]
+    let v: number | null = null
+    if (series) {
+      for (let i = series.length - 1; i >= 0; i--) {
+        if (new Date(series[i].date).getTime() <= asOf) { v = series[i].value; break }
+      }
+    }
+    vals[key] = v
+    if (v != null) have++
+  }
+  if (have < Math.ceil(BREAK_KEYS.length * 0.6)) return null
+  return computeStressFromValues(vals)
+}
+
+// How much the Break Meter has moved over the last `days` — same for everyone,
+// reconstructed from the daily history. Positive = things got worse.
+export function buildMeterChange(history: HistoryMap, days = 7): number | null {
+  const now = Date.now()
+  const cur = totalAsOf(history, now)
+  const prev = totalAsOf(history, now - days * 86400000)
+  if (cur == null || prev == null) return null
+  return cur - prev
 }
 
 export function buildBriefing(stress: StressResult, alertKeys: Set<string> = new Set()): Briefing {

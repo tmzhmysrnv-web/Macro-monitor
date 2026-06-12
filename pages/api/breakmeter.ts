@@ -9,7 +9,7 @@ import { computeStressIndex } from '../../lib/stressIndex'
 import { buildWhatChanged } from '../../lib/whatChanged'
 import { backfillBreakMeter } from '../../lib/backfill'
 import { fetchAllHistory } from '../../lib/fetchHistory'
-import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections } from '../../lib/overview'
+import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections, buildMeterChange } from '../../lib/overview'
 
 const BREAK_INPUTS = ['vix', 'treasury10y', 'yieldCurve', 'cpi', 'joblessClaims', 'hySpread', 'igSpread', 'mortgage30', 'homePriceYoY'] as const
 
@@ -30,6 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const recentBreaks = buildRecentBreaks(history)
     const briefing = buildBriefing(current, alertKeys)
     const directions = buildTrendDirections(data, history)
+    const weekChange = buildMeterChange(history, 7) // shared "past 7 days" delta
     // Fresh trailing-year trend, reconstructed from the 1y history we already
     // fetched (no extra calls). The deep history is a committed static snapshot;
     // the client stitches: snapshot (old) → recentTrend (last ~12mo) → live tip.
@@ -62,6 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       briefing,
       directions,
       recentTrend,
+      weekChange,
       concern: briefing.concern,
     })
   } catch (err) {

@@ -29,6 +29,7 @@ type BreakMeter = {
   briefing: Briefing
   directions?: Record<string, 'up' | 'down' | 'flat'>
   recentTrend?: { date: string; value: number }[]
+  weekChange?: number | null
   concern: { label: string; detail: string } | null
 }
 
@@ -211,7 +212,6 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
   const [full, setFull] = useState<string | null>(null)
   const [showFull, setShowFull] = useState(false)
   const [showAlerts, setShowAlerts] = useState(true)
-  const [delta, setDelta] = useState<number | null>(null)
 
   useEffect(() => {
     // Fast: score + alerts + drivers + the fresh trailing-year trend.
@@ -225,20 +225,8 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
       .catch(() => {})
   }, [])
 
-  // "Since last visit" delta: compare the live total to the value stored on the
-  // visitor's last visit, then advance the baseline (but not on quick refreshes,
-  // so the change vs the genuinely-previous visit stays visible).
-  useEffect(() => {
-    if (!bm || typeof bm.total !== 'number') return
-    try {
-      const raw = localStorage.getItem('bm_last')
-      const prev = raw ? JSON.parse(raw) : null
-      if (prev && typeof prev.total === 'number') setDelta(bm.total - prev.total)
-      if (!prev || typeof prev.total !== 'number' || Date.now() - (prev.at || 0) > 30 * 60 * 1000) {
-        localStorage.setItem('bm_last', JSON.stringify({ total: bm.total, at: Date.now() }))
-      }
-    } catch { /* localStorage unavailable — skip */ }
-  }, [bm])
+  // Shared "past 7 days" delta, reconstructed server-side — same for everyone.
+  const delta = bm?.weekChange ?? null
 
   const sev = bm ? severity(bm.total) : { label: '', color: '#639922' }
   const color = sev.color
@@ -329,9 +317,9 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           <div className="bm-sev" style={{ color }}>{sev.label}</div>
           {bm && delta != null && (
             delta === 0
-              ? <div className="bm-delta bm-delta-flat">No change since last visit</div>
+              ? <div className="bm-delta bm-delta-flat">No change this week</div>
               : <div className="bm-delta" style={{ color: delta > 0 ? '#A32D2D' : '#3B6D11' }}>
-                  {delta > 0 ? '↑' : '↓'} {delta > 0 ? '+' : '−'}{Math.abs(delta)} since last visit
+                  {delta > 0 ? '↑' : '↓'} {delta > 0 ? '+' : '−'}{Math.abs(delta)} in the past week
                 </div>
           )}
           <div className="bm-label">Break Meter</div>
