@@ -68,6 +68,7 @@ export type SubsystemStress = {
   stress: number          // 0–100
   status: 'calm' | 'watch' | 'elevated' | 'stressed' | 'breaking'
   driver: string          // worst signal's label
+  driverKey: string       // worst signal's indicator key (for trend lookup)
 }
 function subStatus(s: number): SubsystemStress['status'] {
   if (s >= 85) return 'breaking'
@@ -94,15 +95,15 @@ function indexLevel(total: number): { level: StressResult['level']; verdict: str
 // Core: score every subsystem (worst signal within), then worst-of + contagion.
 function computeFrom(getVal: (key: string) => number | null): { total: number; subsystems: SubsystemStress[] } {
   const subsystems: SubsystemStress[] = SUBSYSTEMS.map(sub => {
-    let stress = 0, driver = ''
+    let stress = 0, driver = '', driverKey = ''
     for (const sig of sub.signals) {
       const v = getVal(sig.key)
       if (v == null) continue
       const s = signalStress(sig, v)
-      if (s > stress) { stress = s; driver = sig.note }
+      if (s > stress) { stress = s; driver = sig.note; driverKey = sig.key }
     }
     const r = Math.round(stress)
-    return { key: sub.key, label: sub.label, stress: r, status: subStatus(r), driver }
+    return { key: sub.key, label: sub.label, stress: r, status: subStatus(r), driver, driverKey }
   })
 
   const stresses = subsystems.map(s => s.stress)

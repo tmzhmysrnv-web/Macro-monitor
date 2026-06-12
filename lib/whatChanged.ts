@@ -3,7 +3,7 @@
 // indicator, ranked by significance, colored by direction.
 
 import type { MacroData } from './fetchData'
-import { fetchAllHistory } from './fetchHistory'
+import { fetchAllHistory, type HistoryMap } from './fetchHistory'
 import { INDICATORS } from './thresholds'
 
 export type ChangeRow = {
@@ -60,8 +60,8 @@ function weightForKey(key: string): number {
   return IMPORTANCE[key] ?? 8
 }
 
-export async function buildWhatChanged(data: MacroData): Promise<ChangeRow[]> {
-  const history = await fetchAllHistory()
+export async function buildWhatChanged(data: MacroData, preloaded?: HistoryMap): Promise<ChangeRow[]> {
+  const history = preloaded ?? await fetchAllHistory()
   const rows: ChangeRow[] = []
 
   for (const ind of INDICATORS) {

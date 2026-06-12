@@ -255,7 +255,6 @@ export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [aiSummary, setAiSummary] = useState<{ text: string; generatedAt: string } | null>(null)
   const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string }>>([])
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
@@ -266,11 +265,6 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
-
-    fetch('/api/summary')
-      .then(r => r.json())
-      .then(d => setAiSummary(d))
-      .catch(() => {})
 
     fetch('/api/calendar')
       .then(r => r.json())
@@ -467,28 +461,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
-            <Overview />
-
-            {/* Summary */}
-            <div className={`summary-box ${overallStatus !== 'ok' ? overallStatus : ''}`}>
-              <div className="summary-label">
-                Summary
-              </div>
-              {aiSummary ? (
-                <>
-                  <div className="summary-text">{aiSummary.text}</div>
-                  <div className="summary-time">
-                    Generated {new Date(aiSummary.generatedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div className="skeleton" style={{ height: '13px', width: '95%' }} />
-                  <div className="skeleton" style={{ height: '13px', width: '88%' }} />
-                  <div className="skeleton" style={{ height: '13px', width: '72%' }} />
-                </div>
-              )}
-            </div>
+            <Overview events={events} />
 
             {/* Upcoming events strip */}
             {events.length > 0 && (
