@@ -7,6 +7,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchAllData } from '../../lib/fetchData'
 import { computeStressIndex } from '../../lib/stressIndex'
 import { buildWhatChanged } from '../../lib/whatChanged'
+import { backfillBreakMeter } from '../../lib/backfill'
 import { fetchAllHistory } from '../../lib/fetchHistory'
 import { buildAlerts, buildWatching, buildRecentBreaks, buildBriefing, buildTrendDirections } from '../../lib/overview'
 
@@ -29,6 +30,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const recentBreaks = buildRecentBreaks(history)
     const briefing = buildBriefing(current, alertKeys)
     const directions = buildTrendDirections(data, history)
+    // Fresh trailing-year trend, reconstructed from the 1y history we already
+    // fetched (no extra calls). The deep history is a committed static snapshot;
+    // the client stitches: snapshot (old) → recentTrend (last ~12mo) → live tip.
+    const recentTrend = await backfillBreakMeter(history)
 
     // Enrich drivers with a weekly trend arrow + rough contribution share.
     // A subsystem whose driver is in active alert is floored to "elevated" so
@@ -56,6 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       recentBreaks,
       briefing,
       directions,
+      recentTrend,
       concern: briefing.concern,
     })
   } catch (err) {

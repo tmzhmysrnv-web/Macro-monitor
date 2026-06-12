@@ -5,6 +5,11 @@
 import { useEffect, useState } from 'react'
 import type { MacroData } from '../lib/fetchData'
 import { buildAlertCards, type AlertCard } from '../lib/alertCards'
+import trendSnapshot from '../data/trendSnapshot.json'
+
+// Deep Break Meter history is immutable — bundled as a static snapshot so it
+// renders instantly and never depends on a live, throttle-prone backfill.
+const DEEP_TREND = trendSnapshot.history as { date: string; value: number }[]
 
 type Driver = { key: string; label: string; stress: number; status: string; driver: string; driverKey: string; trend: 'up' | 'down' | 'flat'; share: number }
 type ChangeRow = { key: string; label: string; why: string; current: number; weekAgo: number; unit: string; direction: string; significance: number }
@@ -23,6 +28,7 @@ type BreakMeter = {
   recentBreaks: BreakEvent[]
   briefing: Briefing
   directions?: Record<string, 'up' | 'down' | 'flat'>
+  recentTrend?: { date: string; value: number }[]
   concern: { label: string; detail: string } | null
 }
 
@@ -202,21 +208,15 @@ function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: strin
 export default function Overview({ data = null, events = [], onViewCard }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [trend, setTrend] = useState<{ date: string; value: number }[] | null>(null)
   const [full, setFull] = useState<string | null>(null)
   const [showFull, setShowFull] = useState(false)
 
   useEffect(() => {
-    // Fast: score + alerts + drivers paint as soon as this returns.
+    // Fast: score + alerts + drivers + the fresh trailing-year trend.
     fetch('/api/breakmeter')
       .then(r => r.json())
       .then(d => { setBm(d); setLoading(false) })
       .catch(() => setLoading(false))
-    // Slow: the 10-year trend streams in separately, so it never blocks the meter.
-    fetch('/api/trend')
-      .then(r => r.json())
-      .then(d => setTrend(d?.history ?? null))
-      .catch(() => {})
     fetch('/api/summary')
       .then(r => r.json())
       .then(d => setFull(d?.text ?? null))
@@ -236,11 +236,16 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
   const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
 
-  // The 10-year trend (loaded separately) with today's live reading appended.
+  // Stitch the trend: immutable deep snapshot → fresh trailing year (recomputed
+  // live, no extra fetch) → today's live reading. The deep history renders
+  // instantly; the recent part sharpens once the meter loads.
   const today = new Date().toISOString().split('T')[0]
-  const trendLine = trend && bm
-    ? [...trend.filter(p => p.date.slice(0, 7) !== today.slice(0, 7)), { date: today, value: bm.total }]
-    : []
+  const recent = bm?.recentTrend ?? []
+  const cutoff = recent.length ? recent[0].date : null
+  const base = cutoff ? [...DEEP_TREND.filter(p => p.date < cutoff), ...recent] : DEEP_TREND
+  const trendLine = bm
+    ? [...base.filter(p => p.date.slice(0, 7) !== today.slice(0, 7)), { date: today, value: bm.total }]
+    : base
 
   // Gauge geometry
   const R = 64, CX = 80, CY = 80
