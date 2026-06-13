@@ -526,7 +526,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
-            <Overview data={data} events={events} onViewCard={handleViewCard} />
+            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} />
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {

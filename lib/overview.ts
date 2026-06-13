@@ -30,6 +30,63 @@ const EVENT_LABEL: Record<string, string> = {
   joblessClaims: 'Jobless claims', yieldCurve: 'Yield curve',
 }
 
+// Which domain tab each indicator belongs to — used to tie "Watching Closely"
+// items back to a category (Housing/Credit/Inflation…) and route clicks to the
+// matching intelligence/section tab.
+export const METRIC_CATEGORY: Record<string, { tab: string; label: string }> = {
+  treasury10y: { tab: 'bonds', label: 'Bonds' },
+  yieldCurve:  { tab: 'bonds', label: 'Bonds' },
+  fedfunds:    { tab: 'bonds', label: 'Bonds' },
+  mortgage30:  { tab: 'housing', label: 'Housing' },
+  hySpread:    { tab: 'credit', label: 'Credit' },
+  igSpread:    { tab: 'credit', label: 'Credit' },
+  cpi:         { tab: 'inflation', label: 'Inflation' },
+  oil:         { tab: 'inflation', label: 'Inflation' },
+  joblessClaims: { tab: 'labor', label: 'Labor' },
+  vix:         { tab: 'markets', label: 'Markets' },
+  sp500:       { tab: 'markets', label: 'Markets' },
+  dxy:         { tab: 'global', label: 'Global' },
+  gold:        { tab: 'global', label: 'Global' },
+  copper:      { tab: 'global', label: 'Global' },
+}
+
+// Short "why this matters" — mirrors the What-Changed panel, used under Recent
+// Breaks rows so each crossed threshold carries its own one-liner.
+const METRIC_WHY: Record<string, string> = {
+  treasury10y: 'Drives borrowing costs', mortgage30: 'Sets housing affordability',
+  vix: 'Market volatility', joblessClaims: 'Labor market health', oil: 'Energy & inflation input',
+  cpi: 'Cost of living', hySpread: 'Corporate credit stress', igSpread: 'Early credit warning',
+  yieldCurve: 'Recession signal', fedfunds: 'Fed policy stance', dxy: 'Dollar strength',
+  sp500: 'Broad equity market', gold: 'Safe-haven demand', copper: 'Global growth pulse',
+}
+
+// Directional, plain-English blurb for "Watching Closely" — what a further move
+// in this indicator would actually do ("10Y Treasury could affect borrowing
+// costs"). Longer/forward-looking, distinct from the terse METRIC_WHY above.
+const WATCH_WHY: Record<string, string> = {
+  treasury10y:  'Could lift borrowing costs across the economy',
+  mortgage30:   'Could squeeze housing affordability',
+  vix:          'Signals rising market fear',
+  cpi:          'Keeps the cost of living elevated',
+  oil:          'Feeds through to inflation and pump prices',
+  hySpread:     'Flags growing corporate credit stress',
+  igSpread:     'An early warning on credit conditions',
+  joblessClaims:'Points to a softening labor market',
+  yieldCurve:   'A classic recession warning',
+  fedfunds:     'Shapes the Fed’s policy stance',
+  dxy:          'A strong dollar tightens global conditions',
+  gold:         'Rising demand signals safe-haven flight',
+  copper:       'A read on global growth momentum',
+  sp500:        'Tracks the broad equity market’s direction',
+}
+
+// Each Break-Meter subsystem maps to the tab that explains it in depth — so a
+// "biggest concern: Credit" routes to the Credit intelligence model, etc.
+const SUBSYS_TAB: Record<string, string> = {
+  credit: 'credit', volatility: 'markets', labor: 'labor',
+  bonds: 'bonds', housing: 'housing', inflation: 'inflation',
+}
+
 // Format a level/value with the right unit affix
 function fmtLevel(key: string, v: number): string {
   if (key === 'oil') return `$${v}`
@@ -61,7 +118,11 @@ export function buildAlerts(data: MacroData): Alert[] {
 
 // ── 2. Watching Closely ───────────────────────────────────────────────
 // Indicators that aren't alerting yet but sit closest to their threshold.
-export type WatchItem = { key: string; label: string; text: string; heat: 'hot' | 'near'; pctToGo: number }
+export type WatchItem = {
+  key: string; label: string; text: string; heat: 'hot' | 'near'; pctToGo: number
+  why: string                                       // directional plain-English blurb
+  category: { tab: string; label: string } | null  // domain it belongs to / routes to
+}
 
 function gapText(ind: Indicator, gap: number): string {
   const g = gap >= 10 ? Math.round(gap).toString() : gap.toFixed(2).replace(/\.?0+$/, '')
@@ -102,6 +163,8 @@ export function buildWatching(data: MacroData): WatchItem[] {
       text: gapText(ind, gap),
       heat: status === 'warn' ? 'hot' : 'near',
       pctToGo: norm,
+      why: WATCH_WHY[ind.key] ?? '',
+      category: METRIC_CATEGORY[ind.key] ?? null,
     })
   }
   return items.sort((a, b) => a.pctToGo - b.pctToGo).slice(0, 5)
@@ -109,7 +172,7 @@ export function buildWatching(data: MacroData): WatchItem[] {
 
 // ── 3. Recent Breaks ──────────────────────────────────────────────────
 // Notable round-number thresholds crossed within the last ~5 months.
-export type BreakEvent = { key: string; text: string; tone: 'bad' | 'good'; date: string; daysAgo: number }
+export type BreakEvent = { key: string; text: string; why: string; tone: 'bad' | 'good'; date: string; daysAgo: number }
 
 // Round levels worth flagging when crossed, per indicator
 const MILESTONES: Record<string, number[]> = {
@@ -153,7 +216,7 @@ export function buildRecentBreaks(history: HistoryMap): BreakEvent[] {
         const tone: 'bad' | 'good' = danger ? (rose ? 'bad' : 'good') : (rose ? 'good' : 'bad')
         const verb = rose ? 'crossed' : 'fell below'
         const text = `${EVENT_LABEL[key]} ${verb} ${fmtLevel(key, level)}`
-        const ev: BreakEvent = { key, text, tone, date: series[i].date, daysAgo: ago }
+        const ev: BreakEvent = { key, text, why: METRIC_WHY[key] ?? '', tone, date: series[i].date, daysAgo: ago }
         if (!best || ago < best.daysAgo) best = ev
       }
     }
@@ -174,6 +237,7 @@ export function buildRecentBreaks(history: HistoryMap): BreakEvent[] {
       const ev: BreakEvent = {
         key: 'yieldCurve',
         text: invertedNow ? 'Yield curve inverted' : 'Yield curve un-inverted',
+        why: METRIC_WHY['yieldCurve'],
         tone: invertedNow ? 'bad' : 'good',
         date: yc[i].date,
         daysAgo: ago,
@@ -189,8 +253,8 @@ export function buildRecentBreaks(history: HistoryMap): BreakEvent[] {
 // ── 4. Today's Briefing ───────────────────────────────────────────────
 export type Briefing = {
   headline: string
-  concern: { label: string; detail: string } | null
-  stabilizer: { label: string; detail: string } | null
+  concern: { label: string; detail: string; tab: string } | null
+  stabilizer: { label: string; detail: string; tab: string } | null
 }
 
 function headlineFor(total: number): string {
@@ -286,7 +350,7 @@ export function buildBriefing(stress: StressResult, alertKeys: Set<string> = new
   const calmest = [...cats].reverse().find(c => !alertKeys.has(c.driverKey))
   return {
     headline: headlineFor(stress.total),
-    concern: top && top.stress >= 25 ? { label: top.label, detail: top.driver } : null,
-    stabilizer: calmest && calmest.stress < 25 ? { label: calmest.label, detail: calmest.driver } : null,
+    concern: top && top.stress >= 25 ? { label: top.label, detail: top.driver, tab: SUBSYS_TAB[top.key] ?? 'overview' } : null,
+    stabilizer: calmest && calmest.stress < 25 ? { label: calmest.label, detail: calmest.driver, tab: SUBSYS_TAB[calmest.key] ?? 'overview' } : null,
   }
 }

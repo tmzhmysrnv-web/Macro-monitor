@@ -14,10 +14,10 @@ const DEEP_TREND = trendSnapshot.history as { date: string; value: number }[]
 type Driver = { key: string; label: string; stress: number; status: string; driver: string; driverKey: string; trend: 'up' | 'down' | 'flat'; share: number }
 type ChangeRow = { key: string; label: string; why: string; current: number; weekAgo: number; unit: string; direction: string; significance: number }
 type Alert = { key: string; label: string; message: string }
-type WatchItem = { key: string; label: string; text: string; heat: 'hot' | 'near' }
-type BreakEvent = { key: string; text: string; tone: 'bad' | 'good'; date: string; daysAgo: number }
-type Briefing = { headline: string; concern: { label: string; detail: string } | null; stabilizer: { label: string; detail: string } | null }
-type EventItem = { name: string; date: string; daysUntil: number; description: string }
+type WatchItem = { key: string; label: string; text: string; heat: 'hot' | 'near'; why: string; category: { tab: string; label: string } | null }
+type BreakEvent = { key: string; text: string; why: string; tone: 'bad' | 'good'; date: string; daysAgo: number }
+type Briefing = { headline: string; concern: { label: string; detail: string; tab: string } | null; stabilizer: { label: string; detail: string; tab: string } | null }
+type EventItem = { name: string; date: string; daysUntil: number; description: string; metricKey?: string }
 type BreakMeter = {
   available: boolean
   total: number; level: string; verdict: string
@@ -30,7 +30,7 @@ type BreakMeter = {
   directions?: Record<string, 'up' | 'down' | 'flat'>
   recentTrend?: { date: string; value: number }[]
   weekChange?: number | null
-  concern: { label: string; detail: string } | null
+  concern: { label: string; detail: string; tab: string } | null
 }
 
 const CAT_COLORS: Record<string, string> = {
@@ -206,7 +206,7 @@ function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: strin
   )
 }
 
-export default function Overview({ data = null, events = [], onViewCard }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void }) {
+export default function Overview({ data = null, events = [], onViewCard, onNavigate }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAlerts, setShowAlerts] = useState(true)
@@ -356,9 +356,14 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
               onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
             >
               <span className="rb-dot" style={{ background: e.tone === 'bad' ? '#E24B4A' : '#639922' }} />
-              <span className="rb-text">{e.text}</span>
-              <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
-              {onViewCard && <span className="rb-go">↗</span>}
+              <div className="rb-main">
+                <div className="rb-top">
+                  <span className="rb-text">{e.text}</span>
+                  <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
+                  {onViewCard && <span className="rb-go">↗</span>}
+                </div>
+                {e.why && <div className="rb-why">{e.why}</div>}
+              </div>
             </div>
           ))}
         </div>
@@ -367,13 +372,32 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           <div className="panel-title">Watching closely</div>
           {loading && <div className="panel-loading">Loading…</div>}
           {bm && bm.watching.length === 0 && <div className="panel-empty">Nothing close to an alert threshold.</div>}
-          {bm && bm.watching.map(w => (
-            <div className="wc-row" key={w.key}>
-              <span className="wc-icon">{w.heat === 'hot' ? '🔥' : '⚠️'}</span>
-              <span className="wc-label">{w.label}</span>
-              <span className="wc-dist">{w.text}</span>
-            </div>
-          ))}
+          {bm && bm.watching.map(w => {
+            const nav = onNavigate && w.category ? () => onNavigate(w.category!.tab) : undefined
+            return (
+              <div
+                className={`wc-row ${nav ? 'is-click' : ''}`}
+                key={w.key}
+                onClick={nav}
+                role={nav ? 'button' : undefined}
+                tabIndex={nav ? 0 : undefined}
+                onKeyDown={nav ? (ev) => { if (ev.key === 'Enter') nav() } : undefined}
+              >
+                <span className="wc-icon">{w.heat === 'hot' ? '🔥' : '⚠️'}</span>
+                <div className="wc-main">
+                  <div className="wc-top">
+                    <span className="wc-label">{w.label}</span>
+                    <span className="wc-dist">{w.text}</span>
+                  </div>
+                  <div className="wc-sub">
+                    {w.category && <span className="wc-cat">{w.category.label}</span>}
+                    {w.why && <span className="wc-why">{w.why}</span>}
+                    {nav && <span className="wc-go">→</span>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
@@ -417,7 +441,14 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
             const pctStr = absPct == null ? '—' : `${absPct >= 100 ? absPct.toFixed(0) : absPct.toFixed(1)}%`
             const arrow = row.current > row.weekAgo ? '↑' : row.current < row.weekAgo ? '↓' : ''
             return (
-              <div className="change-row" key={row.key}>
+              <div
+                className={`change-row ${onViewCard ? 'is-click' : ''}`}
+                key={row.key}
+                onClick={onViewCard ? () => onViewCard(row.key, row.label) : undefined}
+                role={onViewCard ? 'button' : undefined}
+                tabIndex={onViewCard ? 0 : undefined}
+                onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(row.key, row.label) } : undefined}
+              >
                 <div className="change-main">
                   <span className="change-label">{row.label}</span>
                   <span className="change-why">{row.why}</span>
@@ -442,18 +473,35 @@ export default function Overview({ data = null, events = [], onViewCard }: { dat
           <>
             <div className="ts-headline" style={{ color }}>{bm.briefing.headline}</div>
             <div className="ts-grid">
-              <div className="ts-cell">
-                <div className="ts-k">Biggest concern</div>
-                <div className="ts-v">{bm.briefing.concern ? <>{bm.briefing.concern.label}<span className="ts-detail"> — {bm.briefing.concern.detail}</span></> : 'Nothing pressing right now'}</div>
-              </div>
-              <div className="ts-cell">
-                <div className="ts-k">Biggest stabilizer</div>
-                <div className="ts-v">{bm.briefing.stabilizer ? <>{bm.briefing.stabilizer.label}<span className="ts-detail"> — calm</span></> : 'No standout'}</div>
-              </div>
-              <div className="ts-cell">
-                <div className="ts-k">Watch next</div>
-                <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span></> : 'No major releases scheduled'}</div>
-              </div>
+              {(() => {
+                const concern = bm.briefing.concern
+                const cNav = onNavigate && concern ? () => onNavigate(concern.tab) : undefined
+                return (
+                  <div className={`ts-cell ${cNav ? 'is-click' : ''}`} onClick={cNav} role={cNav ? 'button' : undefined} tabIndex={cNav ? 0 : undefined} onKeyDown={cNav ? (e) => { if (e.key === 'Enter') cNav() } : undefined}>
+                    <div className="ts-k">Biggest concern</div>
+                    <div className="ts-v">{concern ? <>{concern.label}<span className="ts-detail"> — {concern.detail}</span>{cNav && <span className="ts-go"> →</span>}</> : 'Nothing pressing right now'}</div>
+                  </div>
+                )
+              })()}
+              {(() => {
+                const stab = bm.briefing.stabilizer
+                const sNav = onNavigate && stab ? () => onNavigate(stab.tab) : undefined
+                return (
+                  <div className={`ts-cell ${sNav ? 'is-click' : ''}`} onClick={sNav} role={sNav ? 'button' : undefined} tabIndex={sNav ? 0 : undefined} onKeyDown={sNav ? (e) => { if (e.key === 'Enter') sNav() } : undefined}>
+                    <div className="ts-k">Biggest stabilizer</div>
+                    <div className="ts-v">{stab ? <>{stab.label}<span className="ts-detail"> — calm</span>{sNav && <span className="ts-go"> →</span>}</> : 'No standout'}</div>
+                  </div>
+                )
+              })()}
+              {(() => {
+                const wNav = onViewCard && nextEvent?.metricKey ? () => onViewCard(nextEvent.metricKey!, nextEvent.name) : undefined
+                return (
+                  <div className={`ts-cell ${wNav ? 'is-click' : ''}`} onClick={wNav} role={wNav ? 'button' : undefined} tabIndex={wNav ? 0 : undefined} onKeyDown={wNav ? (e) => { if (e.key === 'Enter') wNav() } : undefined}>
+                    <div className="ts-k">Watch next</div>
+                    <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span>{wNav && <span className="ts-go"> ↗</span>}</> : 'No major releases scheduled'}</div>
+                  </div>
+                )
+              })()}
             </div>
           </>
         )}
@@ -530,26 +578,40 @@ const ovStyles = `
   .panel-title { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-bottom: 12px; }
   .panel-loading, .panel-empty { font-size: 12px; color: var(--text-muted); font-family: var(--mono); padding: 0.5rem 0; }
 
-  .rb-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+  .rb-row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
   .rb-row:last-child { border-bottom: none; padding-bottom: 0; }
   .rb-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
   .rb-row.is-click:hover { background: var(--border); }
-  .rb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .rb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .rb-main { flex: 1; min-width: 0; }
+  .rb-top { display: flex; align-items: baseline; gap: 9px; }
   .rb-text { font-size: 13px; color: var(--text-primary); flex: 1; }
   .rb-ago { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
   .rb-go { font-size: 11px; color: var(--text-muted); opacity: 0; transition: opacity 0.12s; }
   .rb-row.is-click:hover .rb-go { opacity: 1; }
+  .rb-why { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-  .wc-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+  .wc-row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
   .wc-row:last-child { border-bottom: none; padding-bottom: 0; }
-  .wc-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; }
+  .wc-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
+  .wc-row.is-click:hover { background: var(--border); }
+  .wc-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; margin-top: 1px; }
+  .wc-main { flex: 1; min-width: 0; }
+  .wc-top { display: flex; align-items: baseline; gap: 9px; }
   .wc-label { font-size: 13px; color: var(--text-primary); flex: 1; }
   .wc-dist { font-size: 11px; color: var(--text-secondary); font-family: var(--mono); white-space: nowrap; }
+  .wc-sub { display: flex; align-items: baseline; gap: 7px; margin-top: 3px; flex-wrap: wrap; }
+  .wc-cat { font-size: 9px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; font-family: var(--mono); color: var(--text-secondary); background: var(--border); padding: 1px 6px; border-radius: 4px; flex-shrink: 0; }
+  .wc-why { font-size: 11px; color: var(--text-muted); flex: 1; min-width: 0; }
+  .wc-go { font-size: 11px; color: var(--text-muted); opacity: 0; transition: opacity 0.12s; }
+  .wc-row.is-click:hover .wc-go { opacity: 1; }
 
   /* label (what changed) | the change (middle) | % — middle col is auto so it
      never overflows into the label/% columns */
   .change-row { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(54px,1fr); align-items: center; padding: 9px 0; border-bottom: 0.5px solid var(--border); gap: 14px; }
   .change-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .change-row.is-click { cursor: pointer; margin: 0 -6px; padding: 9px 6px; border-radius: 6px; transition: background 0.12s; }
+  .change-row.is-click:hover { background: var(--border); }
   .change-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .change-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
   .change-why { font-size: 11px; color: var(--text-muted); }
@@ -571,9 +633,13 @@ const ovStyles = `
   .ts-headline { font-size: 16px; font-weight: 500; margin-bottom: 14px; }
   .ts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 20px; }
   .ts-cell { display: flex; flex-direction: column; gap: 3px; }
+  .ts-cell.is-click { cursor: pointer; margin: -4px -8px; padding: 4px 8px; border-radius: 6px; transition: background 0.12s; }
+  .ts-cell.is-click:hover { background: var(--border); }
   .ts-k { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
   .ts-v { font-size: 13px; color: var(--text-primary); font-weight: 500; line-height: 1.4; }
   .ts-detail { color: var(--text-secondary); font-weight: 400; }
+  .ts-go { color: var(--text-muted); opacity: 0; transition: opacity 0.12s; font-family: var(--mono); }
+  .ts-cell.is-click:hover .ts-go { opacity: 1; }
   .ts-full-wrap { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
   .ts-toggle { font-family: var(--mono); font-size: 11px; color: var(--text-secondary); background: none; border: none; cursor: pointer; padding: 0; }
   .ts-toggle:hover { color: var(--text-primary); }
