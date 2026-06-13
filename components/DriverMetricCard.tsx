@@ -4,11 +4,14 @@
 // value, a sparkline, and a click-to-expand inline history chart.
 import { useState } from 'react'
 
+export type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
+
 export type MetricCardData = {
   label: string
   value: string
   sub?: string
   unit?: string
+  tone?: Tone            // good/warn/bad sentiment → green/amber/red, like the raw cards
   points?: { date: string; value: number }[] // oldest → newest
   pctl?: number          // 0..100 position of the latest value in its history
   histLabel?: string     // "historically low" / "historically normal" / …
@@ -16,14 +19,24 @@ export type MetricCardData = {
   alertProximity?: number // 0..1, 1 = at the alert
 }
 
-function Sparkline({ vals }: { vals: number[] }) {
+// Matches the raw indicator cards: green dot = healthy, amber = watch, red =
+// stress. Value text is tinted only on the danger side (like the raw cards,
+// which leave an "ok" value the default color).
+const TONE_DOT: Record<Tone, string> = {
+  good: '#639922', neutral: 'var(--text-muted)', warn: '#BA7517', bad: '#E24B4A', crisis: '#A32D2D',
+}
+const TONE_VALUE: Record<Tone, string> = {
+  good: 'var(--text-primary)', neutral: 'var(--text-primary)', warn: '#854F0B', bad: '#A32D2D', crisis: '#A32D2D',
+}
+
+function Sparkline({ vals, color = 'var(--text-secondary)' }: { vals: number[]; color?: string }) {
   const W = 96, H = 26
   const min = Math.min(...vals), max = Math.max(...vals)
   const range = max - min || 1
   const pts = vals.map((v, i) => `${(i / (vals.length - 1) * W).toFixed(1)},${(H - (v - min) / range * H).toFixed(1)}`).join(' ')
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', opacity: 0.75 }}>
-      <polyline points={pts} fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', opacity: 0.8 }}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }
@@ -95,15 +108,18 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
       onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o) } } : undefined}
     >
       <div className="dc-top">
-        <span className="dc-label">{m.label}</span>
+        <span className="dc-label">
+          {m.tone && <span className="dc-dot" style={{ background: TONE_DOT[m.tone] }} />}
+          {m.label}
+        </span>
         {clickable && <span className="dc-expand">{open ? '▾' : '↗'}</span>}
       </div>
       <div className="dc-mid">
         <div>
-          <div className="dc-value">{m.value}</div>
+          <div className="dc-value" style={m.tone ? { color: TONE_VALUE[m.tone] } : undefined}>{m.value}</div>
           {m.sub && <div className="dc-sub">{m.sub}</div>}
         </div>
-        {pts && !open && <Sparkline vals={pts.map(p => p.value)} />}
+        {pts && !open && <Sparkline vals={pts.map(p => p.value)} color={m.tone ? TONE_DOT[m.tone] : undefined} />}
       </div>
 
       {m.pctl != null && (
@@ -131,7 +147,8 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
         .dc-click { cursor: pointer; }
         .dc-click:hover { border-color: var(--border-med); }
         .dc-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 5px; }
-        .dc-label { font-size: 10px; color: var(--text-muted); line-height: 1.3; }
+        .dc-label { font-size: 10px; color: var(--text-muted); line-height: 1.3; display: inline-flex; align-items: center; gap: 5px; }
+        .dc-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .dc-expand { font-size: 10px; color: var(--text-muted); opacity: 0.55; }
         .dc-click:hover .dc-expand { opacity: 1; }
         .dc-mid { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; }

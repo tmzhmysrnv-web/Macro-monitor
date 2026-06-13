@@ -12,6 +12,7 @@
 //   Payment-to-income      -> NAR Housing Affordability Index (FIXHAI)
 
 import { fredFetch } from './fred'
+import { toneHigh, toneLow, type Tone as MetricTone } from './metricTone'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -78,6 +79,7 @@ function metric(obs: Obs[]): Metric {
 // ── Metric-card formatting (for the expandable driver cards) ───────────
 export type MetricCard = {
   label: string; value: string; sub?: string; unit?: string
+  tone?: MetricTone
   points?: { date: string; value: number }[]
   pctl?: number; histLabel?: string
   alertText?: string; alertProximity?: number
@@ -261,7 +263,7 @@ function scoreAffordability(d: HousingData): Omit<Category, 'fill'> {
   const status = level >= 1 ? 'Improving' : level <= -2 ? 'Deteriorating' : 'Pressured'
   const tone: Tone = status === 'Improving' ? 'good' : status === 'Pressured' ? 'warn' : 'bad'
   const metrics: MetricCard[] = [
-    { label: '30Y Mortgage Rate', value: fPct(rate), unit: '%', points: spark(d.mortgage30.obs), ...hist(d.mortgage30.obs), ...alertAbove(rate, 7), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
+    { label: '30Y Mortgage Rate', value: fPct(rate), unit: '%', tone: toneHigh(rate, 7, 9), points: spark(d.mortgage30.obs), ...hist(d.mortgage30.obs), ...alertAbove(rate, 7), sub: d.mortgage30.chg3m != null ? `${d.mortgage30.chg3m >= 0 ? '+' : ''}${d.mortgage30.chg3m}pp 3mo` : undefined },
     { label: 'Affordability Index', value: fIndex(idx), points: spark(d.affordabilityIndex.obs), ...hist(d.affordabilityIndex.obs), sub: subYoY(d.affordabilityIndex) ?? (d.affordabilityIndex.chg3m != null ? `${d.affordabilityIndex.chg3m >= 0 ? '+' : ''}${d.affordabilityIndex.chg3m} 3mo` : undefined) },
     { label: 'Median Home Price', value: fMoney(d.medianPrice.latest), points: spark(d.medianPrice.obs), ...hist(d.medianPrice.obs), sub: subYoY(d.medianPrice) },
     { label: 'Home Price Growth', value: fPct(d.homePriceYoY, 1), unit: '%', points: spark(d.homePriceYoYObs), ...hist(d.homePriceYoYObs), sub: 'YoY' },
@@ -290,7 +292,7 @@ function scoreSupply(d: HousingData): Omit<Category, 'fill'> {
   const metrics: MetricCard[] = [
     { label: 'Active Listings', value: fCount(d.activeListings.latest), points: spark(d.activeListings.obs), ...hist(d.activeListings.obs), sub: subYoY(d.activeListings) },
     { label: 'New Listings', value: fCount(d.newListings.latest), points: spark(d.newListings.obs), ...hist(d.newListings.obs), sub: subYoY(d.newListings) },
-    { label: 'Months of Supply', value: d.monthsSupply.latest != null ? `${d.monthsSupply.latest.toFixed(1)} mo` : '—', points: spark(d.monthsSupply.obs), ...hist(d.monthsSupply.obs), ...alertBelow(d.monthsSupply.latest, 3, ' mo'), sub: subYoY(d.monthsSupply) },
+    { label: 'Months of Supply', value: d.monthsSupply.latest != null ? `${d.monthsSupply.latest.toFixed(1)} mo` : '—', tone: toneLow(d.monthsSupply.latest, 4, 3), points: spark(d.monthsSupply.obs), ...hist(d.monthsSupply.obs), ...alertBelow(d.monthsSupply.latest, 3, ' mo'), sub: subYoY(d.monthsSupply) },
     { label: 'Housing Starts', value: fThou(d.housingStarts.latest), points: spark(d.housingStarts.obs), ...hist(d.housingStarts.obs), sub: subYoY(d.housingStarts) },
     { label: 'Building Permits', value: fThou(d.permits.latest), points: spark(d.permits.obs), ...hist(d.permits.obs), sub: subYoY(d.permits) },
   ]
@@ -364,9 +366,9 @@ function scoreStress(d: HousingData): Omit<Category, 'fill'> {
   else if ((mYoY != null && mYoY >= 10) || (cYoY != null && cYoY >= 10)) status = 'Elevated'
   const tone: Tone = status === 'Stressed' ? 'bad' : status === 'Elevated' ? 'warn' : 'good' // Low = green
   const metrics: MetricCard[] = [
-    { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), unit: '%', points: spark(d.mortgageDelinq.obs), ...hist(d.mortgageDelinq.obs), sub: subYoY(d.mortgageDelinq) },
-    { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), unit: '%', points: spark(d.ccDelinq.obs), ...hist(d.ccDelinq.obs), sub: subYoY(d.ccDelinq) },
-    { label: 'Debt Service Ratio', value: d.debtService.latest != null ? `${d.debtService.latest.toFixed(1)}%` : '—', unit: '%', points: spark(d.debtService.obs), ...hist(d.debtService.obs), sub: 'of income' },
+    { label: 'Mortgage Delinquency', value: fPct(d.mortgageDelinq.latest), unit: '%', tone: toneHigh(d.mortgageDelinq.latest, 3, 5), points: spark(d.mortgageDelinq.obs), ...hist(d.mortgageDelinq.obs), sub: subYoY(d.mortgageDelinq) },
+    { label: 'Card Delinquency', value: fPct(d.ccDelinq.latest), unit: '%', tone: toneHigh(d.ccDelinq.latest, 3.5, 5), points: spark(d.ccDelinq.obs), ...hist(d.ccDelinq.obs), sub: subYoY(d.ccDelinq) },
+    { label: 'Debt Service Ratio', value: d.debtService.latest != null ? `${d.debtService.latest.toFixed(1)}%` : '—', unit: '%', tone: toneHigh(d.debtService.latest, 11, 13), points: spark(d.debtService.obs), ...hist(d.debtService.obs), sub: 'of income' },
   ]
   return { key: 'stress', label: 'Financial Stress', status, tone, signals, metrics }
 }

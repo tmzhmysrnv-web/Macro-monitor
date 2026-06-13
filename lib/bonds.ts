@@ -15,6 +15,7 @@
 //   Term premium / liquidity    -> approximated via realized vol + curve moves
 
 import { fredFetch } from './fred'
+import { toneHigh, toneLow } from './metricTone'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -73,6 +74,7 @@ function spark(obs: Obs[], max = 48): { date: string; value: number }[] | undefi
 
 export type MetricCard = {
   label: string; value: string; sub?: string; unit?: string
+  tone?: Tone
   points?: { date: string; value: number }[]
   pctl?: number; histLabel?: string
   alertText?: string; alertProximity?: number
@@ -201,9 +203,9 @@ function scoreGrowth(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Growth'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '2Y–10Y Spread', value: fSpread(s210), unit: '%', points: spark(d.spread2_10Obs), ...hist(d.spread2_10Obs), sub: s210 != null && s210 < 0 ? 'inverted' : undefined },
-    { label: '3M–10Y Spread', value: fSpread(s310), unit: '%', points: spark(d.spread3m10History), ...hist(d.spread3m10History), sub: s310 != null && s310 < 0 ? 'inverted' : undefined },
-    { label: '10Y Yield', value: fPct(d.tenY), unit: '%', points: spark(d.tenYHistory), ...hist(d.tenYHistory), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
+    { label: '2Y–10Y Spread', value: fSpread(s210), unit: '%', tone: toneLow(s210, 0, -0.5), points: spark(d.spread2_10Obs), ...hist(d.spread2_10Obs), sub: s210 != null && s210 < 0 ? 'inverted' : undefined },
+    { label: '3M–10Y Spread', value: fSpread(s310), unit: '%', tone: toneLow(s310, 0, -0.5), points: spark(d.spread3m10History), ...hist(d.spread3m10History), sub: s310 != null && s310 < 0 ? 'inverted' : undefined },
+    { label: '10Y Yield', value: fPct(d.tenY), unit: '%', tone: toneHigh(d.tenY, 5, 6), points: spark(d.tenYHistory), ...hist(d.tenYHistory), sub: d.tenYChg3m != null ? `${d.tenYChg3m >= 0 ? '+' : ''}${d.tenYChg3m}pp 3mo` : undefined },
     { label: '2Y Yield', value: fPct(d.twoY), unit: '%', points: spark(d.twoYObs), ...hist(d.twoYObs) },
   ]
   return { key: 'growth', label: 'Growth Expectations', status, tone, signals, metrics }
@@ -225,9 +227,9 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Neutral'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: '10Y Treasury', value: fPct(ten), unit: '%', points: spark(d.tenYHistory), ...hist(d.tenYHistory), ...alertAbove(ten, 5) },
-    { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(d.thirtY, 6) },
-    { label: '10Y Real Yield', value: fPct(ry), unit: '%', points: spark(d.realYieldObs), ...hist(d.realYieldObs), sub: 'TIPS' },
+    { label: '10Y Treasury', value: fPct(ten), unit: '%', tone: toneHigh(ten, 5, 6), points: spark(d.tenYHistory), ...hist(d.tenYHistory), ...alertAbove(ten, 5) },
+    { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', tone: toneHigh(d.thirtY, 6, 7), points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(d.thirtY, 6) },
+    { label: '10Y Real Yield', value: fPct(ry), unit: '%', tone: toneHigh(ry, 2.5, 3.5), points: spark(d.realYieldObs), ...hist(d.realYieldObs), sub: 'TIPS' },
     { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
   ]
   return { key: 'rates', label: 'Interest Rate Environment', status, tone, signals, metrics }
@@ -252,7 +254,7 @@ function scoreFinancing(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Stable Financing'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: '30Y Treasury', value: fPct(t30), unit: '%', points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(t30, 6), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
+    { label: '30Y Treasury', value: fPct(t30), unit: '%', tone: toneHigh(t30, 6, 7), points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(t30, 6), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
     { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—', unit: '%', points: spark(d.debtObs), ...hist(d.debtObs) },
     { label: '30Y Record High', value: fPct(d.thirtYMax), sub: nearMultiDecadeHigh ? 'at/near it now' : 'in 30+ yr record' },
   ]
@@ -275,7 +277,7 @@ function scoreMarketStress(d: BondData): Omit<Category, 'fill'> {
   else { status = 'Calm Markets'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: '10Y Yield Volatility', value: vol != null ? `${vol} bp/day` : '—', sub: 'realized, 1mo' },
+    { label: '10Y Yield Volatility', value: vol != null ? `${vol} bp/day` : '—', sub: 'realized, 1mo', tone: toneHigh(vol, 8, 13) },
     { label: '10Y Weekly Move', value: drop != null ? `${drop >= 0 ? '+' : ''}${Math.round(drop)} bp` : '—' },
   ]
   return { key: 'stress', label: 'Market Stress', status, tone, signals, metrics }

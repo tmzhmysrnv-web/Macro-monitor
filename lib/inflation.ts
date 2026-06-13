@@ -10,6 +10,7 @@
 //   Energy               -> WTI (DCOILWTICO) + retail gasoline (GASREGW)
 
 import { fredFetch } from './fred'
+import { toneHigh } from './metricTone'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -58,6 +59,7 @@ function annualized3m(idx: Obs[]): number | null {
 // ── shared card helpers (mirror the other intelligence tabs) ──────────
 export type MetricCard = {
   label: string; value: string; sub?: string; unit?: string
+  tone?: Tone
   points?: { date: string; value: number }[]
   pctl?: number; histLabel?: string
   alertText?: string; alertProximity?: number
@@ -136,8 +138,8 @@ function scoreCurrent(d: InflationData): Omit<Category, 'fill'> {
   else { status = 'Near Target'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'CPI (YoY)', value: fPct(head), unit: '%', points: spark(d.cpiYoY), ...hist(d.cpiYoY), ...alertAbove(head, 4) },
-    { label: 'Core CPI (YoY)', value: fPct(core), unit: '%', sub: 'ex food & energy', points: spark(d.coreYoY), ...hist(d.coreYoY), ...alertAbove(core, 4) },
+    { label: 'CPI (YoY)', value: fPct(head), unit: '%', tone: toneHigh(head, 3, 4, 6), points: spark(d.cpiYoY), ...hist(d.cpiYoY), ...alertAbove(head, 4) },
+    { label: 'Core CPI (YoY)', value: fPct(core), unit: '%', sub: 'ex food & energy', tone: toneHigh(core, 3, 4, 5.5), points: spark(d.coreYoY), ...hist(d.coreYoY), ...alertAbove(core, 4) },
   ]
   return { key: 'current', label: 'Current Inflation', status, tone, signals, metrics }
 }
@@ -164,9 +166,9 @@ function scoreTrend(d: InflationData): Omit<Category, 'fill'> {
   // No sparkline on the 3-month cards: their value is the annualized PACE, which
   // would clash with a year-over-year history line and read as misleading.
   const metrics: MetricCard[] = [
-    { label: 'Core CPI 3mo Annualized', value: fPct(c3), unit: '%', sub: 'where it’s heading' },
-    { label: 'CPI 3mo Annualized', value: fPct(h3), unit: '%', sub: 'recent 3-month pace' },
-    { label: 'Inflation Momentum', value: momentum == null ? '—' : `${momentum >= 0 ? '+' : ''}${momentum.toFixed(1)}pp`, sub: '3mo pace vs yearly' },
+    { label: 'Core CPI 3mo Annualized', value: fPct(c3), unit: '%', sub: 'where it’s heading', tone: toneHigh(c3, 3, 4) },
+    { label: 'CPI 3mo Annualized', value: fPct(h3), unit: '%', sub: 'recent 3-month pace', tone: toneHigh(h3, 4, 6) },
+    { label: 'Inflation Momentum', value: momentum == null ? '—' : `${momentum >= 0 ? '+' : ''}${momentum.toFixed(1)}pp`, sub: '3mo pace vs yearly', tone: toneHigh(momentum, 0.4, 1) },
   ]
   return { key: 'trend', label: 'Inflation Trend', status, tone, signals, metrics }
 }
@@ -188,8 +190,8 @@ function scoreEnergy(d: InflationData): Omit<Category, 'fill'> {
   else { status = 'Low Pressure'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'WTI Crude', value: fUsd(wti), unit: '', points: spark(d.wti), ...hist(d.wti), ...alertAbove(wti, 100, '') },
-    { label: 'Retail Gasoline', value: fUsd(gas, 2), unit: '', sub: 'per gallon', points: spark(d.gas), ...hist(d.gas) },
+    { label: 'WTI Crude', value: fUsd(wti), unit: '', tone: toneHigh(wti, 88, 100, 120), points: spark(d.wti), ...hist(d.wti), ...alertAbove(wti, 100, '') },
+    { label: 'Retail Gasoline', value: fUsd(gas, 2), unit: '', sub: 'per gallon', tone: toneHigh(gas, 3.75, 4.5), points: spark(d.gas), ...hist(d.gas) },
   ]
   return { key: 'energy', label: 'Energy Pressure', status, tone, signals, metrics }
 }
@@ -210,8 +212,8 @@ function scoreConsumer(d: InflationData): Omit<Category, 'fill'> {
   else { status = 'Normalizing'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'Shelter Inflation', value: fPct(shelter), unit: '%', sub: 'YoY', points: spark(d.shelterYoY), ...hist(d.shelterYoY), ...alertAbove(shelter, 5) },
-    { label: 'Food Inflation', value: fPct(food), unit: '%', sub: 'YoY', points: spark(d.foodYoY), ...hist(d.foodYoY) },
+    { label: 'Shelter Inflation', value: fPct(shelter), unit: '%', sub: 'YoY', tone: toneHigh(shelter, 4, 5, 6), points: spark(d.shelterYoY), ...hist(d.shelterYoY), ...alertAbove(shelter, 5) },
+    { label: 'Food Inflation', value: fPct(food), unit: '%', sub: 'YoY', tone: toneHigh(food, 4, 6), points: spark(d.foodYoY), ...hist(d.foodYoY) },
   ]
   return { key: 'consumer', label: 'Consumer Cost Pressure', status, tone, signals, metrics }
 }

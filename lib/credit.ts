@@ -10,6 +10,7 @@
 //   Regional-bank / bank stress indicators      -> proxied via NFCI + CRE delinquency
 
 import { fredFetch } from './fred'
+import { toneHigh, toneLow } from './metricTone'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -55,6 +56,7 @@ function metricOf(obs: Obs[]): Metric {
 // ── shared card helpers (sparkline + historical percentile + alert distance) ──
 export type MetricCard = {
   label: string; value: string; sub?: string; unit?: string
+  tone?: Tone
   points?: { date: string; value: number }[]
   pctl?: number; histLabel?: string
   alertText?: string; alertProximity?: number
@@ -154,9 +156,9 @@ function scoreLending(d: CreditData): Omit<Category, 'fill'> {
   else { status = 'Normal'; tone = 'neutral' }
 
   const metrics: MetricCard[] = [
-    { label: 'Bank Lending Standards', value: fNet(std), sub: 'net tightening (SLOOS)', points: spark(d.standards.obs), ...hist(d.standards.obs) },
-    { label: 'Business Loan Growth', value: fPct(d.ciLoans.yoyPct, 1), unit: '%', sub: 'C&I, YoY', points: spark(d.ciLoans.obs) },
-    { label: 'Consumer Loan Growth', value: fPct(d.consumerLoans.yoyPct, 1), unit: '%', sub: 'YoY', points: spark(d.consumerLoans.obs) },
+    { label: 'Bank Lending Standards', value: fNet(std), sub: 'net tightening (SLOOS)', tone: toneHigh(std, 12, 30), points: spark(d.standards.obs), ...hist(d.standards.obs) },
+    { label: 'Business Loan Growth', value: fPct(d.ciLoans.yoyPct, 1), unit: '%', sub: 'C&I, YoY', tone: toneLow(d.ciLoans.yoyPct, 1, -3), points: spark(d.ciLoans.obs) },
+    { label: 'Consumer Loan Growth', value: fPct(d.consumerLoans.yoyPct, 1), unit: '%', sub: 'YoY', tone: toneLow(d.consumerLoans.yoyPct, 0, -3), points: spark(d.consumerLoans.obs) },
   ]
   return { key: 'lending', label: 'Lending Conditions', status, tone, signals, metrics }
 }
@@ -178,8 +180,8 @@ function scoreCorporate(d: CreditData): Omit<Category, 'fill'> {
   else { status = 'Healthy'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'High-Yield Spread', value: fPct(hy), unit: '%', points: spark(d.hy.obs), ...hist(d.hy.obs), ...alertAbove(hy, 5), sub: d.hy.chg3m != null ? `${d.hy.chg3m >= 0 ? '+' : ''}${d.hy.chg3m}pp 3mo` : undefined },
-    { label: 'Investment-Grade Spread', value: fPct(ig), unit: '%', points: spark(d.ig.obs), ...hist(d.ig.obs) },
+    { label: 'High-Yield Spread', value: fPct(hy), unit: '%', tone: toneHigh(hy, 4, 6, 8), points: spark(d.hy.obs), ...hist(d.hy.obs), ...alertAbove(hy, 5), sub: d.hy.chg3m != null ? `${d.hy.chg3m >= 0 ? '+' : ''}${d.hy.chg3m}pp 3mo` : undefined },
+    { label: 'Investment-Grade Spread', value: fPct(ig), unit: '%', tone: toneHigh(ig, 1.8, 2.5), points: spark(d.ig.obs), ...hist(d.ig.obs) },
   ]
   return { key: 'corporate', label: 'Corporate Credit Health', status, tone, signals, metrics }
 }
@@ -200,9 +202,9 @@ function scoreConsumer(d: CreditData): Omit<Category, 'fill'> {
   else { status = 'Stable'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'Card Delinquencies', value: fPct(cc), unit: '%', points: spark(d.ccDelinq.obs), ...hist(d.ccDelinq.obs), sub: subYoY(d.ccDelinq) },
-    { label: 'Card Charge-Offs', value: fPct(co), unit: '%', points: spark(d.chargeOff.obs), ...hist(d.chargeOff.obs) },
-    { label: 'Debt Service Ratio', value: dsr != null ? `${dsr.toFixed(1)}%` : '—', unit: '%', sub: 'of income', points: spark(d.debtService.obs), ...hist(d.debtService.obs) },
+    { label: 'Card Delinquencies', value: fPct(cc), unit: '%', tone: toneHigh(cc, 3.5, 5, 7), points: spark(d.ccDelinq.obs), ...hist(d.ccDelinq.obs), sub: subYoY(d.ccDelinq) },
+    { label: 'Card Charge-Offs', value: fPct(co), unit: '%', tone: toneHigh(co, 4.5, 6), points: spark(d.chargeOff.obs), ...hist(d.chargeOff.obs) },
+    { label: 'Debt Service Ratio', value: dsr != null ? `${dsr.toFixed(1)}%` : '—', unit: '%', sub: 'of income', tone: toneHigh(dsr, 11, 13), points: spark(d.debtService.obs), ...hist(d.debtService.obs) },
   ]
   return { key: 'consumer', label: 'Consumer Credit Health', status, tone, signals, metrics }
 }
@@ -223,8 +225,8 @@ function scoreFinancial(d: CreditData): Omit<Category, 'fill'> {
   else { status = 'Stable'; tone = 'good' }
 
   const metrics: MetricCard[] = [
-    { label: 'Financial Conditions', value: fIdx(nfci), sub: 'NFCI · 0 = average', points: spark(d.nfci.obs), ...hist(d.nfci.obs) },
-    { label: 'CRE Delinquencies', value: fPct(cre), unit: '%', points: spark(d.creDelinq.obs), ...hist(d.creDelinq.obs), sub: subYoY(d.creDelinq) },
+    { label: 'Financial Conditions', value: fIdx(nfci), sub: 'NFCI · 0 = average', tone: toneHigh(nfci, 0, 0.4, 1), points: spark(d.nfci.obs), ...hist(d.nfci.obs) },
+    { label: 'CRE Delinquencies', value: fPct(cre), unit: '%', tone: toneHigh(cre, 2, 3), points: spark(d.creDelinq.obs), ...hist(d.creDelinq.obs), sub: subYoY(d.creDelinq) },
   ]
   return { key: 'financial', label: 'Financial System Stress', status, tone, signals, metrics }
 }
