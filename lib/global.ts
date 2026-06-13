@@ -11,7 +11,6 @@
 // source, so capital flows are read via the dollar (DXY) + 10Y safe-haven
 // demand; EM stress is read via EM equities (EEM) rather than paid CDS data.
 
-import { fredFetch } from './fred'
 import { toneHigh, toneLow, type Tone as MetricTone } from './metricTone'
 
 export type Obs = { date: string; value: number }
@@ -33,20 +32,6 @@ async function yahooHistory(symbol: string, range = '1y'): Promise<Obs[]> {
   } catch { return [] }
 }
 
-const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
-const FRED_KEY = process.env.FRED_API_KEY
-async function fredSeries(seriesId: string, limit: number): Promise<Obs[]> {
-  try {
-    const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=desc&limit=${limit}`
-    const res = await fredFetch(url, { next: { revalidate: 3600 } })
-    if (!res || !res.ok) return []
-    const data = await res.json()
-    return (data.observations || [])
-      .filter((o: { value: string }) => o.value !== '.' && o.value !== '')
-      .map((o: { date: string; value: string }) => ({ date: o.date, value: parseFloat(o.value) }))
-  } catch { return [] }
-}
-
 // ── numeric helpers ───────────────────────────────────────────────────
 function ret(obs: Obs[], n: number): number | null {
   if (obs.length <= n || obs[n].value === 0) return null
@@ -62,11 +47,6 @@ function drawdown(obs: Obs[]): number | null {
   const peak = Math.max(...obs.map(o => o.value))
   return parseFloat(((obs[0].value / peak - 1) * 100).toFixed(1))
 }
-function changeNback(obs: Obs[], n: number): number | null {
-  if (obs.length <= n) return null
-  return parseFloat((obs[0].value - obs[n].value).toFixed(2))
-}
-
 // ── shared card helpers (mirror the other intelligence tabs) ──────────
 export type MetricCard = {
   label: string; value: string; sub?: string; unit?: string
@@ -98,30 +78,28 @@ function alertAbove(value: number | null, threshold: number, unit = ''): { alert
 }
 
 const fUsd = (v: number | null, d = 0) => v == null ? '—' : `$${v.toFixed(d)}`
-const fPct = (v: number | null, d = 2) => v == null ? '—' : `${v.toFixed(d)}%`
 const fRel = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}pp`
 const fSigned = (v: number | null, suffix = '%') => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}${suffix}`
 
 export type GlobalData = {
-  dxy: Obs[]; tenY: Obs[]
+  dxy: Obs[]
   wti: Obs[]; brent: Obs[]; commodity: Obs[]
   copper: Obs[]; gold: Obs[]; acwx: Obs[]
   eem: Obs[]
 }
 
 export async function fetchGlobalData(): Promise<GlobalData> {
-  const [dxy, wti, brent, commodity, copper, gold, acwx, eem, tenY] = await Promise.all([
+  const [dxy, wti, brent, commodity, copper, gold, acwx, eem] = await Promise.all([
     yahooHistory('DX-Y.NYB'), // US dollar index
     yahooHistory('CL=F'),     // WTI crude
     yahooHistory('BZ=F'),     // Brent crude
     yahooHistory('DBC'),      // broad commodity index
     yahooHistory('HG=F'),     // copper
-    yahooHistory('GC=F'),     // gold (copper/gold growth-vs-fear ratio)
+    yahooHistory('GC=F'),     // gold (safe-haven demand + copper/gold growth-vs-fear ratio)
     yahooHistory('ACWX'),     // global equities ex-US
     yahooHistory('EEM'),      // emerging-market equities
-    fredSeries('DGS10', 200), // 10Y Treasury yield (safe-haven demand proxy)
   ])
-  return { dxy, tenY, wti, brent, commodity, copper, gold, acwx, eem }
+  return { dxy, wti, brent, commodity, copper, gold, acwx, eem }
 }
 
 // ── Category scoring ──────────────────────────────────────────────────
@@ -136,13 +114,15 @@ const RANK: Record<Tone, number> = { good: 0, neutral: 1, warn: 2, bad: 3, crisi
 
 // 1 ── Global Capital Flows (where is global capital moving?) ───────────
 function scoreCapital(d: GlobalData): Omit<Category, 'fill'> {
+  // Dollar + safe-haven gold = where global capital is moving. (The Treasury
+  // demand / term-premium angle lives on the Bonds tab, where it belongs.)
   const dxy = d.dxy[0]?.value ?? null
   const dxy3m = ret(d.dxy, 63)
-  const yld = d.tenY[0]?.value ?? null
-  const yld3m = changeNback(d.tenY, 63) // pp; rising = softer Treasury demand
+  const gold = d.gold[0]?.value ?? null
+  const gold3m = ret(d.gold, 63)
   const signals: string[] = []
   if (dxy != null) signals.push(`The dollar is at ${dxy.toFixed(1)}${dxy3m != null ? ` (${dxy3m >= 0 ? '+' : ''}${dxy3m}% over 3 months)` : ''} — ${dxy3m != null && dxy3m >= 3 ? 'a fast climb that strains foreign borrowers' : 'broadly stable'}`)
-  if (yld3m != null) signals.push(`10Y Treasury yield ${yld3m >= 0 ? `up ${yld3m}pp` : `down ${Math.abs(yld3m)}pp`} over 3 months — ${yld3m <= 0 ? 'steady foreign demand for safe U.S. assets' : 'demand softening as yields rise'}`)
+  if (gold3m != null) signals.push(`Gold ${gold3m >= 0 ? `up ${gold3m}%` : `down ${Math.abs(gold3m)}%`} over 3 months — ${gold3m >= 12 ? 'heavy safe-haven demand' : 'no rush to safety'}`)
 
   let status: string, tone: Tone
   if (dxy3m != null && dxy3m >= 6) { status = 'Global Stress'; tone = 'bad' }
@@ -150,12 +130,12 @@ function scoreCapital(d: GlobalData): Omit<Category, 'fill'> {
   else if (dxy3m != null && dxy3m <= -3) { status = 'Strong Global Confidence'; tone = 'good' }
   else if (dxy3m != null && dxy3m >= 1) { status = 'Stable'; tone = 'neutral' }
   else { status = 'Normal Flows'; tone = 'good' }
-  // Rising yields + a firm dollar = financing pressure → at least a watch.
-  if (yld3m != null && yld3m >= 1.0 && RANK[tone] < RANK.warn) { status = 'Flight to Safety'; tone = 'warn' }
+  // A simultaneous dollar + gold surge is a genuine flight to safety.
+  if (dxy3m != null && dxy3m >= 2 && gold3m != null && gold3m >= 15 && RANK[tone] < RANK.warn) { status = 'Flight to Safety'; tone = 'warn' }
 
   const metrics: MetricCard[] = [
     { label: 'U.S. Dollar (DXY)', value: dxy != null ? dxy.toFixed(2) : '—', sub: dxy3m != null ? `${dxy3m >= 0 ? '+' : ''}${dxy3m}% 3mo` : undefined, tone: toneHigh(dxy3m, 3, 6), points: spark(d.dxy), ...hist(d.dxy) },
-    { label: 'Treasury Demand', value: fPct(yld, 2), sub: yld3m != null ? `10Y yield, ${yld3m >= 0 ? '+' : ''}${yld3m}pp 3mo` : '10Y yield', tone: toneHigh(yld3m, 0.5, 1.0), points: spark(d.tenY), ...hist(d.tenY) },
+    { label: 'Gold (Safe Haven)', value: gold != null ? `$${Math.round(gold)}` : '—', sub: gold3m != null ? `${gold3m >= 0 ? '+' : ''}${gold3m}% 3mo` : undefined, tone: toneHigh(gold3m, 12, 22), points: spark(d.gold), ...hist(d.gold) },
   ]
   return { key: 'capital', label: 'Global Capital Flows', status, tone, signals, metrics }
 }
@@ -284,7 +264,6 @@ function buildAlerts(d: GlobalData): GlobalAlert[] {
   const wti = d.wti[0]?.value ?? null
   const copper3m = ret(d.copper, 63)
   const eemDD = drawdown(d.eem)
-  const yld3m = changeNback(d.tenY, 63)
 
   if (dxy3m != null && dxy3m >= 6) {
     alerts.push({
@@ -339,16 +318,6 @@ function buildAlerts(d: GlobalData): GlobalAlert[] {
       why: 'A deep EM drawdown signals capital fleeing riskier economies — stress that can spread through trade links, banks, and currency markets into developed markets.',
       affected: ['Markets', 'Credit', 'Government Finance'],
       context: 'EM sell-offs preceded broader contagion in 1997–98 and 2008.',
-    })
-  }
-
-  if (yld3m != null && yld3m >= 1.0) {
-    alerts.push({
-      id: 'treasury-stress', title: 'Treasury Financing Stress Emerging',
-      what: `The 10Y Treasury yield has risen ${yld3m}pp in three months.`,
-      why: 'A fast rise in yields can signal waning foreign appetite for U.S. debt, raising the government’s borrowing costs and tightening conditions across global markets.',
-      affected: ['Government Finance', 'Credit', 'Housing', 'Markets'],
-      context: 'Rapid yield jumps drove the 2022–23 global bond rout.',
     })
   }
 
@@ -476,7 +445,7 @@ function buildSummary(d: GlobalData, cats: Category[], risk: Callout): string {
     ? 'Commodity demand is softening, a sign global growth is losing momentum.'
     : 'Commodity demand is stable, suggesting global growth has slowed but not stalled.'
   const s4 = fin?.tone === 'good'
-    ? 'Treasury demand remains healthy, and with emerging-market stress limited, the risk of financial contagion spreading from abroad stays low.'
+    ? 'Capital flows remain orderly and emerging-market stress is limited, keeping the risk of financial contagion spreading from abroad low.'
     : 'Financial stress is building in emerging markets, raising the risk that problems abroad spill over into domestic markets.'
   const s5 = elevated === 0
     ? 'For now, external conditions pose little threat to the domestic outlook.'

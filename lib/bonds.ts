@@ -114,6 +114,13 @@ export type BondData = {
   thirtYChg3m: number | null
   volBp: number | null           // realized 10Y vol (bp)
   debtToGDP: number | null
+  termPremium: number | null     // 10Y ACM term premium (THREEFYTP10) — duration-demand gauge
+  termPremiumChg3m: number | null
+  termPremiumObs: Obs[]
+  foreignHoldings: number | null // foreign-held federal debt ($B)
+  foreignSharePct: number | null // foreign holdings as % of total US debt
+  foreignShareYoY: number | null // change in that share vs ~1y ago (pp)
+  foreignHoldingsObs: Obs[]
   thirtYMax: number | null       // max 30Y over the long window (multi-decade high)
   spread3m10History: Obs[]       // for uninversion detection + sparkline
   tenYHistory: Obs[]             // for the 5% alert lookback + sparkline
@@ -126,7 +133,7 @@ export type BondData = {
 }
 
 export async function fetchBondData(): Promise<BondData> {
-  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt] = await Promise.all([
+  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt, tp, foreign, totalDebt] = await Promise.all([
     fredSeries('DGS10', 1300),    // ~5y daily — vol, trend, alert lookback, sparkline, percentile
     fredSeries('DGS30', 9000),    // long window for the multi-decade-high check
     fredSeries('DGS2', 1300),
@@ -136,7 +143,20 @@ export async function fetchBondData(): Promise<BondData> {
     fredSeries('T10Y2Y', 1300),
     fredSeries('T10Y3M', 1300),   // spread + history for uninversion + percentile
     fredSeries('GFDEGDQ188S', 44), // public debt as % of GDP (quarterly)
+    fredSeries('THREEFYTP10', 1300), // 10Y ACM term premium (daily)
+    fredSeries('FDHBFIN', 44),    // foreign-held federal debt ($B, quarterly)
+    fredSeries('GFDEBTN', 60),    // total public debt ($M, quarterly) — for foreign share
   ])
+
+  // Foreign share of total debt — date-aligned (FDHBFIN lags GFDEBTN by ~1 quarter).
+  const totalAt = (date?: string) => date ? (totalDebt.find(o => o.date === date)?.value ?? null) : null
+  const shareAt = (fh?: Obs) => {
+    const tot = totalAt(fh?.date)
+    return fh != null && tot ? (fh.value * 1000) / tot * 100 : null
+  }
+  const foreignSharePct = shareAt(foreign[0]) != null ? parseFloat((shareAt(foreign[0]) as number).toFixed(1)) : null
+  const shareYrAgo = shareAt(foreign[4])
+  const foreignShareYoY = foreignSharePct != null && shareYrAgo != null ? parseFloat((foreignSharePct - shareYrAgo).toFixed(1)) : null
 
   return {
     tenY: dgs10[0]?.value ?? null,
@@ -151,6 +171,13 @@ export async function fetchBondData(): Promise<BondData> {
     thirtYChg3m: chgDaysBack(dgs30, 91),
     volBp: realizedVolBp(dgs10),
     debtToGDP: debt[0]?.value ?? null,
+    termPremium: tp[0]?.value ?? null,
+    termPremiumChg3m: chgDaysBack(tp, 91),
+    termPremiumObs: tp,
+    foreignHoldings: foreign[0]?.value ?? null,
+    foreignSharePct,
+    foreignShareYoY,
+    foreignHoldingsObs: foreign,
     thirtYMax: dgs30.length ? Math.max(...dgs30.map(o => o.value)) : null,
     spread3m10History: t10y3m,
     tenYHistory: dgs10,
@@ -239,24 +266,29 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
 function scoreFinancing(d: BondData): Omit<Category, 'fill'> {
   const signals: string[] = []
   const t30 = d.thirtY
+  const tp = d.termPremium
   const nearMultiDecadeHigh = t30 != null && d.thirtYMax != null && t30 >= d.thirtYMax - 0.1
   if (t30 != null) signals.push(`30Y Treasury at ${fPct(t30)}${nearMultiDecadeHigh ? ' — near a multi-decade high' : ''}`)
-  if (d.thirtYChg3m != null) signals.push(`30Y yield ${d.thirtYChg3m >= 0 ? 'up' : 'down'} ${Math.abs(d.thirtYChg3m)}pp over 3 months${d.thirtYChg3m >= 0.4 ? ' — financing costs rising fast' : ''}`)
+  if (tp != null) signals.push(`10Y term premium at ${fPct(tp)}${d.termPremiumChg3m != null && d.termPremiumChg3m >= 0.15 ? ' and rising' : ''} — the extra yield investors demand to hold long Treasuries${tp >= 0.5 ? ', a sign structural demand (including foreign central banks like Japan and China) is fading' : ''}`)
+  if (d.foreignSharePct != null) signals.push(`Foreign investors hold ${d.foreignSharePct.toFixed(0)}% of U.S. debt${d.foreignShareYoY != null ? ` (${d.foreignShareYoY >= 0 ? '+' : ''}${d.foreignShareYoY.toFixed(1)}pp YoY)` : ''}${d.foreignShareYoY != null && d.foreignShareYoY <= -0.5 ? ' — a shrinking share as the U.S. leans more on domestic buyers' : ''}`)
   if (d.debtToGDP != null) signals.push(`Federal debt at ${d.debtToGDP.toFixed(0)}% of GDP`)
 
   const risingFast = d.thirtYChg3m != null && d.thirtYChg3m >= 0.4
+  const tpElevated = tp != null && tp >= 0.75
+  const tpHigh = tp != null && tp >= 1.2
 
   let status: string, tone: Tone
-  if (nearMultiDecadeHigh && risingFast) { status = 'Financing Warning'; tone = 'crisis' }
+  if ((nearMultiDecadeHigh && risingFast) || tpHigh) { status = 'Financing Warning'; tone = 'crisis' }
   else if (t30 != null && t30 >= 6) { status = 'Fiscal Stress'; tone = 'bad' }
-  else if (t30 != null && (t30 >= 5 || nearMultiDecadeHigh)) { status = 'Rising Fiscal Pressure'; tone = 'warn' }
+  else if ((t30 != null && (t30 >= 5 || nearMultiDecadeHigh)) || tpElevated) { status = 'Rising Fiscal Pressure'; tone = 'warn' }
   else if (t30 != null && t30 >= 4) { status = 'Manageable'; tone = 'neutral' }
   else { status = 'Stable Financing'; tone = 'good' }
 
   const metrics: MetricCard[] = [
     { label: '30Y Treasury', value: fPct(t30), unit: '%', tone: toneHigh(t30, 6, 7), points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(t30, 6), sub: d.thirtYChg3m != null ? `${d.thirtYChg3m >= 0 ? '+' : ''}${d.thirtYChg3m}pp 3mo` : undefined },
+    { label: '10Y Term Premium', value: fPct(tp), unit: '%', tone: toneHigh(tp, 0.5, 1.2), points: spark(d.termPremiumObs), ...hist(d.termPremiumObs), sub: d.termPremiumChg3m != null ? `${d.termPremiumChg3m >= 0 ? '+' : ''}${d.termPremiumChg3m.toFixed(2)}pp 3mo` : 'demand for duration' },
+    { label: 'Foreign Holdings', value: d.foreignHoldings != null ? `$${(d.foreignHoldings / 1000).toFixed(1)}T` : '—', sub: d.foreignSharePct != null ? `${d.foreignSharePct.toFixed(0)}% of US debt${d.foreignShareYoY != null ? `, ${d.foreignShareYoY >= 0 ? '+' : ''}${d.foreignShareYoY.toFixed(1)}pp YoY` : ''}` : 'foreign-held', points: spark(d.foreignHoldingsObs) },
     { label: 'Debt-to-GDP', value: d.debtToGDP != null ? `${d.debtToGDP.toFixed(0)}%` : '—', unit: '%', points: spark(d.debtObs), ...hist(d.debtObs) },
-    { label: '30Y Record High', value: fPct(d.thirtYMax), sub: nearMultiDecadeHigh ? 'at/near it now' : 'in 30+ yr record' },
   ]
   return { key: 'financing', label: 'Government Financing', status, tone, signals, metrics }
 }
@@ -358,6 +390,16 @@ function buildAlerts(d: BondData): BondAlert[] {
     })
   }
 
+  if (d.termPremium != null && d.termPremium >= 1.0) {
+    alerts.push({
+      id: 'term-premium', title: 'Treasury Term Premium Elevated — Financing Stress',
+      what: `The 10-year term premium has risen to ${fPct(d.termPremium)}.`,
+      why: 'The term premium is the extra yield investors demand to hold long-term Treasuries. A sharp rise signals that structural demand — including from foreign central banks like Japan and China, which have been net sellers — is fading, pushing the government\'s long-term borrowing costs higher and tightening conditions across markets.',
+      affected: ['Government Finance', 'Housing', 'Credit', 'Stock Market'],
+      context: 'The term premium spent the 2010s near zero or negative; a sustained move above 1% marks the return of real supply/demand pressure on Treasuries.',
+    })
+  }
+
   const s310 = d.spread3m_10
   if (s310 != null && s310 <= -1.0) {
     alerts.push({
@@ -411,6 +453,10 @@ function buildWatching(d: BondData, alerts: BondAlert[]): WatchItem[] {
   if (d.thirtY != null && !firing.has('thirtY-6')) {
     const dist = parseFloat((6 - d.thirtY).toFixed(2))
     items.push({ label: '30-Year Treasury', text: `${dist}pp below the 6% alert`, proximity: Math.max(0, Math.min(1, d.thirtY / 6)), key: 'financing' })
+  }
+  if (d.termPremium != null && !firing.has('term-premium')) {
+    const dist = parseFloat((1.0 - d.termPremium).toFixed(2))
+    items.push({ label: 'Term Premium', text: dist > 0 ? `${dist}pp below the 1.0% financing-stress alert` : 'above the financing-stress alert', proximity: Math.max(0, Math.min(1, d.termPremium / 1.0)), key: 'financing' })
   }
   if (d.volBp != null && !firing.has('vol-stress')) {
     const dist = parseFloat((13 - d.volBp).toFixed(1))
