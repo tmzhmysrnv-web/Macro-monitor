@@ -7,6 +7,7 @@ import type { DataPoint } from '../lib/fetchHistory'
 import Overview from '../components/Overview'
 import Housing from '../components/Housing'
 import Bonds from '../components/Bonds'
+import Credit from '../components/Credit'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -78,7 +79,7 @@ const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'bonds',     label: 'Bonds' },   // renders the <Bonds /> intelligence model, not indicator cards
   { id: 'housing',   label: 'Housing' }, // renders the <Housing /> status model, not indicator cards
-  { id: 'credit',    label: 'Credit',    sections: [{ label: 'Credit Spreads', keys: ['hySpread', 'igSpread'] }] },
+  { id: 'credit',    label: 'Credit' },  // renders the <Credit /> intelligence model, not indicator cards
   { id: 'inflation', label: 'Inflation', sections: [{ label: 'Inflation', keys: ['cpi', 'oil'] }] },
   { id: 'labor',     label: 'Labor',     sections: [{ label: 'Labor Market', keys: ['joblessClaims'] }] },
   { id: 'markets',   label: 'Markets',   sections: [{ label: 'Equities & Volatility', keys: ['sp500', 'vix'] }] },
@@ -276,9 +277,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string; metricKey?: string }>>([])
-  // Prefetched Bonds/Housing payloads so switching to those tabs is instant.
+  // Prefetched Bonds/Housing/Credit payloads so switching to those tabs is instant.
   const [bondsData, setBondsData] = useState<any>(null)
   const [housingData, setHousingData] = useState<any>(null)
+  const [creditData, setCreditData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -301,6 +303,7 @@ export default function Dashboard() {
     const t = setTimeout(() => {
       fetch('/api/bonds').then(r => r.json()).then(d => { if (d && !d.error) setBondsData(d) }).catch(() => {})
       fetch('/api/housing').then(r => r.json()).then(d => { if (d && !d.error) setHousingData(d) }).catch(() => {})
+      fetch('/api/credit').then(r => r.json()).then(d => { if (d && !d.error) setCreditData(d) }).catch(() => {})
     }, 600)
     return () => clearTimeout(t)
   }, [])
@@ -588,6 +591,9 @@ export default function Dashboard() {
 
         {/* ── HOUSING TAB — status model, not a dashboard ── */}
         {activeTab === 'housing' && <Housing initialData={housingData} />}
+
+        {/* ── CREDIT TAB — credit-market intelligence model, not cards ── */}
+        {activeTab === 'credit' && <Credit initialData={creditData} />}
 
         {/* ── CATEGORY TABS — filtered card sections ── */}
         {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (
