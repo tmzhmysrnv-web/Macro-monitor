@@ -398,9 +398,18 @@ function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: Cal
   const riskKey = useWatch ? (watching[0]?.key ?? worst?.key ?? '') : worst.key
 
   const goods = cats.filter(c => c.tone === 'good')
-  const pool = goods.length ? goods : [...cats].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])
-  const best = pool.sort((a, b) => STAB_PREF.indexOf(a.key) - STAB_PREF.indexOf(b.key))[0]
-  const stabText = best ? (STAB_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`) : 'No clear stabilizers right now.'
+  let best: Category | undefined
+  if (goods.length) {
+    best = [...goods].sort((a, b) => STAB_PREF.indexOf(a.key) - STAB_PREF.indexOf(b.key))[0]
+  } else {
+    // Nothing is genuinely calm — surface the least-pressing theme, but never
+    // the same theme as the biggest risk, and phrase it honestly.
+    best = [...cats].filter(c => c.key !== riskKey)
+      .sort((a, b) => (TONE_RANK[a.tone] - TONE_RANK[b.tone]) || (STAB_PREF.indexOf(a.key) - STAB_PREF.indexOf(b.key)))[0]
+  }
+  const stabText = !best ? 'No clear stabilizers right now.'
+    : best.tone === 'good' ? (STAB_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`)
+    : `${best.label} is the least-pressing area right now, though no category is a firm stabilizer yet.`
   return {
     risk: { text: riskText, why: RISK_WHY[riskKey] ?? '', key: riskKey },
     stabilizer: { text: stabText, why: STAB_WHY[best?.key] ?? '', key: best?.key ?? '' },
