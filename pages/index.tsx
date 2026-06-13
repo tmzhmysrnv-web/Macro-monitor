@@ -393,14 +393,24 @@ export default function Dashboard() {
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
         .topbar { margin-bottom: 0.5rem; }
-        .site-name { position: relative; display: inline-block; font-family: 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.78; }
-        /* a bit of grain over the title — keeps it textured and in the background */
-        .site-name::after { content: ''; position: absolute; inset: -1px -2px; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.16;
+        /* The title lives in a small terminal window — a thin top bezel framing
+           the same grainy, page-blended background as before (no black screen) */
+        .term-window { display: inline-block; max-width: 100%; border-radius: 6px; overflow: hidden;
+          border: 0.5px solid var(--border-med); background: transparent;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.07); }
+        .term-bar { display: flex; align-items: center; gap: 5px; padding: 3px 8px;
+          background: var(--border); border-bottom: 0.5px solid var(--border-med); }
+        .term-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .term-screen { position: relative; padding: 7px 11px 8px; line-height: 1; }
+        /* the noisy background — soft-light grain blended into the page, as before */
+        .term-screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.16;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
           background-size: 110px 110px; }
+        .term-prompt { font-family: 'Space Mono', var(--mono); font-size: 14px; color: var(--term); opacity: 0.5; margin-right: 7px; }
+        .site-name { position: relative; display: inline; font-family: 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.82; }
         .term-cursor { display: inline-block; width: 0.5em; height: 0.95em; margin-left: 3px; vertical-align: -0.1em; background: var(--term); opacity: 0.85; animation: termblink 1.2s steps(1, end) infinite; }
         @keyframes termblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
-        .site-tagline { font-size: 12px; color: var(--text-muted); margin-top: 2px; margin-bottom: 1rem; }
+        .site-tagline { font-size: 12px; color: var(--text-muted); margin-top: 7px; margin-bottom: 1rem; }
         .topbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
         .pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); display: inline-flex; align-items: center; gap: 5px; }
@@ -506,8 +516,18 @@ export default function Dashboard() {
 
       <div className="page">
         <div className="topbar">
-          <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
-          <div className="site-tagline">a quiet macro dashboard · alerts only when it matters</div>
+          <div className="term-window" role="img" aria-label="is the world breaking?">
+            <div className="term-bar" aria-hidden="true">
+              <span className="term-dot" style={{ background: 'rgba(226,75,74,0.55)' }} />
+              <span className="term-dot" style={{ background: 'rgba(186,117,23,0.6)' }} />
+              <span className="term-dot" style={{ background: 'rgba(99,153,34,0.6)' }} />
+            </div>
+            <div className="term-screen">
+              <span className="term-prompt" aria-hidden="true">&gt;</span>
+              <span className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></span>
+            </div>
+          </div>
+          <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
           <div className="topbar-row">
             {!loading && !error && (
               <span className={`pill pill-${overallStatus}`}>
@@ -673,7 +693,7 @@ export default function Dashboard() {
 
         <div className="footer">
           <div className="footer-row">
-            <span className="footer-note">Data: FRED API · Yahoo Finance · refreshes every 15 min</span>
+            <span className="footer-note">Economic data from the Federal Reserve · stock prices refresh every 15 min</span>
             <span className="footer-note">Alerts: email · SMS · in-app</span>
           </div>
           <p className="disclaimer">
