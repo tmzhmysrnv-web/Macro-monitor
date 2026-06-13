@@ -11,6 +11,7 @@ import Credit from '../components/Credit'
 import Inflation from '../components/Inflation'
 import Labor from '../components/Labor'
 import Markets from '../components/Markets'
+import Global from '../components/Global'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -86,7 +87,7 @@ const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
   { id: 'inflation', label: 'Inflation' }, // renders the <Inflation /> intelligence model, not indicator cards
   { id: 'labor',     label: 'Labor' },   // renders the <Labor /> intelligence model, not indicator cards
   { id: 'markets',   label: 'Markets' }, // renders the <Markets /> intelligence model, not indicator cards
-  { id: 'global',    label: 'Global',    sections: [{ label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'oil', 'copper'] }] },
+  { id: 'global',    label: 'Global' },  // renders the <Global /> intelligence model, not indicator cards
   { id: 'all',       label: 'All Data',  sections: SECTIONS },
 ]
 
@@ -287,6 +288,7 @@ export default function Dashboard() {
   const [inflationData, setInflationData] = useState<any>(null)
   const [laborData, setLaborData] = useState<any>(null)
   const [marketsData, setMarketsData] = useState<any>(null)
+  const [globalData, setGlobalData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -313,6 +315,7 @@ export default function Dashboard() {
       fetch('/api/inflation').then(r => r.json()).then(d => { if (d && !d.error) setInflationData(d) }).catch(() => {})
       fetch('/api/labor').then(r => r.json()).then(d => { if (d && !d.error) setLaborData(d) }).catch(() => {})
       fetch('/api/markets').then(r => r.json()).then(d => { if (d && !d.error) setMarketsData(d) }).catch(() => {})
+      fetch('/api/global').then(r => r.json()).then(d => { if (d && !d.error) setGlobalData(d) }).catch(() => {})
     }, 600)
     return () => clearTimeout(t)
   }, [])
@@ -612,6 +615,9 @@ export default function Dashboard() {
 
         {/* ── MARKETS TAB — markets intelligence model, not cards ── */}
         {activeTab === 'markets' && <Markets initialData={marketsData} />}
+
+        {/* ── GLOBAL TAB — global-risk intelligence model, not cards ── */}
+        {activeTab === 'global' && <Global initialData={globalData} />}
 
         {/* ── CATEGORY TABS — filtered card sections ── */}
         {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (

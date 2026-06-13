@@ -459,7 +459,7 @@ function buildSummary(d: MarketsData, cats: Category[], risk: Callout): string {
     : trend?.tone === 'bad' || vol?.tone === 'bad' || vol?.tone === 'crisis'
     ? 'If fear keeps building, the pullback could deepen as investors move to protect capital.'
     : 'With volatility contained and participation broad, the path of least resistance remains higher.'
-  const s6 = `The primary risk: ${risk.text.charAt(0).toLowerCase()}${risk.text.slice(1)}`
+  const s6 = `The primary risk: ${/^[A-Z][A-Z.]/.test(risk.text) ? risk.text : risk.text.charAt(0).toLowerCase() + risk.text.slice(1)}`
   return [s1, s2, s3, s4, s5, s6].filter(Boolean).join(' ')
 }
 

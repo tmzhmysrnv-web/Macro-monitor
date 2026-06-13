@@ -480,7 +480,7 @@ function buildSummary(d: LaborData, cats: Category[], risk: Callout): string {
   const s5 = layoff?.tone === 'good' && (hiring?.tone === 'good' || hiring?.tone === 'neutral')
     ? 'For now, low layoffs are keeping the job market on solid footing even as hiring momentum fades.'
     : 'If hiring demand keeps weakening, it could eventually translate into rising unemployment and increased layoff activity.'
-  const s6 = `The primary risk: ${risk.text.charAt(0).toLowerCase()}${risk.text.slice(1)}`
+  const s6 = `The primary risk: ${/^[A-Z][A-Z.]/.test(risk.text) ? risk.text : risk.text.charAt(0).toLowerCase() + risk.text.slice(1)}`
   return [s1, s2, s3, s4, s5, s6].filter(Boolean).join(' ')
 }
 
