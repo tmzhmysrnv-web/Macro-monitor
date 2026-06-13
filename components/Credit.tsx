@@ -9,13 +9,14 @@ type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
 type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCardData[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
+type Callout = { text: string; why: string; key: string }
 type CreditResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
   subtitle: string
   summary: string
-  risk: string
-  stabilizer: string
+  risk: Callout
+  stabilizer: Callout
   categories: Category[]
   alerts: Alert[]
   lastAlert: string | null
@@ -49,6 +50,13 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
   useEffect(() => {
     if (initialData && !c) { setC(initialData); setLoading(false) }
   }, [initialData, c])
+
+  // Click a risk/stabilizer callout → open + scroll to its Key Driver.
+  function goToDriver(key: string) {
+    if (!key) return
+    setOpenCat(key)
+    setTimeout(() => document.getElementById(`cr-drv-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+  }
 
   if (error) return <div className="cr-error">Could not load credit data. Try refreshing.</div>
 
@@ -89,16 +97,22 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
         )}
       </div>
 
-      {/* ── 3. Biggest risk / biggest stabilizer ── */}
+      {/* ── 3. Biggest risk / biggest stabilizer (click → its driver) ── */}
       {c && (
         <div className="cr-callouts">
-          <div className="cr-callout cr-callout-risk">
-            <div className="cr-callout-label">▲ Biggest risk</div>
-            <div className="cr-callout-text">{c.risk}</div>
+          <div className="cr-callout cr-callout-risk" role="button" tabIndex={0}
+            onClick={() => goToDriver(c.risk.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(c.risk.key) }}>
+            <div className="cr-callout-label">▲ Biggest risk {c.risk.key && <span className="cr-callout-go">see driver →</span>}</div>
+            <div className="cr-callout-text">{c.risk.text}</div>
+            {c.risk.why && <div className="cr-callout-why">{c.risk.why}</div>}
           </div>
-          <div className="cr-callout cr-callout-stab">
-            <div className="cr-callout-label">▼ Biggest stabilizer</div>
-            <div className="cr-callout-text">{c.stabilizer}</div>
+          <div className="cr-callout cr-callout-stab" role="button" tabIndex={0}
+            onClick={() => goToDriver(c.stabilizer.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(c.stabilizer.key) }}>
+            <div className="cr-callout-label">▼ Biggest stabilizer {c.stabilizer.key && <span className="cr-callout-go">see driver →</span>}</div>
+            <div className="cr-callout-text">{c.stabilizer.text}</div>
+            {c.stabilizer.why && <div className="cr-callout-why">{c.stabilizer.why}</div>}
           </div>
         </div>
       )}
@@ -109,6 +123,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
         {(c?.categories || []).map(cat => (
           <div
             key={cat.key}
+            id={`cr-drv-${cat.key}`}
             className="cr-driver"
             role="button"
             tabIndex={0}
@@ -186,14 +201,6 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
         </div>
       ))}
 
-      {c && (
-        <div className="cr-foot">
-          Data: FRED (SLOOS lending standards, C&I & consumer loan growth, HY & IG spreads, card delinquencies & charge-offs,
-          debt-service ratio, Chicago Fed NFCI, CRE delinquencies). Distressed-debt, bankruptcy filings, and regional-bank
-          stress have no free real-time source and are proxied or omitted. Updated {new Date(c.fetchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
-        </div>
-      )}
-
       <Styles />
     </div>
   )
@@ -211,13 +218,18 @@ function Styles() {
       .cr-summary { font-size: 13px; line-height: 1.65; color: var(--text-secondary); margin: 0; max-width: 78ch; }
 
       .cr-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
-      .cr-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+      .cr-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
       .cr-callout-risk { background: rgba(226,75,74,0.06); border-color: rgba(226,75,74,0.3); }
       .cr-callout-stab { background: rgba(99,153,34,0.06); border-color: rgba(99,153,34,0.3); }
-      .cr-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; }
+      .cr-callout-risk:hover { background: rgba(226,75,74,0.1); }
+      .cr-callout-stab:hover { background: rgba(99,153,34,0.1); }
+      .cr-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .cr-callout-risk .cr-callout-label { color: #A32D2D; }
       .cr-callout-stab .cr-callout-label { color: #3B6D11; }
+      .cr-callout-go { font-size: 9px; font-weight: 500; opacity: 0; letter-spacing: 0.02em; transition: opacity 0.15s; }
+      .cr-callout:hover .cr-callout-go { opacity: 0.85; }
       .cr-callout-text { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+      .cr-callout-why { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); }
 
       .cr-section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 1.4rem 0 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); font-family: var(--mono); }
 

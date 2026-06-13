@@ -396,7 +396,7 @@ function buildAlerts(d: BondData): BondAlert[] {
 }
 
 // ── Watching closely (never empty) ────────────────────────────────────
-export type WatchItem = { label: string; text: string; proximity: number }
+export type WatchItem = { label: string; text: string; proximity: number; key: string }
 
 function buildWatching(d: BondData, alerts: BondAlert[]): WatchItem[] {
   const firing = new Set(alerts.map(a => a.id))
@@ -404,20 +404,20 @@ function buildWatching(d: BondData, alerts: BondAlert[]): WatchItem[] {
 
   if (d.tenY != null && !firing.has('tenY-5')) {
     const dist = parseFloat((5 - d.tenY).toFixed(2))
-    items.push({ label: '10-Year Treasury', text: `${dist}pp below the 5% alert`, proximity: Math.max(0, Math.min(1, d.tenY / 5)) })
+    items.push({ label: '10-Year Treasury', text: `${dist}pp below the 5% alert`, proximity: Math.max(0, Math.min(1, d.tenY / 5)), key: 'rates' })
   }
   if (d.thirtY != null && !firing.has('thirtY-6')) {
     const dist = parseFloat((6 - d.thirtY).toFixed(2))
-    items.push({ label: '30-Year Treasury', text: `${dist}pp below the 6% alert`, proximity: Math.max(0, Math.min(1, d.thirtY / 6)) })
+    items.push({ label: '30-Year Treasury', text: `${dist}pp below the 6% alert`, proximity: Math.max(0, Math.min(1, d.thirtY / 6)), key: 'financing' })
   }
   if (d.volBp != null && !firing.has('vol-stress')) {
     const dist = parseFloat((13 - d.volBp).toFixed(1))
-    items.push({ label: 'Treasury Volatility', text: `${dist}bp below the stress threshold (13bp)`, proximity: Math.max(0, Math.min(1, d.volBp / 13)) })
+    items.push({ label: 'Treasury Volatility', text: `${dist}bp below the stress threshold (13bp)`, proximity: Math.max(0, Math.min(1, d.volBp / 13)), key: 'stress' })
   }
   if (d.spread3m_10 != null && !firing.has('deep-inversion')) {
     const s = d.spread3m_10
-    if (s < 0) items.push({ label: 'Yield Curve', text: `${parseFloat((s + 1).toFixed(2))}pp above the deep-inversion alert (−1.0%)`, proximity: Math.max(0, Math.min(1, Math.abs(s) / 1.0)) })
-    else items.push({ label: 'Yield Curve', text: `${fSpread(s)} — positive; watching for re-inversion`, proximity: Math.max(0, Math.min(1, 0.3 - Math.min(0.3, s) / 1)) })
+    if (s < 0) items.push({ label: 'Yield Curve', text: `${parseFloat((s + 1).toFixed(2))}pp above the deep-inversion alert (−1.0%)`, proximity: Math.max(0, Math.min(1, Math.abs(s) / 1.0)), key: 'growth' })
+    else items.push({ label: 'Yield Curve', text: `${fSpread(s)} — positive; watching for re-inversion`, proximity: Math.max(0, Math.min(1, 0.3 - Math.min(0.3, s) / 1)), key: 'growth' })
   }
 
   return items.sort((a, b) => b.proximity - a.proximity)
@@ -447,21 +447,42 @@ const STABILIZER_PHRASE: Record<string, string> = {
 }
 const STABILIZER_PREF = ['stress', 'financing', 'rates', 'growth']
 
-function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: string; stabilizer: string } {
+// Plain-English "why this matters" for un-initiated readers, per theme.
+const RISK_WHY: Record<string, string> = {
+  growth: 'An inverted yield curve means bond investors expect the economy to slow — historically one of the most reliable recession warnings.',
+  rates: 'Higher-for-longer rates keep mortgages, car loans, and business borrowing expensive, which weighs on growth.',
+  financing: 'Rising government borrowing costs strain the federal budget and push long-term rates higher across the economy.',
+  stress: 'When Treasuries — the world’s safe asset — turn volatile, it signals fear spreading through markets.',
+}
+const STAB_WHY: Record<string, string> = {
+  growth: 'A normal, upward-sloping curve points to steady economic growth ahead.',
+  rates: 'Easier financing conditions lower borrowing costs for households and businesses.',
+  financing: 'Stable government financing keeps long-term rates in check.',
+  stress: 'Calm Treasury markets keep the financial system’s anchor steady.',
+}
+
+export type Callout = { text: string; why: string; key: string }
+
+function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: Callout; stabilizer: Callout } {
   const worst = [...cats].sort((a, b) => TONE_RANK[b.tone] - TONE_RANK[a.tone])[0]
-  const risk = worst && TONE_RANK[worst.tone] >= 2
+  const useWatch = !(worst && TONE_RANK[worst.tone] >= 2)
+  const riskText = !useWatch
     ? (RISK_PHRASE[`${worst.key}:${worst.status}`] ?? `${worst.label}: ${worst.status}.`)
     : watching[0]
       ? `${watching[0].label} approaching its alert — ${watching[0].text}.`
       : 'No major bond-market risks building right now.'
+  const riskKey = useWatch ? (watching[0]?.key ?? worst?.key ?? '') : worst.key
 
   const goods = cats.filter(c => c.tone === 'good')
   const pool = goods.length ? goods : [...cats].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])
   const best = pool.sort((a, b) => STABILIZER_PREF.indexOf(a.key) - STABILIZER_PREF.indexOf(b.key))[0]
-  const stabilizer = best
+  const stabText = best
     ? (STABILIZER_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`)
     : 'No clear stabilizers right now.'
-  return { risk, stabilizer }
+  return {
+    risk: { text: riskText, why: RISK_WHY[riskKey] ?? '', key: riskKey },
+    stabilizer: { text: stabText, why: STAB_WHY[best?.key] ?? '', key: best?.key ?? '' },
+  }
 }
 
 // Most recent bond event for "Last alert" when none are active.
@@ -488,8 +509,8 @@ export type BondModel = {
   available: boolean
   status: BondStatus
   subtitle: string
-  risk: string
-  stabilizer: string
+  risk: Callout
+  stabilizer: Callout
   categories: Category[]
   alerts: BondAlert[]
   lastAlert: string | null
@@ -527,7 +548,7 @@ export async function buildBondModel(): Promise<BondModel> {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
-      risk: '', stabilizer: '',
+      risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
       categories: [], alerts: [], lastAlert: null, watching: [], data,
     }
   }

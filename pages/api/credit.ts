@@ -9,7 +9,7 @@ function buildSummary(m: CreditModel): string {
   if (!m.available) return 'Live credit-market data is temporarily unavailable. Check back shortly.'
   const by: Record<string, string> = Object.fromEntries(m.categories.map(c => [c.key, c.status]))
   const themes = `Lending conditions are ${(by.lending || '').toLowerCase()}, corporate credit is ${(by.corporate || '').toLowerCase()}, consumer credit is ${(by.consumer || '').toLowerCase()}, and financial-system stress is ${(by.financial || '').toLowerCase()}.`
-  return [themes, m.risk].filter(Boolean).join(' ')
+  return [themes, m.risk.text].filter(Boolean).join(' ')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

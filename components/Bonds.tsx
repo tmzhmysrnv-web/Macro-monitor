@@ -9,13 +9,14 @@ type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
 type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCardData[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
+type Callout = { text: string; why: string; key: string }
 type BondResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
   subtitle: string
   summary: string
-  risk: string
-  stabilizer: string
+  risk: Callout
+  stabilizer: Callout
   categories: Category[]
   alerts: Alert[]
   lastAlert: string | null
@@ -51,6 +52,13 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
   useEffect(() => {
     if (initialData && !b) { setB(initialData); setLoading(false) }
   }, [initialData, b])
+
+  // Click a risk/stabilizer callout → open + scroll to its Key Driver.
+  function goToDriver(key: string) {
+    if (!key) return
+    setOpenCat(key)
+    setTimeout(() => document.getElementById(`bn-drv-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+  }
 
   if (error) return <div className="bn-error">Could not load bond data. Try refreshing.</div>
 
@@ -91,16 +99,22 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
         )}
       </div>
 
-      {/* ── 3. Biggest risk / biggest stabilizer ── */}
+      {/* ── 3. Biggest risk / biggest stabilizer (click → its driver) ── */}
       {b && (
         <div className="bn-callouts">
-          <div className="bn-callout bn-callout-risk">
-            <div className="bn-callout-label">▲ Biggest risk</div>
-            <div className="bn-callout-text">{b.risk}</div>
+          <div className="bn-callout bn-callout-risk" role="button" tabIndex={0}
+            onClick={() => goToDriver(b.risk.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(b.risk.key) }}>
+            <div className="bn-callout-label">▲ Biggest risk {b.risk.key && <span className="bn-callout-go">see driver →</span>}</div>
+            <div className="bn-callout-text">{b.risk.text}</div>
+            {b.risk.why && <div className="bn-callout-why">{b.risk.why}</div>}
           </div>
-          <div className="bn-callout bn-callout-stab">
-            <div className="bn-callout-label">▼ Biggest stabilizer</div>
-            <div className="bn-callout-text">{b.stabilizer}</div>
+          <div className="bn-callout bn-callout-stab" role="button" tabIndex={0}
+            onClick={() => goToDriver(b.stabilizer.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(b.stabilizer.key) }}>
+            <div className="bn-callout-label">▼ Biggest stabilizer {b.stabilizer.key && <span className="bn-callout-go">see driver →</span>}</div>
+            <div className="bn-callout-text">{b.stabilizer.text}</div>
+            {b.stabilizer.why && <div className="bn-callout-why">{b.stabilizer.why}</div>}
           </div>
         </div>
       )}
@@ -111,6 +125,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
         {(b?.categories || []).map(c => (
           <div
             key={c.key}
+            id={`bn-drv-${c.key}`}
             className="bn-driver"
             role="button"
             tabIndex={0}
@@ -191,14 +206,6 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
         </div>
       ))}
 
-      {b && (
-        <div className="bn-foot">
-          Data: FRED (Treasury yields 2Y–30Y, 3M & 2Y–10Y spreads, 10Y TIPS real yield, fed funds, debt-to-GDP).
-          Treasury volatility is a realized-vol proxy for the MOVE index; auction bid-to-cover has no free real-time source.
-          Updated {new Date(b.fetchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
-        </div>
-      )}
-
       <Styles />
     </div>
   )
@@ -216,13 +223,18 @@ function Styles() {
       .bn-summary { font-size: 13px; line-height: 1.65; color: var(--text-secondary); margin: 0; max-width: 78ch; }
 
       .bn-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
-      .bn-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+      .bn-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
       .bn-callout-risk { background: rgba(226,75,74,0.06); border-color: rgba(226,75,74,0.3); }
       .bn-callout-stab { background: rgba(99,153,34,0.06); border-color: rgba(99,153,34,0.3); }
-      .bn-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; }
+      .bn-callout-risk:hover { background: rgba(226,75,74,0.1); }
+      .bn-callout-stab:hover { background: rgba(99,153,34,0.1); }
+      .bn-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .bn-callout-risk .bn-callout-label { color: #A32D2D; }
       .bn-callout-stab .bn-callout-label { color: #3B6D11; }
+      .bn-callout-go { font-size: 9px; font-weight: 500; opacity: 0; letter-spacing: 0.02em; transition: opacity 0.15s; }
+      .bn-callout:hover .bn-callout-go { opacity: 0.85; }
       .bn-callout-text { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+      .bn-callout-why { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); }
 
       .bn-section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 1.4rem 0 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); font-family: var(--mono); }
 

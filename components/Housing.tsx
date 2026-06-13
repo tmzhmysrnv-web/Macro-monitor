@@ -10,13 +10,14 @@ type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
 type Category = { key: string; label: string; status: string; tone: Tone; fill: number; signals: string[]; metrics: MetricCardData[] }
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
+type Callout = { text: string; why: string; key: string }
 type HousingResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
   subtitle: string
   summary: string
-  risk: string
-  stabilizer: string
+  risk: Callout
+  stabilizer: Callout
   categories: Category[]
   alerts: Alert[]
   lastAlert: string | null
@@ -52,6 +53,13 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
   useEffect(() => {
     if (initialData && !h) { setH(initialData); setLoading(false) }
   }, [initialData, h])
+
+  // Click a risk/stabilizer callout → open + scroll to its Key Driver.
+  function goToDriver(key: string) {
+    if (!key) return
+    setOpenCat(key)
+    setTimeout(() => document.getElementById(`hs-drv-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+  }
 
   if (error) return <div className="hs-error">Could not load housing data. Try refreshing.</div>
 
@@ -92,16 +100,22 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
         )}
       </div>
 
-      {/* ── Why? — biggest risk / biggest stabilizer ── */}
+      {/* ── Why? — biggest risk / biggest stabilizer (click → its driver) ── */}
       {h && (
         <div className="hs-callouts">
-          <div className="hs-callout hs-callout-risk">
-            <div className="hs-callout-label">▲ Biggest risk</div>
-            <div className="hs-callout-text">{h.risk}</div>
+          <div className="hs-callout hs-callout-risk" role="button" tabIndex={0}
+            onClick={() => goToDriver(h.risk.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(h.risk.key) }}>
+            <div className="hs-callout-label">▲ Biggest risk {h.risk.key && <span className="hs-callout-go">see driver →</span>}</div>
+            <div className="hs-callout-text">{h.risk.text}</div>
+            {h.risk.why && <div className="hs-callout-why">{h.risk.why}</div>}
           </div>
-          <div className="hs-callout hs-callout-stab">
-            <div className="hs-callout-label">▼ Biggest stabilizer</div>
-            <div className="hs-callout-text">{h.stabilizer}</div>
+          <div className="hs-callout hs-callout-stab" role="button" tabIndex={0}
+            onClick={() => goToDriver(h.stabilizer.key)}
+            onKeyDown={e => { if (e.key === 'Enter') goToDriver(h.stabilizer.key) }}>
+            <div className="hs-callout-label">▼ Biggest stabilizer {h.stabilizer.key && <span className="hs-callout-go">see driver →</span>}</div>
+            <div className="hs-callout-text">{h.stabilizer.text}</div>
+            {h.stabilizer.why && <div className="hs-callout-why">{h.stabilizer.why}</div>}
           </div>
         </div>
       )}
@@ -112,6 +126,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
         {(h?.categories || []).map(c => (
           <div
             key={c.key}
+            id={`hs-drv-${c.key}`}
             className="hs-driver"
             role="button"
             tabIndex={0}
@@ -195,13 +210,6 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
         </div>
       ))}
 
-      {h && (
-        <div className="hs-foot">
-          Data: FRED (mortgage rates, listings, sales, starts, delinquencies). Some spec metrics use proxies —
-          new home sales for application demand, price-cut share for market heat. Updated {new Date(h.fetchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
-        </div>
-      )}
-
       <Styles />
     </div>
   )
@@ -218,13 +226,18 @@ function Styles() {
       .hs-summary { font-size: 13px; line-height: 1.65; color: var(--text-secondary); margin: 0; }
 
       .hs-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
-      .hs-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+      .hs-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
       .hs-callout-risk { background: rgba(226,75,74,0.06); border-color: rgba(226,75,74,0.3); }
       .hs-callout-stab { background: rgba(99,153,34,0.06); border-color: rgba(99,153,34,0.3); }
-      .hs-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; }
+      .hs-callout-risk:hover { background: rgba(226,75,74,0.1); }
+      .hs-callout-stab:hover { background: rgba(99,153,34,0.1); }
+      .hs-callout-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--mono); margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
       .hs-callout-risk .hs-callout-label { color: #A32D2D; }
       .hs-callout-stab .hs-callout-label { color: #3B6D11; }
+      .hs-callout-go { font-size: 9px; font-weight: 500; opacity: 0; letter-spacing: 0.02em; transition: opacity 0.15s; }
+      .hs-callout:hover .hs-callout-go { opacity: 0.85; }
       .hs-callout-text { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+      .hs-callout-why { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); }
 
       .hs-section-label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 1.4rem 0 8px; padding-bottom: 6px; border-bottom: 0.5px solid var(--border); font-family: var(--mono); }
 

@@ -479,7 +479,7 @@ function buildAlerts(d: HousingData): HousingAlert[] {
 }
 
 // ── Watching closely ──────────────────────────────────────────────────
-export type WatchItem = { label: string; text: string; proximity: number } // 0..1, 1 = at threshold
+export type WatchItem = { label: string; text: string; proximity: number; key: string } // 0..1, 1 = at threshold
 
 function buildWatching(d: HousingData, alerts: HousingAlert[]): WatchItem[] {
   const firing = new Set(alerts.map(a => a.id))
@@ -488,25 +488,25 @@ function buildWatching(d: HousingData, alerts: HousingAlert[]): WatchItem[] {
   const rate = d.mortgage30.latest
   if (rate != null && !firing.has('mortgage-7') && !firing.has('mortgage-8')) {
     const dist = parseFloat((7 - rate).toFixed(2))
-    items.push({ label: 'Mortgage rates', text: `${dist}pp below the 7% alert`, proximity: Math.max(0, Math.min(1, rate / 7)) })
+    items.push({ label: 'Mortgage rates', text: `${dist}pp below the 7% alert`, proximity: Math.max(0, Math.min(1, rate / 7)), key: 'affordability' })
   } else if (rate != null && firing.has('mortgage-7') && !firing.has('mortgage-8')) {
     const dist = parseFloat((8 - rate).toFixed(2))
-    items.push({ label: 'Mortgage rates', text: `${dist}pp below the 8% alert`, proximity: Math.max(0, Math.min(1, rate / 8)) })
+    items.push({ label: 'Mortgage rates', text: `${dist}pp below the 8% alert`, proximity: Math.max(0, Math.min(1, rate / 8)), key: 'affordability' })
   }
 
   if (d.monthsSupply.latest != null && !firing.has('supply-tight')) {
     const v = d.monthsSupply.latest
-    items.push({ label: 'Months of supply', text: `${parseFloat((v - 3).toFixed(1))} months above the tight-supply alert (3.0)`, proximity: Math.max(0, Math.min(1, 3 / v)) })
+    items.push({ label: 'Months of supply', text: `${parseFloat((v - 3).toFixed(1))} months above the tight-supply alert (3.0)`, proximity: Math.max(0, Math.min(1, 3 / v)), key: 'supply' })
   }
 
   if (d.existingSales.yoyPct != null && !firing.has('sales-drop')) {
     const v = d.existingSales.yoyPct
-    items.push({ label: 'Existing home sales', text: `${parseFloat((v + 10).toFixed(1))}pp above the −10% YoY alert`, proximity: Math.max(0, Math.min(1, v <= 0 ? Math.abs(v) / 10 : 0)) })
+    items.push({ label: 'Existing home sales', text: `${parseFloat((v + 10).toFixed(1))}pp above the −10% YoY alert`, proximity: Math.max(0, Math.min(1, v <= 0 ? Math.abs(v) / 10 : 0)), key: 'demand' })
   }
 
   if (d.mortgageDelinq.yoyPct != null && !firing.has('delinq-spike')) {
     const v = d.mortgageDelinq.yoyPct
-    items.push({ label: 'Mortgage delinquencies', text: `${parseFloat((20 - v).toFixed(1))}pp below the +20% YoY alert`, proximity: Math.max(0, Math.min(1, v > 0 ? v / 20 : 0)) })
+    items.push({ label: 'Mortgage delinquencies', text: `${parseFloat((20 - v).toFixed(1))}pp below the +20% YoY alert`, proximity: Math.max(0, Math.min(1, v > 0 ? v / 20 : 0)), key: 'stress' })
   }
 
   return items.sort((a, b) => b.proximity - a.proximity)
@@ -537,21 +537,44 @@ const TONE_RANK: Record<Tone, number> = { good: 0, neutral: 1, warn: 2, bad: 3 }
 // Preference order when several categories tie as the top stabilizer
 const STABILIZER_PREF = ['stress', 'demand', 'supply', 'heat', 'affordability']
 
-function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: string; stabilizer: string } {
+// Plain-English "why this matters" for un-initiated readers, per theme.
+const RISK_WHY: Record<string, string> = {
+  affordability: 'When homes cost more relative to incomes, fewer people can afford to buy — sidelining buyers and eventually cooling prices.',
+  supply: 'Too few homes for sale forces buyers to compete and bids prices up, worsening affordability.',
+  demand: 'When buyers step back, sales slow and home prices soften — and construction and related jobs follow.',
+  heat: 'A cooling market means homes sit longer and sellers cut prices, a sign demand is fading.',
+  stress: 'Rising mortgage delinquencies are an early warning that households are struggling — and can feed into foreclosures.',
+}
+const STAB_WHY: Record<string, string> = {
+  affordability: 'Improving affordability brings buyers back and supports a healthy market.',
+  supply: 'Healthy inventory eases bidding wars and keeps prices in check.',
+  demand: 'Steady buyer demand keeps sales and construction activity flowing.',
+  heat: 'A balanced market means fair conditions for both buyers and sellers.',
+  stress: 'Low delinquencies mean household balance sheets are healthy and foreclosure risk is contained.',
+}
+
+export type Callout = { text: string; why: string; key: string }
+
+function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: Callout; stabilizer: Callout } {
   const worst = [...cats].sort((a, b) => TONE_RANK[b.tone] - TONE_RANK[a.tone])[0]
-  const risk = worst && TONE_RANK[worst.tone] >= 2
+  const useWatch = !(worst && TONE_RANK[worst.tone] >= 2)
+  const riskText = !useWatch
     ? (RISK_PHRASE[`${worst.key}:${worst.status}`] ?? `${worst.label} is under pressure.`)
     : watching[0]
       ? `${watching[0].label} approaching its alert — ${watching[0].text}.`
       : 'No major risks building right now.'
+  const riskKey = useWatch ? (watching[0]?.key ?? worst?.key ?? '') : worst.key
 
   const goods = cats.filter(c => c.tone === 'good')
   const pool = goods.length ? goods : [...cats].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])
   const best = pool.sort((a, b) => STABILIZER_PREF.indexOf(a.key) - STABILIZER_PREF.indexOf(b.key))[0]
-  const stabilizer = best
+  const stabText = best
     ? (STABILIZER_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`)
     : 'No clear stabilizers right now.'
-  return { risk, stabilizer }
+  return {
+    risk: { text: riskText, why: RISK_WHY[riskKey] ?? '', key: riskKey },
+    stabilizer: { text: stabText, why: STAB_WHY[best?.key] ?? '', key: best?.key ?? '' },
+  }
 }
 
 // Most recent housing alert event (for "Last alert" when none are active).
@@ -571,8 +594,8 @@ export type HousingModel = {
   available: boolean      // false when core FRED series are missing (rate-limited / down)
   status: HousingStatus
   subtitle: string        // one-line plain-English explanation of the status
-  risk: string            // biggest risk callout
-  stabilizer: string      // biggest stabilizer callout
+  risk: Callout           // biggest risk callout (text + why + driver key)
+  stabilizer: Callout     // biggest stabilizer callout
   categories: Category[]
   alerts: HousingAlert[]
   lastAlert: string | null
@@ -601,7 +624,7 @@ export async function buildHousingModel(): Promise<HousingModel> {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
-      risk: '', stabilizer: '',
+      risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
       categories: [], alerts: [], lastAlert: null, watching: [], data,
     }
   }

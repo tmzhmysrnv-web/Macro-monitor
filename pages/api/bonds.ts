@@ -11,7 +11,7 @@ function buildSummary(m: BondModel): string {
   const by: Record<string, string> = Object.fromEntries(m.categories.map(c => [c.key, c.status]))
   const stress = (by.stress || '').replace(/ Markets$/, '').toLowerCase() || 'orderly'
   const themes = `Growth expectations read ${(by.growth || '').toLowerCase()}, financing conditions are ${(by.rates || '').toLowerCase()}, and government financing shows ${(by.financing || '').toLowerCase()} — with Treasury markets ${stress}.`
-  return [themes, m.risk].filter(Boolean).join(' ')
+  return [themes, m.risk.text].filter(Boolean).join(' ')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

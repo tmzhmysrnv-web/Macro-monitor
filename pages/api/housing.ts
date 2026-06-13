@@ -10,7 +10,7 @@ function buildSummary(m: HousingModel): string {
   if (!m.available) return 'Live housing data is temporarily unavailable. Check back shortly.'
   const by: Record<string, string> = Object.fromEntries(m.categories.map(c => [c.key, c.status]))
   const themes = `Affordability is ${(by.affordability || '').toLowerCase()}, supply ${(by.supply || '').toLowerCase()}, demand ${(by.demand || '').toLowerCase()}, and financial stress ${(by.stress || '').toLowerCase()}.`
-  return [themes, m.risk].filter(Boolean).join(' ')
+  return [themes, m.risk.text].filter(Boolean).join(' ')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

@@ -320,27 +320,27 @@ function buildAlerts(d: CreditData): CreditAlert[] {
 }
 
 // ── Watching closely (never empty) ────────────────────────────────────
-export type WatchItem = { label: string; text: string; proximity: number }
+export type WatchItem = { label: string; text: string; proximity: number; key: string }
 
 function buildWatching(d: CreditData, alerts: CreditAlert[]): WatchItem[] {
   const firing = new Set(alerts.map(a => a.id))
   const items: WatchItem[] = []
 
   if (d.hy.latest != null && !firing.has('hy-5') && !firing.has('hy-7')) {
-    items.push({ label: 'High-Yield Spread', text: `${(5 - d.hy.latest).toFixed(2)}% from the 5% stress alert`, proximity: Math.max(0, Math.min(1, d.hy.latest / 5)) })
+    items.push({ label: 'High-Yield Spread', text: `${(5 - d.hy.latest).toFixed(2)}% from the 5% stress alert`, proximity: Math.max(0, Math.min(1, d.hy.latest / 5)), key: 'corporate' })
   }
   if (d.ccDelinq.latest != null && !firing.has('cc-high')) {
-    items.push({ label: 'Card Delinquencies', text: `${(4 - d.ccDelinq.latest).toFixed(2)}% from the 4% warning level`, proximity: Math.max(0, Math.min(1, d.ccDelinq.latest / 4)) })
+    items.push({ label: 'Card Delinquencies', text: `${(4 - d.ccDelinq.latest).toFixed(2)}% from the 4% warning level`, proximity: Math.max(0, Math.min(1, d.ccDelinq.latest / 4)), key: 'consumer' })
   }
   if (d.nfci.latest != null && !firing.has('nfci-tight')) {
     const dist = parseFloat((0 - d.nfci.latest).toFixed(2))
-    items.push({ label: 'Financial Conditions', text: `${dist > 0 ? `${dist} below` : `${Math.abs(dist)} into`} the restrictive zone (NFCI 0)`, proximity: Math.max(0, Math.min(1, (d.nfci.latest + 1) / 1)) })
+    items.push({ label: 'Financial Conditions', text: `${dist > 0 ? `${dist} below` : `${Math.abs(dist)} into`} the restrictive zone (NFCI 0)`, proximity: Math.max(0, Math.min(1, (d.nfci.latest + 1) / 1)), key: 'financial' })
   }
   if (d.standards.latest != null && d.standards.latest < 30) {
-    items.push({ label: 'Lending Standards', text: `${(30 - d.standards.latest).toFixed(0)}pp from the sharp-tightening alert`, proximity: Math.max(0, Math.min(1, (d.standards.latest + 20) / 50)) })
+    items.push({ label: 'Lending Standards', text: `${(30 - d.standards.latest).toFixed(0)}pp from the sharp-tightening alert`, proximity: Math.max(0, Math.min(1, (d.standards.latest + 20) / 50)), key: 'lending' })
   }
   if (d.creDelinq.latest != null && !firing.has('cre-distress')) {
-    items.push({ label: 'CRE Delinquencies', text: `${(3 - d.creDelinq.latest).toFixed(2)}% from the distress threshold`, proximity: Math.max(0, Math.min(1, d.creDelinq.latest / 3)) })
+    items.push({ label: 'CRE Delinquencies', text: `${(3 - d.creDelinq.latest).toFixed(2)}% from the distress threshold`, proximity: Math.max(0, Math.min(1, d.creDelinq.latest / 3)), key: 'financial' })
   }
 
   return items.sort((a, b) => b.proximity - a.proximity).slice(0, 5)
@@ -372,17 +372,39 @@ const STAB_PHRASE: Record<string, string> = {
 }
 const STAB_PREF = ['corporate', 'financial', 'consumer', 'lending']
 
-function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: string; stabilizer: string } {
+// Plain-English "why this matters" for un-initiated readers, per theme.
+const RISK_WHY: Record<string, string> = {
+  lending: 'When banks pull back, it gets harder and pricier for businesses and households to borrow — which slows the whole economy.',
+  corporate: 'If companies struggle to refinance their debt, they cut investment and jobs, and the stress can spread to banks and the stock market.',
+  consumer: 'When households fall behind on debt, banks lend less and consumer spending — the economy’s biggest engine — slows.',
+  financial: 'Tighter conditions across the financial system can choke off credit and turn a slowdown into something worse.',
+}
+const STAB_WHY: Record<string, string> = {
+  lending: 'Freely flowing credit keeps businesses investing and households spending.',
+  corporate: 'Calm corporate credit means companies can borrow cheaply and keep investing and hiring.',
+  consumer: 'Households keeping up with their debts supports steady consumer spending.',
+  financial: 'Loose, orderly financial conditions keep credit available across the economy.',
+}
+
+export type Callout = { text: string; why: string; key: string }
+
+function riskAndStabilizer(cats: Category[], watching: WatchItem[]): { risk: Callout; stabilizer: Callout } {
   const worst = [...cats].sort((a, b) => TONE_RANK[b.tone] - TONE_RANK[a.tone])[0]
-  const risk = worst && TONE_RANK[worst.tone] >= 2
+  const useWatch = !(worst && TONE_RANK[worst.tone] >= 2)
+  const riskText = !useWatch
     ? (RISK_PHRASE[`${worst.key}:${worst.status}`] ?? `${worst.label}: ${worst.status.toLowerCase()}.`)
     : watching[0] ? `${watching[0].label} approaching its alert — ${watching[0].text}.` : 'No major credit risks building right now.'
+  // Keep the click target + "why" consistent with the risk TEXT.
+  const riskKey = useWatch ? (watching[0]?.key ?? worst?.key ?? '') : worst.key
 
   const goods = cats.filter(c => c.tone === 'good')
   const pool = goods.length ? goods : [...cats].sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone])
   const best = pool.sort((a, b) => STAB_PREF.indexOf(a.key) - STAB_PREF.indexOf(b.key))[0]
-  const stabilizer = best ? (STAB_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`) : 'No clear stabilizers right now.'
-  return { risk, stabilizer }
+  const stabText = best ? (STAB_PHRASE[`${best.key}:${best.status}`] ?? `${best.label} is holding steady.`) : 'No clear stabilizers right now.'
+  return {
+    risk: { text: riskText, why: RISK_WHY[riskKey] ?? '', key: riskKey },
+    stabilizer: { text: stabText, why: STAB_WHY[best?.key] ?? '', key: best?.key ?? '' },
+  }
 }
 
 function buildLastAlert(d: CreditData): string | null {
@@ -404,8 +426,8 @@ export type CreditModel = {
   available: boolean
   status: CreditStatus
   subtitle: string
-  risk: string
-  stabilizer: string
+  risk: Callout
+  stabilizer: Callout
   categories: Category[]
   alerts: CreditAlert[]
   lastAlert: string | null
@@ -430,7 +452,7 @@ export async function buildCreditModel(): Promise<CreditModel> {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
-      risk: '', stabilizer: '', categories: [], alerts: [], lastAlert: null, watching: [],
+      risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' }, categories: [], alerts: [], lastAlert: null, watching: [],
     }
   }
 
