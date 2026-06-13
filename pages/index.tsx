@@ -10,6 +10,7 @@ import Bonds from '../components/Bonds'
 import Credit from '../components/Credit'
 import Inflation from '../components/Inflation'
 import Labor from '../components/Labor'
+import Markets from '../components/Markets'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -84,7 +85,7 @@ const TABS: { id: string; label: string; sections?: typeof SECTIONS }[] = [
   { id: 'credit',    label: 'Credit' },  // renders the <Credit /> intelligence model, not indicator cards
   { id: 'inflation', label: 'Inflation' }, // renders the <Inflation /> intelligence model, not indicator cards
   { id: 'labor',     label: 'Labor' },   // renders the <Labor /> intelligence model, not indicator cards
-  { id: 'markets',   label: 'Markets',   sections: [{ label: 'Equities & Volatility', keys: ['sp500', 'vix'] }] },
+  { id: 'markets',   label: 'Markets' }, // renders the <Markets /> intelligence model, not indicator cards
   { id: 'global',    label: 'Global',    sections: [{ label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'oil', 'copper'] }] },
   { id: 'all',       label: 'All Data',  sections: SECTIONS },
 ]
@@ -285,6 +286,7 @@ export default function Dashboard() {
   const [creditData, setCreditData] = useState<any>(null)
   const [inflationData, setInflationData] = useState<any>(null)
   const [laborData, setLaborData] = useState<any>(null)
+  const [marketsData, setMarketsData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
@@ -310,6 +312,7 @@ export default function Dashboard() {
       fetch('/api/credit').then(r => r.json()).then(d => { if (d && !d.error) setCreditData(d) }).catch(() => {})
       fetch('/api/inflation').then(r => r.json()).then(d => { if (d && !d.error) setInflationData(d) }).catch(() => {})
       fetch('/api/labor').then(r => r.json()).then(d => { if (d && !d.error) setLaborData(d) }).catch(() => {})
+      fetch('/api/markets').then(r => r.json()).then(d => { if (d && !d.error) setMarketsData(d) }).catch(() => {})
     }, 600)
     return () => clearTimeout(t)
   }, [])
@@ -606,6 +609,9 @@ export default function Dashboard() {
 
         {/* ── LABOR TAB — labor-market intelligence model, not cards ── */}
         {activeTab === 'labor' && <Labor initialData={laborData} />}
+
+        {/* ── MARKETS TAB — markets intelligence model, not cards ── */}
+        {activeTab === 'markets' && <Markets initialData={marketsData} />}
 
         {/* ── CATEGORY TABS — filtered card sections ── */}
         {(TABS.find(t => t.id === activeTab)?.sections || []).map(section => (
