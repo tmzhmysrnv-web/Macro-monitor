@@ -276,6 +276,27 @@ function PercentileBar({ percentile, opportunityDirection }: { percentile: numbe
 }
 
 
+// Cracked-bell alert mark for the page's top-right. Muted (no glow) to sit
+// quietly beside the title; the red badge shows the live active-alert count.
+function AlertBell({ count, onClick }: { count: number; onClick?: () => void }) {
+  const active = count > 0
+  return (
+    <button
+      className="alert-bell"
+      onClick={onClick}
+      aria-label={active ? `${count} active alert${count > 1 ? 's' : ''}` : 'No active alerts'}
+      title={active ? `${count} active alert${count > 1 ? 's' : ''}` : 'No active alerts'}
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--term)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" />
+        <path d="M9 17v1a3 3 0 0 0 6 0v-1" />
+        <path className="bell-crack" d="M12.6 6.4 L10.9 10 L13.1 12 L11.4 16" stroke="var(--text-secondary)" strokeWidth="1" />
+      </svg>
+      {active && <span className="alert-bell-badge">{count > 9 ? '9+' : count}</span>}
+    </button>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -395,7 +416,12 @@ export default function Dashboard() {
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
-        .topbar { margin-bottom: 0.5rem; }
+        .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+        /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
+        .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.8; line-height: 0; transition: opacity 0.15s; }
+        .alert-bell:hover { opacity: 1; }
+        .alert-bell .bell-crack { opacity: 0.6; }
+        .alert-bell-badge { position: absolute; top: -1px; right: -2px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #E24B4A; color: #fff; font-size: 9px; font-weight: 700; line-height: 15px; text-align: center; font-family: var(--mono); }
         .site-name { position: relative; display: inline-block; font-family: 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.78; }
         /* a bit of grain over the title — keeps it textured and in the background */
         .site-name::after { content: ''; position: absolute; inset: -1px -2px; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.16;
@@ -509,17 +535,20 @@ export default function Dashboard() {
 
       <div className="page">
         <div className="topbar">
-          <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
-          <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
-          <div className="topbar-row">
-            {!loading && !error && (
-              <span className={`pill pill-${overallStatus}`}>
-                <span className={`dot ${overallStatus !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: STATUS_STYLES[overallStatus].dot }} />
-                {overallLabel}
-              </span>
-            )}
-            {fetchedTime && <span className="meta">{fetchedTime}</span>}
+          <div className="topbar-left">
+            <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
+            <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
+            <div className="topbar-row">
+              {!loading && !error && (
+                <span className={`pill pill-${overallStatus}`}>
+                  <span className={`dot ${overallStatus !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: STATUS_STYLES[overallStatus].dot }} />
+                  {overallLabel}
+                </span>
+              )}
+              {fetchedTime && <span className="meta">{fetchedTime}</span>}
+            </div>
           </div>
+          <AlertBell count={alertCount} onClick={() => setActiveTab('overview')} />
         </div>
 
         {/* Tab navigation */}
