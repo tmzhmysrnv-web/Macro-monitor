@@ -42,11 +42,12 @@ function AlertRow({ a, onClick }: { a: PanelAlert; onClick: () => void }) {
 }
 
 export default function NotificationPanel({
-  open, onClose, live, onNavigate,
+  open, onClose, active, past, onNavigate,
 }: {
   open: boolean
   onClose: () => void
-  live: PanelAlert[]
+  active: PanelAlert[]
+  past: PanelAlert[]
   onNavigate: (tab: string) => void
 }) {
   const [feed, setFeed] = useState<PanelAlert[]>([])
@@ -71,8 +72,14 @@ export default function NotificationPanel({
 
   if (!open) return null
 
-  const liveKeys = new Set(live.map(a => a.key))
-  const earlier = feed.filter(f => !liveKeys.has(f.key))
+  const activeKeys = new Set(active.map(a => a.key))
+  // "Earlier" = locally cleared alerts + the server feed, minus anything currently
+  // active and de-duped by key (prefer the local copy).
+  const pastByKey = new Map(past.map(a => [a.key, a]))
+  for (const f of feed) if (!activeKeys.has(f.key) && !pastByKey.has(f.key)) pastByKey.set(f.key, f)
+  const earlier = [...pastByKey.values()]
+    .filter(a => !activeKeys.has(a.key))
+    .sort((x, y) => (y.ts ?? 0) - (x.ts ?? 0))
 
   const go = (tab: string) => { onNavigate(tab); onClose() }
 
@@ -103,10 +110,10 @@ export default function NotificationPanel({
         </div>
 
         <div className="np-scroll">
-          {live.length > 0 && (
+          {active.length > 0 && (
             <div className="np-section">
-              <div className="np-section-label">Active now · {live.length}</div>
-              {live.map(a => <AlertRow key={a.key} a={a} onClick={() => go(a.tab)} />)}
+              <div className="np-section-label">Active now · {active.length}</div>
+              {active.map(a => <AlertRow key={a.key} a={a} onClick={() => go(a.tab)} />)}
             </div>
           )}
 
@@ -117,7 +124,7 @@ export default function NotificationPanel({
             </div>
           )}
 
-          {live.length === 0 && earlier.length === 0 && (
+          {active.length === 0 && earlier.length === 0 && (
             <div className="np-empty">
               <div className="np-empty-mark">✓</div>
               Nothing is breaking right now.<br />We'll surface alerts here the moment they do.

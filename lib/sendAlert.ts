@@ -25,15 +25,26 @@ export async function sendConfirmationEmail(email: string, token: string): Promi
   const r = await client()
   if (!r) { console.warn('sendConfirmationEmail: RESEND_API_KEY not set — skipping send'); return false }
   const url = `${site()}/api/confirm?token=${token}`
+  const p = 'margin:0 0 14px;font-size:15px;line-height:1.65;color:#1A1A18'
+  const dim = 'margin:0 0 14px;font-size:15px;line-height:1.65;color:#6B6B67'
+  const tight = 'margin:0 0 2px;font-size:15px;line-height:1.5;color:#6B6B67'
   const html = shell(`
-    <h2 style="font-size:18px;font-weight:500;margin:0 0 8px">Confirm your macro alerts</h2>
-    <p style="color:#6B6B67;font-size:14px;line-height:1.6;margin:0 0 20px">
-      You asked to get an email whenever a macro indicator breaks its threshold — the kind of move that actually matters.
-      Confirm below and we'll only reach out when something does.
-    </p>
-    <a href="${url}" style="display:inline-block;background:#1A1A18;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:10px 20px;border-radius:8px">Confirm subscription</a>
-    <p style="color:#9E9E9A;font-size:12px;line-height:1.6;margin:20px 0 0">
-      If you didn't request this, just ignore this email — you won't be subscribed.
+    <p style="${p}">The news is designed to make everything feel urgent.</p>
+    <p style="margin:0 0 22px;font-size:18px;font-weight:500;line-height:1.5;color:#1A1A18">Most of it isn't.</p>
+    <p style="${dim}">You've subscribed to Macro Monitor from <strong style="color:#1A1A18">IsTheWorldBreaking.com</strong>.</p>
+    <p style="${dim}">We monitor the indicators that actually matter — labor, inflation, credit, housing, markets, bonds, and global conditions — and watch for meaningful changes beneath the headlines.</p>
+    <p style="${dim}">You don't need to follow every market move or breaking-news alert.</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.65;font-weight:500;color:#1A1A18">Go enjoy your life. We'll let you know when something actually breaks.</p>
+    <p style="${dim}">You'll only receive alerts when an important indicator crosses a threshold worth paying attention to.</p>
+    <div style="margin:0 0 20px">
+      <p style="${tight}">No daily newsletters.</p>
+      <p style="${tight}">No constant notifications.</p>
+      <p style="${tight}">No noise.</p>
+      <p style="margin:6px 0 0;font-size:15px;font-weight:500;color:#1A1A18">Just signals.</p>
+    </div>
+    <a href="${url}" style="display:inline-block;background:#1A1A18;color:#fff;text-decoration:none;font-size:15px;font-weight:500;padding:11px 22px;border-radius:8px">Confirm My Alerts</a>
+    <p style="color:#9E9E9A;font-size:12px;line-height:1.6;margin:22px 0 0;border-top:1px solid #eee;padding-top:14px">
+      If you didn't request these alerts, you can safely ignore this email.
     </p>
   `)
   try {

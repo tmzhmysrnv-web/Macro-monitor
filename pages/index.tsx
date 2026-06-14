@@ -15,6 +15,13 @@ import Global from '../components/Global'
 import NotificationPanel, { type PanelAlert } from '../components/NotificationPanel'
 import { severityOf } from '../lib/alertSeverity'
 
+// Client-side notification history (localStorage). Lets the bell show active
+// alerts instantly on reload and keep cleared ones as "Earlier", independent of
+// the ~600ms tab prefetch and the daily cron feed.
+type AlertHistoryItem = PanelAlert & { firstSeen: number; lastSeen: number; cleared: boolean }
+const ALERT_HISTORY_KEY = 'mm_alert_history'
+const ALERTS_SEEN_KEY = 'mm_alerts_seen_at'
+
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
     vix: data.vix, treasury10y: data.treasury10y, fedfunds: data.fedfunds,
@@ -336,8 +343,20 @@ export default function Dashboard() {
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [notifOpen, setNotifOpen] = useState(false)
+  const [alertHistory, setAlertHistory] = useState<AlertHistoryItem[]>([])
+  const [alertsSeenAt, setAlertsSeenAt] = useState(0)
   // Theme: null = follow OS until we read the saved choice; then explicit.
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
+
+  // Restore notification history + last-seen marker on mount.
+  useEffect(() => {
+    try {
+      const h = localStorage.getItem(ALERT_HISTORY_KEY)
+      if (h) setAlertHistory(JSON.parse(h))
+      const s = localStorage.getItem(ALERTS_SEEN_KEY)
+      if (s) setAlertsSeenAt(Number(s) || 0)
+    } catch {}
+  }, [])
 
   useEffect(() => {
     const saved = (() => { try { return localStorage.getItem('theme') } catch { return null } })()
@@ -427,7 +446,58 @@ export default function Dashboard() {
     }))
   ).sort((x, y) => y.severity - x.severity)
 
-  const alertCount = liveAlerts.length
+  // Which tabs have actually loaded — only those can authoritatively "clear" a
+  // stored alert (an unloaded tab tells us nothing, so we keep its last state).
+  const loadedTabs = new Set<string>()
+  ;([['inflation', inflationData], ['labor', laborData], ['markets', marketsData],
+     ['global', globalData], ['bonds', bondsData], ['credit', creditData], ['housing', housingData]] as [string, any][])
+    .forEach(([t, d]) => { if (d && !d.error) loadedTabs.add(t) })
+
+  // Reconcile live alerts into the persistent history. Keyed on stable
+  // signatures so this only runs when the firing set or loaded tabs change.
+  const liveSig = liveAlerts.map(a => `${a.key}|${a.severity}|${a.title}`).join('~')
+  const loadedSig = [...loadedTabs].sort().join(',')
+  useEffect(() => {
+    if (loadedTabs.size === 0) return
+    const now = Date.now()
+    setAlertHistory(prev => {
+      const liveByKey = new Map(liveAlerts.map(a => [a.key, a]))
+      const seen = new Set<string>()
+      const merged: AlertHistoryItem[] = prev.map(h => {
+        seen.add(h.key)
+        const l = liveByKey.get(h.key)
+        if (l) return { ...h, ...l, lastSeen: now, cleared: false }     // still firing
+        if (loadedTabs.has(h.tab)) return { ...h, cleared: true }        // tab loaded, no longer firing
+        return h                                                         // tab not loaded — leave as-is
+      })
+      for (const a of liveAlerts) {
+        if (!seen.has(a.key)) merged.push({ ...a, firstSeen: now, lastSeen: now, cleared: false })
+      }
+      merged.sort((x, y) =>
+        (Number(x.cleared) - Number(y.cleared)) || (y.severity - x.severity) || (y.lastSeen - x.lastSeen))
+      const next = merged.slice(0, 50)
+      try { localStorage.setItem(ALERT_HISTORY_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSig, loadedSig])
+
+  const activeAlerts = alertHistory.filter(h => !h.cleared)
+  const pastAlerts = alertHistory.filter(h => h.cleared)
+  // Badge = unread: active alerts that first appeared since the panel was last opened.
+  const unreadCount = activeAlerts.filter(a => a.firstSeen > alertsSeenAt).length
+
+  // Opening the bell marks everything currently active as seen (badge calms down).
+  const toggleNotifications = () => {
+    setNotifOpen(o => {
+      if (!o) {
+        const t = Date.now()
+        setAlertsSeenAt(t)
+        try { localStorage.setItem(ALERTS_SEEN_KEY, String(t)) } catch {}
+      }
+      return !o
+    })
+  }
 
   return (
     <>
@@ -600,14 +670,15 @@ export default function Dashboard() {
           </div>
           <div className="topbar-actions">
             <ThemeToggle theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
-            <AlertBell count={alertCount} onClick={() => setNotifOpen(o => !o)} />
+            <AlertBell count={unreadCount} onClick={toggleNotifications} />
           </div>
         </div>
 
         <NotificationPanel
           open={notifOpen}
           onClose={() => setNotifOpen(false)}
-          live={liveAlerts}
+          active={activeAlerts.map(a => ({ ...a, ts: a.lastSeen }))}
+          past={pastAlerts.map(a => ({ ...a, ts: a.lastSeen }))}
           onNavigate={setActiveTab}
         />
 
