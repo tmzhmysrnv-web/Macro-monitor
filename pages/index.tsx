@@ -412,10 +412,6 @@ export default function Dashboard() {
   }) : []
 
   const alertCount = allStatuses.filter(s => s === 'alert').length
-  const warnCount  = allStatuses.filter(s => s === 'warn').length
-  const overallStatus: AlertStatus = alertCount > 0 ? 'alert' : warnCount > 0 ? 'warn' : 'ok'
-  const overallLabel = alertCount > 0 ? `${alertCount} alert${alertCount > 1 ? 's' : ''}` : warnCount > 0 ? `${warnCount} warning${warnCount > 1 ? 's' : ''}` : 'No — all clear'
-  const fetchedTime = data?.fetchedAt ? new Date(data.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET' : ''
 
   return (
     <>
@@ -585,15 +581,6 @@ export default function Dashboard() {
           <div className="topbar-left">
             <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
             <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
-            <div className="topbar-row">
-              {!loading && !error && (
-                <span className={`pill pill-${overallStatus}`}>
-                  <span className={`dot ${overallStatus !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: STATUS_STYLES[overallStatus].dot }} />
-                  {overallLabel}
-                </span>
-              )}
-              {fetchedTime && <span className="meta">{fetchedTime}</span>}
-            </div>
           </div>
           <div className="topbar-actions">
             <ThemeToggle theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />

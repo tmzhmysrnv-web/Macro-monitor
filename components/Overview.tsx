@@ -209,7 +209,7 @@ function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: strin
 export default function Overview({ data = null, events = [], onViewCard, onNavigate }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showAlerts, setShowAlerts] = useState(true)
+  const [showAlerts, setShowAlerts] = useState(false) // collapsed by default — click the header to reveal
 
   useEffect(() => {
     // Fast: score + alerts + drivers + the fresh trailing-year trend.
