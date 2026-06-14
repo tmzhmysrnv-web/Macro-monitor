@@ -297,6 +297,26 @@ function AlertBell({ count, onClick }: { count: number; onClick?: () => void }) 
   )
 }
 
+// Light/dark toggle — shows the moon in light mode (click → dark) and the sun
+// in dark mode (click → light). Muted to sit quietly beside the bell.
+function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark' | null; onToggle: () => void }) {
+  const dark = theme === 'dark'
+  return (
+    <button className="theme-toggle" onClick={onToggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
+      {dark ? (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
+        </svg>
+      ) : (
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3a6 6 0 0 0 9 9a9 9 0 1 1 -9 -9" />
+        </svg>
+      )}
+    </button>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -313,6 +333,20 @@ export default function Dashboard() {
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
+  // Theme: null = follow OS until we read the saved choice; then explicit.
+  const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
+
+  useEffect(() => {
+    const saved = (() => { try { return localStorage.getItem('theme') } catch { return null } })()
+    if (saved === 'light' || saved === 'dark') setTheme(saved)
+    else setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  }, [])
+
+  useEffect(() => {
+    if (!theme) return
+    document.documentElement.setAttribute('data-theme', theme)
+    try { localStorage.setItem('theme', theme) } catch {}
+  }, [theme])
 
   useEffect(() => {
     fetch('/api/data')
@@ -403,13 +437,21 @@ export default function Dashboard() {
           --warn-bg: #FFFBF2; --alert-bg: #FFF5F5; --term: #6b9576;
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
         }
+        /* Dark palette — applied when the OS prefers dark (and no manual
+           light override), or when the user explicitly picks dark. */
         @media (prefers-color-scheme: dark) {
-          :root {
+          :root:not([data-theme='light']) {
             --bg: #111110; --card-bg: #1C1C1A;
             --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
             --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
             --warn-bg: #1E1A10; --alert-bg: #1E1010; --term: #6fae7d;
           }
+        }
+        :root[data-theme='dark'] {
+          --bg: #111110; --card-bg: #1C1C1A;
+          --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
+          --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
+          --warn-bg: #1E1A10; --alert-bg: #1E1010; --term: #6fae7d;
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
@@ -418,9 +460,14 @@ export default function Dashboard() {
 
         .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
-        .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.8; line-height: 0; transition: opacity 0.15s; }
+        .topbar-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .theme-toggle { background: none; border: none; padding: 5px; cursor: pointer; color: var(--text-muted); line-height: 0; transition: color 0.15s; }
+        .theme-toggle:hover { color: var(--text-secondary); }
+        .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.85; line-height: 0; transition: opacity 0.15s; }
         .alert-bell:hover { opacity: 1; }
-        .alert-bell .bell-crack { opacity: 0.6; }
+        /* soft green glow — helps the crack read against the stroke */
+        .alert-bell svg { filter: drop-shadow(0 0 3px rgba(111,174,125,0.55)); }
+        .alert-bell .bell-crack { opacity: 0.7; }
         .alert-bell-badge { position: absolute; top: -1px; right: -2px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #E24B4A; color: #fff; font-size: 9px; font-weight: 700; line-height: 15px; text-align: center; font-family: var(--mono); }
         .site-name { position: relative; display: inline-block; font-family: 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.78; }
         /* a bit of grain over the title — keeps it textured and in the background */
@@ -548,7 +595,10 @@ export default function Dashboard() {
               {fetchedTime && <span className="meta">{fetchedTime}</span>}
             </div>
           </div>
-          <AlertBell count={alertCount} onClick={() => setActiveTab('overview')} />
+          <div className="topbar-actions">
+            <ThemeToggle theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
+            <AlertBell count={alertCount} onClick={() => setActiveTab('overview')} />
+          </div>
         </div>
 
         {/* Tab navigation */}
