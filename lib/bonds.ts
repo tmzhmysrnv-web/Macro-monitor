@@ -436,6 +436,19 @@ function buildAlerts(d: BondData): BondAlert[] {
     })
   }
 
+  // Fast directional spike in yields — the channel a foreign-selling shock
+  // (Japan/China stepping back) hits first. Tier escalates in the title.
+  const wkBp = d.tenYHistory.length > 5 ? (d.tenYHistory[0].value - d.tenYHistory[5].value) * 100 : null
+  if (wkBp != null && wkBp >= 25) {
+    alerts.push({
+      id: 'yield-spike', title: wkBp >= 40 ? 'Disorderly Jump in Treasury Yields' : 'Treasury Yields Spiking',
+      what: `The 10-year yield has jumped ${Math.round(wkBp)}bp in a week.`,
+      why: 'A fast spike in yields — often when large holders such as foreign central banks sell — raises borrowing costs across the economy and can signal waning demand for U.S. debt or a disorderly repricing.',
+      affected: ['Government Finance', 'Housing', 'Credit', 'Stock Market'],
+      context: 'Sharp yield jumps drove the 2022–23 bond rout and the spring-2025 long-end scare.',
+    })
+  }
+
   return alerts
 }
 

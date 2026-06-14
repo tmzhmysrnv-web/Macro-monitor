@@ -320,6 +320,31 @@ function buildAlerts(d: MarketsData, cats: Category[]): MarketAlert[] {
     })
   }
 
+  // Sharp short-term move — a velocity signal, independent of the slow
+  // drawdown-from-high alerts above. Tiers escalate in place (panic supersedes).
+  const day = d.spx.length > 1 && d.spx[1].value !== 0 ? parseFloat(((d.spx[0].value / d.spx[1].value - 1) * 100).toFixed(1)) : null
+  const week = d.spx.length > 5 && d.spx[5].value !== 0 ? parseFloat(((d.spx[0].value / d.spx[5].value - 1) * 100).toFixed(1)) : null
+  const move = day != null && day <= -2.5
+    ? `The S&P 500 fell ${Math.abs(day)}% in a single day${week != null && week <= -2 ? ` (${Math.abs(week)}% over the week)` : ''}.`
+    : week != null ? `The S&P 500 is down ${Math.abs(week)}% over the past week.` : ''
+  if ((day != null && day <= -4.5) || (week != null && week <= -7)) {
+    alerts.push({
+      id: 'market-selloff', title: 'Sharp Market Sell-Off — Panic Selling',
+      what: move,
+      why: 'A drop this fast signals investors are rushing for the exits — a sudden repricing of risk that can feed on itself, freeze risk-taking, and spill into credit and confidence.',
+      affected: ['Investor Wealth', 'Credit', 'Economic Confidence'],
+      context: 'Single-day drops of 4%+ are rare outside genuine stress episodes (2008, 2020).',
+    })
+  } else if ((day != null && day <= -2.5) || (week != null && week <= -5)) {
+    alerts.push({
+      id: 'market-selloff', title: 'Sharp Market Sell-Off — Investors on Edge',
+      what: move,
+      why: 'A fast pullback like this gets investors’ attention — it reflects rising nervousness and can be an early sign sentiment is turning, even if the broader trend is still intact.',
+      affected: ['Investor Wealth', 'Economic Confidence'],
+      context: 'Sharp 2–3% single-day drops happen a few times a year; most fade, but they mark moments of heightened anxiety.',
+    })
+  }
+
   if (ewVsCap != null && ewVsCap <= -6) {
     alerts.push({
       id: 'breadth-weak', title: 'Market Breadth Deteriorating',

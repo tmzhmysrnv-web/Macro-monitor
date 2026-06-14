@@ -302,7 +302,15 @@ function buildAlerts(d: InflationData, cats: Category[]): InflationAlert[] {
     })
   }
 
-  if (wti != null && wti >= 100) {
+  if (wti != null && wti >= 120) {
+    alerts.push({
+      id: 'wti-shock', title: 'Energy Shock — WTI Above $120',
+      what: `WTI crude has surged to ${fUsd(wti)}.`,
+      why: 'Oil above $120 is a powerful inflation shock — it lifts gasoline, shipping, and food costs across the whole economy and has historically tipped growth toward recession.',
+      affected: ['Consumer Spending', 'Inflation', 'Bonds', 'Federal Reserve Policy'],
+      context: 'Oil shocks above $120 contributed to the 1973, 1990, and 2008 downturns.',
+    })
+  } else if (wti != null && wti >= 100) {
     alerts.push({
       id: 'wti-100', title: 'WTI Crude Above $100',
       what: `WTI crude oil is trading at ${fUsd(wti)}.`,
@@ -342,7 +350,7 @@ function buildWatching(d: InflationData, alerts: InflationAlert[]): WatchItem[] 
   if (core != null && !firing.has('core-4')) {
     items.push({ label: 'Core CPI (YoY)', text: `${(4 - core).toFixed(1)}% from the 4% warning level`, proximity: Math.max(0, Math.min(1, core / 4)), key: 'current' })
   }
-  if (wti != null && !firing.has('wti-100')) {
+  if (wti != null && !firing.has('wti-100') && !firing.has('wti-shock')) {
     items.push({ label: 'WTI Crude', text: `${fUsd(100 - wti)} from the $100 alert level`, proximity: Math.max(0, Math.min(1, wti / 100)), key: 'energy' })
   }
   if (shelter != null) {

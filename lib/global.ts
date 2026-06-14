@@ -311,7 +311,15 @@ function buildAlerts(d: GlobalData): GlobalAlert[] {
     })
   }
 
-  if (eemDD != null && eemDD <= -15) {
+  if (eemDD != null && eemDD <= -25) {
+    alerts.push({
+      id: 'em-contagion', title: 'Contagion Risk — Emerging Markets Cracking',
+      what: `Emerging-market equities have fallen ${Math.abs(eemDD)}% from their high.`,
+      why: 'A drawdown this deep means a localized EM problem is turning systemic — capital flight, currency crises, and banking stress that spread through trade and funding links into developed markets.',
+      affected: ['Markets', 'Credit', 'Government Finance', 'Consumer Spending'],
+      context: 'EM collapses of this scale drove the 1997–98 Asian/Russian crises and the 2008 contagion.',
+    })
+  } else if (eemDD != null && eemDD <= -15) {
     alerts.push({
       id: 'em-stress', title: 'Emerging-Market Stress Building',
       what: `Emerging-market equities are ${Math.abs(eemDD)}% below their recent high.`,
@@ -344,7 +352,7 @@ function buildWatching(d: GlobalData, alerts: GlobalAlert[]): WatchItem[] {
   if (copper3m != null && !firing.has('copper-slump')) {
     items.push({ label: 'Copper', text: copper3m <= -5 ? 'in the slowdown zone' : `${(copper3m + 12).toFixed(0)}pp from the slowdown trigger`, proximity: Math.max(0, Math.min(1, (-copper3m + 5) / 17)), key: 'growth' })
   }
-  if (eemDD != null && !firing.has('em-stress')) {
+  if (eemDD != null && !firing.has('em-stress') && !firing.has('em-contagion')) {
     items.push({ label: 'EM Equities', text: `${(Math.abs(-15 - eemDD)).toFixed(0)}% from the stress threshold`, proximity: Math.max(0, Math.min(1, Math.abs(eemDD) / 15)), key: 'financial' })
   }
   return items.sort((a, b) => b.proximity - a.proximity).slice(0, 5)
