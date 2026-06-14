@@ -8,17 +8,20 @@ import { Redis } from '@upstash/redis'
 
 let _redis: Redis | null = null
 
+// Accept both naming schemes: the bare Upstash vars and the KV_* names that
+// Vercel's Upstash/KV marketplace integration injects (KV_REST_API_URL /
+// KV_REST_API_TOKEN). The REST client needs the REST pair, not KV_URL (TCP).
+const restUrl = () => process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
+const restToken = () => process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
+
 export function redisReady(): boolean {
-  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  return !!(restUrl() && restToken())
 }
 
 function getRedis(): Redis | null {
   if (_redis) return _redis
   if (!redisReady()) return null
-  _redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
+  _redis = new Redis({ url: restUrl()!, token: restToken()! })
   return _redis
 }
 
