@@ -22,7 +22,8 @@ const shell = (inner: string) => `
 `
 
 export async function sendConfirmationEmail(email: string, token: string): Promise<boolean> {
-  const r = await client(); if (!r) return false
+  const r = await client()
+  if (!r) { console.warn('sendConfirmationEmail: RESEND_API_KEY not set — skipping send'); return false }
   const url = `${site()}/api/confirm?token=${token}`
   const html = shell(`
     <h2 style="font-size:18px;font-weight:500;margin:0 0 8px">Confirm your macro alerts</h2>
@@ -35,8 +36,14 @@ export async function sendConfirmationEmail(email: string, token: string): Promi
       If you didn't request this, just ignore this email — you won't be subscribed.
     </p>
   `)
-  await r.emails.send({ from: FROM(), to: email, subject: 'Confirm your Macro Monitor alerts', html })
-  return true
+  try {
+    const { error } = await r.emails.send({ from: FROM(), to: email, subject: 'Confirm your Macro Monitor alerts', html })
+    if (error) { console.error('Resend rejected confirmation email:', error); return false }
+    return true
+  } catch (e) {
+    console.error('Resend confirmation send threw:', e)
+    return false
+  }
 }
 
 function alertRows(alerts: FiredAlert[]): string {

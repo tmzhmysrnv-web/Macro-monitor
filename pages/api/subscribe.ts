@@ -29,8 +29,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     })
 
-    await sendConfirmationEmail(email, token)
-    return res.status(200).json({ ok: true, status: 'pending', message: 'Check your inbox to confirm.' })
+    const emailed = await sendConfirmationEmail(email, token)
+    return res.status(200).json({
+      ok: true,
+      status: 'pending',
+      emailed,
+      message: emailed
+        ? 'Check your inbox to confirm.'
+        : "Subscribed — but the confirmation email couldn't be sent. Try again shortly.",
+    })
   } catch (err) {
     console.error('Subscribe error:', err)
     return res.status(500).json({ error: 'Something went wrong. Try again.' })
