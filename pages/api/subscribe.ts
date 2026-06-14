@@ -1,9 +1,12 @@
 // pages/api/subscribe.ts
-// Starts double opt-in: records a pending subscriber and emails a confirm link.
+// Single-step signup (no double opt-in): activates the subscriber immediately,
+// sends a welcome email, and — if anything is breaking right now — a first alert
+// digest so they see the current state of the world.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { randomUUID } from 'crypto'
 import { getSubscriber, upsertSubscriber, redisReady } from '../../lib/redis'
-import { sendConfirmationEmail } from '../../lib/sendAlert'
+import { sendWelcomeEmail, sendDigest } from '../../lib/sendAlert'
+import { collectAlerts } from '../../lib/alertEngine'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -20,23 +23,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ ok: true, status: 'active', message: "You're already subscribed." })
     }
 
-    // Reuse the pending token if one exists so older confirm links keep working.
+    const now = new Date().toISOString()
     const token = existing?.token ?? randomUUID()
     await upsertSubscriber({
       email,
-      status: 'pending',
+      status: 'active',
       token,
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      createdAt: existing?.createdAt ?? now,
+      confirmedAt: now,
     })
 
-    const emailed = await sendConfirmationEmail(email, token)
+    const welcomed = await sendWelcomeEmail(email, token)
+
+    // Send the current active alerts as a first digest (the cron only emails on
+    // change, so without this a new subscriber wouldn't see what's already firing).
+    try {
+      const { alerts } = await collectAlerts()
+      if (alerts.length > 0) await sendDigest(alerts, { email, token })
+    } catch (e) {
+      console.error('Subscribe first-digest failed:', e)
+    }
+
     return res.status(200).json({
       ok: true,
-      status: 'pending',
-      emailed,
-      message: emailed
-        ? 'Check your inbox to confirm.'
-        : "Subscribed — but the confirmation email couldn't be sent. Try again shortly.",
+      status: 'active',
+      emailed: welcomed,
+      message: welcomed
+        ? "You're subscribed. Check your inbox for a welcome note."
+        : "You're subscribed — but the welcome email couldn't be sent.",
     })
   } catch (err) {
     console.error('Subscribe error:', err)

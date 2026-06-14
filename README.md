@@ -65,9 +65,9 @@ CRON_SECRET=make_up_any_random_string
 SITE_URL=https://your-app.vercel.app
 ```
 
-Subscribers manage themselves: anyone can sign up from the in-app bell, confirm
-via a double-opt-in email, and unsubscribe from any alert. There's no single
-recipient env var anymore.
+Subscribers manage themselves: anyone can sign up from the in-app bell (they're
+activated immediately and get a welcome email), and unsubscribe from any alert
+via the link in every email. There's no single recipient env var anymore.
 
 ### 4. Run locally
 
