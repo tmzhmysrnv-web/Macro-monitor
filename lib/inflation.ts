@@ -264,7 +264,15 @@ function buildAlerts(d: InflationData, cats: Category[]): InflationAlert[] {
   const wti = d.wti[0]?.value ?? null
   const trend = cats.find(c => c.key === 'trend')
 
-  if (head != null && head >= 5) {
+  if (head != null && head >= 8) {
+    alerts.push({
+      id: 'cpi-severe', title: 'Severe Inflation — CPI Above 8%',
+      what: `Headline CPI is running at ${fPct(head)} year-over-year.`,
+      why: 'Inflation this high is a four-decade extreme — it rapidly destroys purchasing power and forces the Fed into aggressive rate hikes that risk tipping the economy into recession.',
+      affected: ['Consumer Spending', 'Federal Reserve Policy', 'Bonds', 'Credit', 'Housing'],
+      context: 'CPI last exceeded 8% at the 2022 peak of 9.1% — the highest since 1981.',
+    })
+  } else if (head != null && head >= 5) {
     alerts.push({
       id: 'cpi-5', title: 'CPI Above 5%',
       what: `Headline CPI is running at ${fPct(head)} year-over-year.`,
@@ -344,7 +352,7 @@ function buildWatching(d: InflationData, alerts: InflationAlert[]): WatchItem[] 
   const wti = d.wti[0]?.value ?? null
   const shelter = d.shelterYoY[0]?.value ?? null
 
-  if (head != null && !firing.has('cpi-4') && !firing.has('cpi-5')) {
+  if (head != null && !firing.has('cpi-4') && !firing.has('cpi-5') && !firing.has('cpi-severe')) {
     items.push({ label: 'CPI (YoY)', text: `${(4 - head).toFixed(1)}% from the 4% alert threshold`, proximity: Math.max(0, Math.min(1, head / 4)), key: 'current' })
   }
   if (core != null && !firing.has('core-4')) {
