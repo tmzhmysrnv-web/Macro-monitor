@@ -1,6 +1,6 @@
 # Macro Monitor
 
-A calm macro dashboard. Shows the state of key economic indicators at a glance. Sends email + SMS alerts only when thresholds are breached — no noise otherwise.
+A calm macro dashboard. Shows the state of key economic indicators at a glance. Sends email + in-app alerts only when thresholds are breached — no noise otherwise.
 
 ---
 
@@ -43,10 +43,10 @@ npm install
 2. Create an API key
 3. Add and verify your sending domain (or use their sandbox for testing)
 
-**Twilio (for SMS alerts, ~$2/mo)**
-1. Go to https://twilio.com → sign up
-2. Get a phone number (~$1/mo)
-3. Copy Account SID, Auth Token, and your Twilio number
+**Upstash Redis (free, required for email + in-app feed)**
+1. Easiest: Vercel → Storage → Upstash Redis (one click; sets the two env vars automatically)
+2. Or sign up at https://upstash.com → create a Redis database → copy the REST URL + token
+3. Stores subscribers, alert dedup state, and the in-app notification feed
 
 ### 3. Set environment variables
 
@@ -58,15 +58,16 @@ Fill in `.env.local`:
 ```
 FRED_API_KEY=your_key
 RESEND_API_KEY=your_key
-ALERT_EMAIL_TO=you@gmail.com
 ALERT_EMAIL_FROM=alerts@yourdomain.com
-TWILIO_ACCOUNT_SID=ACxxxxxxx
-TWILIO_AUTH_TOKEN=your_token
-TWILIO_FROM_NUMBER=+1xxxxxxxxxx
-ALERT_SMS_TO=+1xxxxxxxxxx
+UPSTASH_REDIS_REST_URL=https://your-db.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_upstash_rest_token
 CRON_SECRET=make_up_any_random_string
 SITE_URL=https://your-app.vercel.app
 ```
+
+Subscribers manage themselves: anyone can sign up from the in-app bell, confirm
+via a double-opt-in email, and unsubscribe from any alert. There's no single
+recipient env var anymore.
 
 ### 4. Run locally
 
@@ -101,8 +102,10 @@ Your site will be live at `https://macro-monitor.vercel.app`
 
 ### Cron job
 
-`vercel.json` configures a cron to run `/api/cron` every 4 hours automatically.
-Add `CRON_SECRET` as an env var in Vercel — it matches the secret in your `.env.local`.
+`vercel.json` configures a cron to run `/api/cron` once a day automatically.
+It checks every intelligence-tab alert, emails subscribers about anything new or
+escalated, and updates the in-app feed. Add `CRON_SECRET` as an env var in Vercel
+— it matches the secret in your `.env.local`.
 
 ### Custom domain (optional)
 
@@ -127,7 +130,7 @@ Changes deploy automatically when you push to GitHub.
 | FRED API | Free |
 | Yahoo Finance | Free |
 | Resend email | Free (3k/mo) |
-| Twilio SMS | ~$1–3/mo |
+| Upstash Redis | Free (10k cmd/day) |
 | Domain (optional) | ~$10/yr |
 
-**Total: ~$2–3/month once SMS is active**
+**Total: $0/month (plus an optional domain)**

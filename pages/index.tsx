@@ -12,6 +12,8 @@ import Inflation from '../components/Inflation'
 import Labor from '../components/Labor'
 import Markets from '../components/Markets'
 import Global from '../components/Global'
+import NotificationPanel, { type PanelAlert } from '../components/NotificationPanel'
+import { severityOf } from '../lib/alertSeverity'
 
 function getValueForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
@@ -333,6 +335,7 @@ export default function Dashboard() {
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
+  const [notifOpen, setNotifOpen] = useState(false)
   // Theme: null = follow OS until we read the saved choice; then explicit.
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
 
@@ -406,12 +409,25 @@ export default function Dashboard() {
     setActiveChart({ key, label })
   }, [])
 
-  const allStatuses = data ? INDICATORS.map(ind => {
-    const val = getValueForKey(data, ind.key)
-    return val != null ? getStatus(ind, val) : 'ok' as AlertStatus
-  }) : []
+  // Live alerts = what's firing across the prefetched intelligence-tab models.
+  // This is the client-side mirror of lib/alertEngine, so the bell badge and the
+  // notification panel always agree with the cron-driven email + feed.
+  const liveAlerts: PanelAlert[] = ([
+    [inflationData, 'inflation', 'Inflation'],
+    [laborData, 'labor', 'Labor'],
+    [marketsData, 'markets', 'Markets'],
+    [globalData, 'global', 'Global'],
+    [bondsData, 'bonds', 'Bonds'],
+    [creditData, 'credit', 'Credit'],
+    [housingData, 'housing', 'Housing'],
+  ] as [any, string, string][]).flatMap(([d, tab, tabLabel]) =>
+    ((d?.alerts ?? []) as Array<{ id: string; title: string; what: string }>).map(a => ({
+      key: `${tab}:${a.id}`, tab, tabLabel,
+      severity: severityOf(a.id, a.title), title: a.title, what: a.what,
+    }))
+  ).sort((x, y) => y.severity - x.severity)
 
-  const alertCount = allStatuses.filter(s => s === 'alert').length
+  const alertCount = liveAlerts.length
 
   return (
     <>
@@ -584,9 +600,16 @@ export default function Dashboard() {
           </div>
           <div className="topbar-actions">
             <ThemeToggle theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
-            <AlertBell count={alertCount} onClick={() => setActiveTab('overview')} />
+            <AlertBell count={alertCount} onClick={() => setNotifOpen(o => !o)} />
           </div>
         </div>
+
+        <NotificationPanel
+          open={notifOpen}
+          onClose={() => setNotifOpen(false)}
+          live={liveAlerts}
+          onNavigate={setActiveTab}
+        />
 
         {/* Tab navigation */}
         <div className="tabbar">
@@ -746,7 +769,7 @@ export default function Dashboard() {
         <div className="footer">
           <div className="footer-row">
             <span className="footer-note">Economic data from the Federal Reserve · stock prices refresh every 15 min</span>
-            <span className="footer-note">Alerts: email · SMS · in-app</span>
+            <span className="footer-note">Alerts: email · in-app</span>
           </div>
           <p className="disclaimer">
             For informational purposes only. Not financial advice. Historical context is descriptive, not predictive.

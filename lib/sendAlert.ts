@@ -1,80 +1,76 @@
 // lib/sendAlert.ts
-// Sends email + SMS alerts when thresholds are breached
+// Email delivery via Resend: the double-opt-in confirmation email and the alert
+// digest. SMS was removed. Every send is a no-op when RESEND_API_KEY is absent,
+// so the cron and subscribe flow stay safe before email is configured.
 
-export type AlertPayload = {
-  indicator: string
-  value: number
-  threshold: number
-  direction: 'above' | 'below'
-  unit: string
-}
+import type { FiredAlert } from './alertEngine'
+import { TIERS, type Severity } from './alertSeverity'
 
-function formatMessage(alert: AlertPayload): string {
-  const dir = alert.direction === 'above' ? '↑' : '↓'
-  return `${dir} MACRO ALERT: ${alert.indicator} is ${alert.value}${alert.unit} — ${alert.direction} threshold of ${alert.threshold}${alert.unit}`
-}
+const site = () => (process.env.SITE_URL || 'https://macromonitor.vercel.app').replace(/\/$/, '')
+const FROM = () => process.env.ALERT_EMAIL_FROM || 'alerts@macromonitor.app'
 
-export async function sendEmailAlert(alerts: AlertPayload[]): Promise<void> {
-  if (!process.env.RESEND_API_KEY || alerts.length === 0) return
-
-  const lines = alerts.map(a => `
-    <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:500">${a.indicator}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#A32D2D">${a.value}${a.unit}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#666">${a.direction} ${a.threshold}${a.unit}</td>
-    </tr>
-  `).join('')
-
-  const html = `
-    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto">
-      <h2 style="font-size:18px;font-weight:500;margin-bottom:4px">Macro Monitor Alert</h2>
-      <p style="color:#666;font-size:13px;margin-bottom:16px">${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })} ET</p>
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
-        <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:8px 12px;text-align:left;font-weight:500">Indicator</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:500">Value</th>
-            <th style="padding:8px 12px;text-align:left;font-weight:500">Threshold</th>
-          </tr>
-        </thead>
-        <tbody>${lines}</tbody>
-      </table>
-      <p style="font-size:12px;color:#999;margin-top:16px">
-        View dashboard → <a href="${process.env.SITE_URL || 'https://your-site.vercel.app'}">macromonitor</a>
-      </p>
-    </div>
-  `
-
+async function client() {
+  if (!process.env.RESEND_API_KEY) return null
   const { Resend } = await import('resend')
-  const resend = new Resend(process.env.RESEND_API_KEY)
-
-  await resend.emails.send({
-    from: process.env.ALERT_EMAIL_FROM || 'alerts@yourdomain.com',
-    to: process.env.ALERT_EMAIL_TO || '',
-    subject: `🚨 Macro Alert: ${alerts.map(a => a.indicator).join(', ')}`,
-    html,
-  })
+  return new Resend(process.env.RESEND_API_KEY)
 }
 
-export async function sendSmsAlert(alerts: AlertPayload[]): Promise<void> {
-  if (!process.env.TWILIO_ACCOUNT_SID || alerts.length === 0) return
+const shell = (inner: string) => `
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1A1A18">
+    ${inner}
+  </div>
+`
 
-  const twilio = (await import('twilio')).default
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-
-  const body = alerts.map(a => formatMessage(a)).join('\n')
-
-  await client.messages.create({
-    body: `Macro Monitor\n${body}\n${process.env.SITE_URL || ''}`,
-    from: process.env.TWILIO_FROM_NUMBER || '',
-    to: process.env.ALERT_SMS_TO || '',
-  })
+export async function sendConfirmationEmail(email: string, token: string): Promise<boolean> {
+  const r = await client(); if (!r) return false
+  const url = `${site()}/api/confirm?token=${token}`
+  const html = shell(`
+    <h2 style="font-size:18px;font-weight:500;margin:0 0 8px">Confirm your macro alerts</h2>
+    <p style="color:#6B6B67;font-size:14px;line-height:1.6;margin:0 0 20px">
+      You asked to get an email whenever a macro indicator breaks its threshold — the kind of move that actually matters.
+      Confirm below and we'll only reach out when something does.
+    </p>
+    <a href="${url}" style="display:inline-block;background:#1A1A18;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:10px 20px;border-radius:8px">Confirm subscription</a>
+    <p style="color:#9E9E9A;font-size:12px;line-height:1.6;margin:20px 0 0">
+      If you didn't request this, just ignore this email — you won't be subscribed.
+    </p>
+  `)
+  await r.emails.send({ from: FROM(), to: email, subject: 'Confirm your Macro Monitor alerts', html })
+  return true
 }
 
-export async function sendAllAlerts(alerts: AlertPayload[]): Promise<void> {
-  if (alerts.length === 0) return
-  await Promise.allSettled([
-    sendEmailAlert(alerts),
-    sendSmsAlert(alerts),
-  ])
+function alertRows(alerts: FiredAlert[]): string {
+  return alerts.map(a => {
+    const tier = TIERS[a.severity as Severity]
+    return `
+      <tr>
+        <td style="padding:14px 0;border-bottom:1px solid #eee;vertical-align:top">
+          <div style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${tier.color};background:${tier.bg};padding:2px 7px;border-radius:4px;margin-bottom:6px">${tier.label} · ${a.tabLabel}</div>
+          <div style="font-size:15px;font-weight:500;margin-bottom:3px">${a.title}</div>
+          <div style="font-size:13px;color:#6B6B67;line-height:1.55">${a.what}</div>
+          <div style="font-size:12px;color:#9E9E9A;line-height:1.55;margin-top:4px">${a.why}</div>
+        </td>
+      </tr>`
+  }).join('')
+}
+
+export async function sendDigest(alerts: FiredAlert[], recipient: { email: string; token: string }): Promise<boolean> {
+  const r = await client(); if (!r || alerts.length === 0) return false
+  const unsub = `${site()}/api/unsubscribe?token=${recipient.token}`
+  const lead = alerts.slice(0, 2).map(a => a.title).join(', ') + (alerts.length > 2 ? '…' : '')
+  const heading = alerts.length === 1 ? '1 macro alert' : `${alerts.length} macro alerts`
+
+  const html = shell(`
+    <p style="font-size:12px;color:#9E9E9A;margin:0 0 4px">${new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET</p>
+    <h2 style="font-size:18px;font-weight:500;margin:0 0 16px">${heading}</h2>
+    <table style="width:100%;border-collapse:collapse">${alertRows(alerts)}</table>
+    <a href="${site()}" style="display:inline-block;margin-top:18px;font-size:13px;color:#1A1A18;font-weight:500;text-decoration:none">Open the dashboard →</a>
+    <p style="font-size:11px;color:#9E9E9A;line-height:1.6;margin:24px 0 0;border-top:1px solid #eee;padding-top:12px">
+      You're getting this because you subscribed to Macro Monitor alerts.
+      <a href="${unsub}" style="color:#9E9E9A">Unsubscribe</a>.
+    </p>
+  `)
+
+  await r.emails.send({ from: FROM(), to: recipient.email, subject: `🔔 ${heading}: ${lead}`, html })
+  return true
 }
