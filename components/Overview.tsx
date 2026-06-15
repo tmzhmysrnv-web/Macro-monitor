@@ -4,7 +4,6 @@
 // Breaks → Watching → Drivers → What Changed → Today's Situation.
 import { useEffect, useState } from 'react'
 import type { MacroData } from '../lib/fetchData'
-import { buildAlertCards, type AlertCard } from '../lib/alertCards'
 import trendSnapshot from '../data/trendSnapshot.json'
 
 // Deep Break Meter history is immutable — bundled as a static snapshot so it
@@ -147,69 +146,9 @@ function BreakMeterTrend({ history, color }: { history: { date: string; value: n
   )
 }
 
-function AlertCardView({ card, onView }: { card: AlertCard; onView?: (key: string, label: string) => void }) {
-  const dirColor = card.direction === 'Rising' ? '#A32D2D' : card.direction === 'Cooling' ? '#3B6D11' : 'var(--text-secondary)'
-  const dirArrow = card.direction === 'Rising' ? '↑' : card.direction === 'Cooling' ? '↓' : '→'
-  return (
-    <div className="ac">
-      {/* Header */}
-      <div className="ac-head">
-        <div className="ac-icon">{card.icon}</div>
-        <div className="ac-head-main">
-          <div className="ac-title">{card.title}</div>
-          <div className="ac-new"><span className="ac-new-dot" /> Active alert</div>
-        </div>
-      </div>
-
-      <div className="ac-body">
-        {/* Left: the numbers */}
-        <div className="ac-stats">
-          <div className="ac-stat"><span className="ac-stat-k">Current value</span><span className="ac-stat-v">{card.current}</span></div>
-          <div className="ac-stat"><span className="ac-stat-k">Threshold</span><span className="ac-stat-v">{card.threshold}</span></div>
-          {card.triggered && <div className="ac-stat"><span className="ac-stat-k">Triggered</span><span className="ac-stat-v">{card.triggered}</span></div>}
-          <div className="ac-stat"><span className="ac-stat-k">Direction</span><span className="ac-stat-v" style={{ color: dirColor }}>{dirArrow} {card.direction}</span></div>
-        </div>
-
-        {/* Why it matters */}
-        <div className="ac-col">
-          <div className="ac-col-h">Why it matters</div>
-          <div className="ac-why">{card.whyItMatters}</div>
-        </div>
-
-        {/* Affected areas */}
-        {card.affectedAreas.length > 0 && (
-          <div className="ac-col">
-            <div className="ac-col-h">Affected areas</div>
-            <div className="ac-areas">
-              {card.affectedAreas.map((a, i) => (
-                <div className="ac-area" key={i}>
-                  <span className="ac-area-icon">{a.icon}</span>
-                  <span className="ac-area-text"><strong>{a.label}</strong>{a.desc ? ` — ${a.desc}` : ''}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Historical context */}
-        <div className="ac-col">
-          <div className="ac-col-h">Historical context</div>
-          {card.historicalContext.map((c, i) => (
-            <div className="ac-ctx" key={i}>{c}</div>
-          ))}
-          {onView && (
-            <button className="ac-view" onClick={() => onView(card.key, card.name)}>{card.viewLabel} →</button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function Overview({ data = null, events = [], onViewCard, onNavigate }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void }) {
+export default function Overview({ data = null, events = [], onViewCard, onNavigate, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onOpenAlerts?: () => void; activeCount?: number }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showAlerts, setShowAlerts] = useState(false) // collapsed by default — click the header to reveal
 
   useEffect(() => {
     // Fast: score + alerts + drivers + the fresh trailing-year trend.
@@ -224,13 +163,6 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
 
   const sev = bm ? severity(bm.total) : { label: '', color: '#639922' }
   const color = sev.color
-  // Alerts are derived from the SAME data the top-bar pill uses, so the two can
-  // never disagree. Trend (Rising/Cooling) + triggered date come from the meter
-  // payload when it's loaded, but the alert list itself does not depend on it.
-  const directions: Record<string, 'up' | 'down' | 'flat'> = bm?.directions ?? {}
-  const triggered: Record<string, string> = {}
-  for (const e of bm?.recentBreaks ?? []) if (!triggered[e.key]) triggered[e.key] = e.date
-  const alertCards: AlertCard[] = data ? buildAlertCards(data, { directions, triggered }) : []
   const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
   const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
@@ -265,39 +197,32 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
 
   return (
     <div>
-      {/* ── 1. Active Alerts (click header to expand/collapse) ── */}
-      <div className={`alerts-box ${alertCards.length ? 'is-alert' : 'is-clear'}`}>
+      {/* ── 1. Active Alerts → opens the alert monitor (the cracked-bell drawer) ── */}
+      <div className={`alerts-box ${activeCount ? 'is-alert' : 'is-clear'}`}>
         <div
-          className={`alerts-head ${alertCards.length ? 'is-toggle' : ''}`}
-          onClick={alertCards.length ? () => setShowAlerts(s => !s) : undefined}
-          role={alertCards.length ? 'button' : undefined}
-          tabIndex={alertCards.length ? 0 : undefined}
-          aria-expanded={alertCards.length ? showAlerts : undefined}
-          onKeyDown={alertCards.length ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowAlerts(s => !s) } } : undefined}
+          className={`alerts-head ${activeCount ? 'is-toggle' : ''}`}
+          onClick={activeCount ? onOpenAlerts : undefined}
+          role={activeCount ? 'button' : undefined}
+          tabIndex={activeCount ? 0 : undefined}
+          onKeyDown={activeCount ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenAlerts?.() } } : undefined}
         >
-          <span className={`alerts-dot ${alertCards.length ? 'is-pulse' : ''}`} style={{ background: alertCards.length ? '#E24B4A' : '#639922' }} />
+          <span className={`alerts-dot ${activeCount ? 'is-pulse' : ''}`} style={{ background: activeCount ? '#E24B4A' : '#639922' }} />
           <span className="alerts-head-text">
             {!dataReady ? 'Checking alerts…'
-              : alertCards.length ? `${alertCards.length} Active Alert${alertCards.length > 1 ? 's' : ''}`
+              : activeCount ? `${activeCount} Active Alert${activeCount > 1 ? 's' : ''}`
               : 'No Active Alerts'}
           </span>
-          {alertCards.length > 0 && (
-            <span className="alerts-chevron">{showAlerts ? 'Hide ▲' : 'Show ▼'}</span>
-          )}
+          {activeCount > 0 && <span className="alerts-chevron">View →</span>}
         </div>
-        {dataReady && alertCards.length === 0 && (
+        {dataReady && activeCount === 0 && (
           <div className="alerts-clear-sub">Nothing important is currently breaking.</div>
         )}
-        {dataReady && alertCards.length > 0 && bm?.concern && (
+        {dataReady && activeCount > 0 && bm?.concern && (
           <div className="alerts-concern-inline">
             Most significant concern: <strong>{bm.concern.label}</strong>{bm.concern.detail ? ` · ${bm.concern.detail}` : ''}
           </div>
         )}
       </div>
-
-      {showAlerts && alertCards.map(a => (
-        <AlertCardView key={a.key} card={a} onView={onViewCard} />
-      ))}
 
       {/* ── 2. Break Meter ── */}
       <div className="bm-hero">

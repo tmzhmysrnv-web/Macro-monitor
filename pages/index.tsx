@@ -14,10 +14,12 @@ import Markets from '../components/Markets'
 import Global from '../components/Global'
 import NotificationPanel, { type PanelAlert } from '../components/NotificationPanel'
 import { severityOf } from '../lib/alertSeverity'
+import { barFor } from '../lib/alertMeta'
 
 // Client-side notification history (localStorage). Lets the bell show active
 // alerts instantly on reload and keep cleared ones as "Earlier", independent of
-// the ~600ms tab prefetch and the daily cron feed.
+// the ~600ms tab prefetch and the daily cron feed. Also accumulates each alert's
+// value over time (triggerValue / peak / track) to power the monitor trajectory.
 type AlertHistoryItem = PanelAlert & { firstSeen: number; lastSeen: number; cleared: boolean }
 const ALERT_HISTORY_KEY = 'mm_alert_history'
 const ALERTS_SEEN_KEY = 'mm_alerts_seen_at'
@@ -446,9 +448,10 @@ export default function Dashboard() {
     [creditData, 'credit', 'Credit'],
     [housingData, 'housing', 'Housing'],
   ] as [any, string, string][]).flatMap(([d, tab, tabLabel]) =>
-    ((d?.alerts ?? []) as Array<{ id: string; title: string; what: string }>).map(a => ({
-      key: `${tab}:${a.id}`, tab, tabLabel,
+    ((d?.alerts ?? []) as Array<{ id: string; title: string; what: string; why: string; affected: string[]; context: string }>).map(a => ({
+      key: `${tab}:${a.id}`, id: a.id, tab, tabLabel,
       severity: severityOf(a.id, a.title), title: a.title, what: a.what,
+      why: a.why, affected: a.affected, context: a.context,
     }))
   ).sort((x, y) => y.severity - x.severity)
 
@@ -466,18 +469,33 @@ export default function Dashboard() {
   useEffect(() => {
     if (loadedTabs.size === 0) return
     const now = Date.now()
+    const valOf = (a: { id: string; what?: string }) => barFor({ id: a.id, what: a.what ?? '' } as never)?.value ?? null
     setAlertHistory(prev => {
       const liveByKey = new Map(liveAlerts.map(a => [a.key, a]))
       const seen = new Set<string>()
       const merged: AlertHistoryItem[] = prev.map(h => {
         seen.add(h.key)
         const l = liveByKey.get(h.key)
-        if (l) return { ...h, ...l, lastSeen: now, cleared: false }     // still firing
+        if (l) {                                                          // still firing — refresh + track value
+          const v = valOf(l)
+          const track = (h.track ?? []).slice()
+          if (v != null && track[track.length - 1] !== v) track.push(v)
+          return {
+            ...h, ...l, lastSeen: now, cleared: false,
+            value: v ?? h.value ?? null,
+            peak: v != null ? Math.max(h.peak ?? v, v) : (h.peak ?? null),
+            track: track.slice(-24),
+            triggerValue: h.triggerValue ?? v ?? null,
+          }
+        }
         if (loadedTabs.has(h.tab)) return { ...h, cleared: true }        // tab loaded, no longer firing
         return h                                                         // tab not loaded — leave as-is
       })
       for (const a of liveAlerts) {
-        if (!seen.has(a.key)) merged.push({ ...a, firstSeen: now, lastSeen: now, cleared: false })
+        if (!seen.has(a.key)) {
+          const v = valOf(a)
+          merged.push({ ...a, firstSeen: now, lastSeen: now, cleared: false, value: v, triggerValue: v, peak: v, track: v != null ? [v] : [] })
+        }
       }
       merged.sort((x, y) =>
         (Number(x.cleared) - Number(y.cleared)) || (y.severity - x.severity) || (y.lastSeen - x.lastSeen))
@@ -493,17 +511,26 @@ export default function Dashboard() {
   // Badge = unread: active alerts that first appeared since the panel was last opened.
   const unreadCount = activeAlerts.filter(a => a.firstSeen > alertsSeenAt).length
 
-  // Opening the bell marks everything currently active as seen (badge calms down).
-  const toggleNotifications = () => {
-    setNotifOpen(o => {
-      if (!o) {
-        const t = Date.now()
-        setAlertsSeenAt(t)
-        try { localStorage.setItem(ALERTS_SEEN_KEY, String(t)) } catch {}
-      }
-      return !o
-    })
+  // Per-section status colors for the monitor's status row — straight from each
+  // prefetched model's overall tone (so it agrees with the email's status row).
+  const sections = ([
+    [inflationData, 'inflation', 'Inflation'], [laborData, 'labor', 'Labor'],
+    [marketsData, 'markets', 'Markets'], [globalData, 'global', 'Global'],
+    [bondsData, 'bonds', 'Bonds'], [creditData, 'credit', 'Credit'],
+    [housingData, 'housing', 'Housing'],
+  ] as [any, string, string][]).map(([d, tab, tabLabel]) => ({ tab, tabLabel, tone: (d?.status?.tone as string) ?? 'unknown' }))
+
+  const markAlertsSeen = () => {
+    const t = Date.now()
+    setAlertsSeenAt(t)
+    try { localStorage.setItem(ALERTS_SEEN_KEY, String(t)) } catch {}
   }
+  // The bell toggles the monitor; opening marks everything active as seen.
+  const toggleNotifications = () => {
+    setNotifOpen(o => { if (!o) markAlertsSeen(); return !o })
+  }
+  // Overview's "N active — view" opens (never closes) the monitor.
+  const openAlerts = () => { markAlertsSeen(); setNotifOpen(true) }
 
   return (
     <>
@@ -683,8 +710,9 @@ export default function Dashboard() {
         <NotificationPanel
           open={notifOpen}
           onClose={() => setNotifOpen(false)}
-          active={activeAlerts.map(a => ({ ...a, ts: a.lastSeen }))}
-          past={pastAlerts.map(a => ({ ...a, ts: a.lastSeen }))}
+          active={activeAlerts}
+          past={pastAlerts}
+          sections={sections}
           onNavigate={setActiveTab}
         />
 
@@ -704,7 +732,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
-            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} />
+            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {

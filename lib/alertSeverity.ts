@@ -59,3 +59,14 @@ export function alertFamily(id: string): string {
 export function alertRank(id: string, severity: number): number {
   return LADDER[id]?.rank ?? severity
 }
+
+// The id of the next-higher tier in the same family (for "distance to next
+// tier"), or null if this is the top rung or a singleton.
+export function nextTierId(id: string): string | null {
+  const cur = LADDER[id]
+  if (!cur) return null
+  for (const [k, v] of Object.entries(LADDER)) {
+    if (v.family === cur.family && v.rank === cur.rank + 1) return k
+  }
+  return null
+}

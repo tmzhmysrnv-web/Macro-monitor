@@ -5,6 +5,7 @@
 // Thresholds mirror each lib's buildAlerts; `dir` is the breach direction.
 
 import type { FiredAlert } from './alertEngine'
+import { nextTierId } from './alertSeverity'
 
 type Dir = 'above' | 'below'
 export type AlertMeta = { t: number; unit: string; dir: Dir; next?: string }
@@ -84,4 +85,13 @@ export function barFor(alert: FiredAlert): AlertBar | null {
 
 export function nextFor(id: string): string | undefined {
   return ALERT_META[id]?.next
+}
+
+// Threshold of the next-higher tier in this alert's ladder (for "X to the Y line"),
+// or null if there's no higher tier.
+export function nextTierThreshold(id: string): { t: number; unit: string } | null {
+  const nid = nextTierId(id)
+  if (!nid) return null
+  const m = ALERT_META[nid]
+  return m ? { t: m.t, unit: m.unit } : null
 }
