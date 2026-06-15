@@ -73,7 +73,9 @@ export async function listActiveSubscribers(): Promise<Subscriber[]> {
 // Keyed by the alert's composite key (`<tab>:<id>`) so the same id on two tabs
 // can't collide. Stored in one hash so we can clear cleared alerts in one call.
 const ALERT_STATE = 'alertstate'
-export type AlertState = { title: string; severity: number; ts: number }
+// `severity` holds the family RANK. `firing:false` = a tombstone kept during the
+// cooldown window after an alert clears; `notifiedTs` = when we last emailed it.
+export type AlertState = { title: string; severity: number; ts: number; notifiedTs?: number; firing?: boolean }
 
 export async function getAlertStates(): Promise<Record<string, AlertState>> {
   const r = getRedis(); if (!r) return {}

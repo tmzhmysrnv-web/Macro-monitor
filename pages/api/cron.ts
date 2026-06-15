@@ -9,9 +9,20 @@
 //   • new family                       → notify
 //   • rank increased                   → notify (escalation, e.g. CPI 4% → 5%)
 //   • rank decreased (downgrade)       → SILENT — an improvement isn't a new break
-//   • family no longer firing          → cleared, so a future re-fire notifies
+//   • cleared then re-fires            → notify, UNLESS it's a "level" family still
+//                                         inside the cooldown window (anti-flapping).
+//                                         "Event" families (a sharp sell-off, a yield
+//                                         spike) skip the cooldown — each occurrence is
+//                                         a distinct event worth sending — as does a
+//                                         re-fire that returns at a worse rank.
+//   • cleared past the cooldown        → tombstone forgotten, so it's "new" again
 // Without Redis configured, nothing persists and no email is sent — the run is a
 // safe no-op that still reports what it found.
+
+// Re-notify a flapping LEVEL alert at most once per this window.
+const COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000
+// Discrete-event families — each fresh occurrence notifies, no cooldown.
+const EVENT_FAMILIES = new Set(['market-selloff', 'yield-spike'])
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildAlertReport, type FiredAlert } from '../../lib/alertEngine'
@@ -44,18 +55,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!cur || rank > cur.rank) famNow.set(fam, { alert: a, rank })
     }
 
-    // Notify only on a new family or a rank increase — never a downgrade.
     const toNotify: FiredAlert[] = []
     const nextStates: Record<string, AlertState> = {}
+    const clearedKeys: string[] = []
+
+    // Firing families: notify on new, escalation, or a (cooled-down) re-fire.
     for (const [fam, { alert, rank }] of famNow) {
       const p = prior[fam]
-      const notify = !p || rank > p.severity   // `severity` field stores the family rank
+      const wasFiring = p ? p.firing !== false : false
+      let notify: boolean
+      if (!p) {
+        notify = true                                        // brand new
+      } else if (wasFiring) {
+        notify = rank > p.severity                           // escalation only; downgrade/same is silent
+      } else {
+        // re-fire after a clear: event families and worse-than-last always notify;
+        // level families wait out the cooldown to absorb flapping.
+        const isEvent = EVENT_FAMILIES.has(alertFamily(alert.id))
+        const cooled = now - (p.notifiedTs ?? 0) >= COOLDOWN_MS
+        notify = isEvent || cooled || rank > p.severity
+      }
       if (notify) toNotify.push(alert)
-      nextStates[fam] = { title: alert.title, severity: rank, ts: notify ? now : (p?.ts ?? now) }
+      nextStates[fam] = {
+        title: alert.title,
+        severity: rank,
+        ts: notify ? now : (p?.ts ?? now),
+        notifiedTs: notify ? now : (p?.notifiedTs ?? now),
+        firing: true,
+      }
     }
 
-    // Families that were firing but have now cleared — drop so a future re-fire notifies.
-    const clearedKeys = Object.keys(prior).filter(k => !famNow.has(k))
+    // Families no longer firing: keep a tombstone through the cooldown, then forget.
+    for (const fam of Object.keys(prior)) {
+      if (famNow.has(fam)) continue
+      const p = prior[fam]
+      if (p.firing !== false) {
+        nextStates[fam] = { ...p, firing: false, ts: now }   // just cleared → tombstone
+      } else if (now - (p.notifiedTs ?? p.ts) >= COOLDOWN_MS) {
+        clearedKeys.push(fam)                                // tombstone expired → forget
+      } else {
+        nextStates[fam] = p                                  // keep tombstone alive
+      }
+    }
 
     await Promise.all([
       setAlertStates(nextStates),
