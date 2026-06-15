@@ -6,7 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { randomUUID } from 'crypto'
 import { getSubscriber, upsertSubscriber, redisReady } from '../../lib/redis'
 import { sendWelcomeEmail, sendDigest } from '../../lib/sendAlert'
-import { collectAlerts } from '../../lib/alertEngine'
+import { buildAlertReport } from '../../lib/alertEngine'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -38,8 +38,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Send the current active alerts as a first digest (the cron only emails on
     // change, so without this a new subscriber wouldn't see what's already firing).
     try {
-      const { alerts } = await collectAlerts()
-      if (alerts.length > 0) await sendDigest(alerts, { email, token })
+      const report = await buildAlertReport()
+      if (report.alerts.length > 0) {
+        await sendDigest(report.alerts, { email, token }, { breakLevel: report.breakLevel, sections: report.sections })
+      }
     } catch (e) {
       console.error('Subscribe first-digest failed:', e)
     }

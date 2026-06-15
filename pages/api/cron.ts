@@ -13,7 +13,7 @@
 // safe no-op that still reports what it found.
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { collectAlerts } from '../../lib/alertEngine'
+import { buildAlertReport } from '../../lib/alertEngine'
 import {
   getAlertStates, setAlertStates, clearAlertStates, pushFeed,
   listActiveSubscribers, type AlertState, type FeedItem,
@@ -27,7 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { alerts, errors } = await collectAlerts()
+    const report = await buildAlertReport()
+    const { alerts, errors } = report
     const prior = await getAlertStates()
     const now = Date.now()
 
@@ -69,9 +70,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }))
       await pushFeed(feedItems)
 
+      const digestCtx = { breakLevel: report.breakLevel, sections: report.sections }
       const subscribers = await listActiveSubscribers()
       const sends = await Promise.allSettled(
-        subscribers.map(s => sendDigest(toNotify, { email: s.email, token: s.token }))
+        subscribers.map(s => sendDigest(toNotify, { email: s.email, token: s.token }, digestCtx))
       )
       emailed = sends.filter(r => r.status === 'fulfilled' && r.value).length
     }

@@ -348,6 +348,12 @@ export default function Dashboard() {
   // Theme: null = follow OS until we read the saved choice; then explicit.
   const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
 
+  // Deep-link: open the tab named in ?tab= (used by the alert email's links).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t && TABS.some(x => x.id === t)) setActiveTab(t)
+  }, [])
+
   // Restore notification history + last-seen marker on mount.
   useEffect(() => {
     try {

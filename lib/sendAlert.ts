@@ -1,11 +1,11 @@
 // lib/sendAlert.ts
-// Email delivery via Resend: a welcome email on signup and the alert digest.
-// No double opt-in — subscribing activates immediately. SMS was removed. Every
-// send is a no-op when RESEND_API_KEY is absent, so the flow stays safe before
-// email is configured.
+// Email delivery via Resend: a welcome email on signup and the alert digest —
+// the product's payoff, designed to be self-contained (you shouldn't need to
+// open the site). No double opt-in. SMS removed. Every send no-ops without
+// RESEND_API_KEY, so the flow stays safe before email is configured.
 
-import type { FiredAlert } from './alertEngine'
-import { TIERS, type Severity } from './alertSeverity'
+import type { FiredAlert, SectionTone } from './alertEngine'
+import { barFor, nextFor, type AlertBar } from './alertMeta'
 
 const site = () => (process.env.SITE_URL || 'https://istheworldbreaking.com').replace(/\/$/, '')
 const FROM = () => process.env.ALERT_EMAIL_FROM || 'alerts@istheworldbreaking.com'
@@ -17,11 +17,12 @@ async function client() {
 }
 
 const shell = (inner: string) => `
-  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1A1A18">
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:540px;margin:0 auto;color:#1A1A18">
     ${inner}
   </div>
 `
 
+// ── Welcome email (single-step signup) ────────────────────────────────
 export async function sendWelcomeEmail(email: string, token: string): Promise<boolean> {
   const r = await client()
   if (!r) { console.warn('sendWelcomeEmail: RESEND_API_KEY not set — skipping send'); return false }
@@ -32,7 +33,7 @@ export async function sendWelcomeEmail(email: string, token: string): Promise<bo
   const html = shell(`
     <p style="${p}">The news is designed to make everything feel urgent.</p>
     <p style="margin:0 0 22px;font-size:18px;font-weight:500;line-height:1.5;color:#1A1A18">Most of it isn't.</p>
-    <p style="${dim}">You've subscribed to Macro Monitor from <strong style="color:#1A1A18">IsTheWorldBreaking.com</strong>.</p>
+    <p style="${dim}">You've subscribed at <strong style="color:#1A1A18">IsTheWorldBreaking.com</strong>.</p>
     <p style="${dim}">We monitor the indicators that actually matter — labor, inflation, credit, housing, markets, bonds, and global conditions — and watch for meaningful changes beneath the headlines.</p>
     <p style="${dim}">You don't need to follow every market move or breaking-news alert.</p>
     <p style="margin:0 0 14px;font-size:15px;line-height:1.65;font-weight:500;color:#1A1A18">Go enjoy your life. We'll let you know when something actually breaks.</p>
@@ -57,38 +58,145 @@ export async function sendWelcomeEmail(email: string, token: string): Promise<bo
   }
 }
 
-// Full alert "cards" — bordered, tier-colored, with what/why and a link back.
-function alertCards(alerts: FiredAlert[]): string {
-  return alerts.map(a => {
-    const tier = TIERS[a.severity as Severity]
-    return `
-      <div style="border:1px solid #eee;border-left:3px solid ${tier.color};border-radius:8px;padding:14px 16px;margin:0 0 12px">
-        <div style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${tier.color};background:${tier.bg};padding:2px 7px;border-radius:4px">${tier.label} · ${a.tabLabel}</div>
-        <div style="font-size:16px;font-weight:600;margin:8px 0 8px;color:#1A1A18">${a.title}</div>
-        <div style="font-size:13px;color:#6B6B67;line-height:1.55;margin-bottom:7px"><strong style="color:#1A1A18">What's happening — </strong>${a.what}</div>
-        <div style="font-size:13px;color:#6B6B67;line-height:1.55"><strong style="color:#1A1A18">Why it matters — </strong>${a.why}</div>
-        <a href="${site()}" style="display:inline-block;margin-top:11px;font-size:12px;font-weight:600;color:${tier.color};text-decoration:none">View on IsTheWorldBreaking.com →</a>
-      </div>`
-  }).join('')
+// ── Alert digest building blocks ──────────────────────────────────────
+type Tier = { label: string; text: string; bg: string; border: string }
+function tierStyle(sev: number): Tier {
+  if (sev >= 3) return { label: 'Critical', text: '#A32D2D', bg: '#FCEBEB', border: '#E24B4A' }
+  if (sev === 1) return { label: 'Update', text: '#3B6D11', bg: '#EAF3DE', border: '#97C459' }
+  return { label: 'Alert', text: '#854F0B', bg: '#FAEEDA', border: '#EF9F27' }
 }
 
-export async function sendDigest(alerts: FiredAlert[], recipient: { email: string; token: string }): Promise<boolean> {
+const TONE_RANK: Record<string, number> = { crisis: 5, bad: 4, warn: 3, neutral: 2, good: 1, unknown: 0 }
+function toneColor(tone: string): string {
+  if (tone === 'bad' || tone === 'crisis') return '#E24B4A'
+  if (tone === 'warn') return '#BA7517'
+  if (tone === 'good' || tone === 'neutral') return '#639922'
+  return '#C9C7BF'
+}
+
+function fmtNum(v: number, unit: string): string {
+  const r = v >= 100 ? Math.round(v).toString() : (Math.round(v * 10) / 10).toString()
+  switch (unit) {
+    case '$': return `$${v >= 100 ? Math.round(v) : r}`
+    case '%': return `${r}%`
+    case 'k': return `${r}k`
+    case 'bp': return `${r}bp`
+    case 'pp': return `${r}pp`
+    case 'M': return `${r}M`
+    case 'mo': return `${r} mo`
+    default: return r
+  }
+}
+
+function barHtml(bar: AlertBar, color: string): string {
+  const scale = Math.max(bar.value, bar.threshold) * 1.4 || 1
+  const vPct = Math.max(3, Math.min(100, Math.round(bar.value / scale * 100)))
+  const arrow = bar.dir === 'above' ? '↑' : '↓'
+  return `
+    <table width="100%" style="border-collapse:collapse;margin:6px 0 16px"><tr>
+      <td style="vertical-align:bottom;padding-right:16px;white-space:nowrap">
+        <div style="font-size:11px;color:#9E9E9A;font-family:monospace">now</div>
+        <div style="font-size:24px;font-weight:600;color:${color};font-family:monospace;line-height:1.1">${fmtNum(bar.value, bar.unit)}</div>
+      </td>
+      <td style="vertical-align:bottom;width:99%">
+        <div style="font-size:11px;color:#9E9E9A;font-family:monospace;text-align:right;margin-bottom:5px">threshold ${fmtNum(bar.threshold, bar.unit)}</div>
+        <div style="height:6px;background:#EFEDE8;border-radius:3px;overflow:hidden">
+          <table width="100%" style="border-collapse:collapse"><tr><td style="height:6px;background:${color};width:${vPct}%"></td><td style="height:6px"></td></tr></table>
+        </div>
+        <div style="font-size:11px;color:${color};font-family:monospace;text-align:right;margin-top:5px">${arrow} past the line</div>
+      </td>
+    </tr></table>`
+}
+
+function affectedHtml(areas: string[]): string {
+  if (!areas.length) return ''
+  const chips = areas.map(a => `<span style="display:inline-block;font-size:12px;color:#6B6B67;background:#F3F1EC;padding:3px 9px;border-radius:6px;margin:0 5px 5px 0">${a}</span>`).join('')
+  return `
+    <div style="margin:14px 0 0">
+      <div style="font-size:11px;color:#9E9E9A;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:7px;font-family:monospace">areas affected</div>
+      <div>${chips}</div>
+    </div>`
+}
+
+function cardHtml(a: FiredAlert): string {
+  const tier = tierStyle(a.severity)
+  const bar = barFor(a)
+  const next = nextFor(a.id)
+  return `
+    <div style="border:1px solid #eee;border-left:3px solid ${tier.border};border-radius:6px;padding:16px 18px;margin:0 0 14px">
+      <div style="display:inline-block;font-family:monospace;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:${tier.text};background:${tier.bg};padding:3px 9px;border-radius:5px;margin-bottom:12px">${tier.label} · ${a.tabLabel.toLowerCase()}</div>
+      <div style="font-size:17px;font-weight:600;color:#1A1A18;line-height:1.35;margin-bottom:${bar ? '14px' : '12px'}">${a.title}</div>
+      ${bar ? barHtml(bar, tier.border) : ''}
+      <div style="font-size:14px;line-height:1.6;color:#6B6B67;margin-bottom:10px"><strong style="color:#1A1A18">What this means — </strong>${a.what}</div>
+      <div style="font-size:14px;line-height:1.6;color:#6B6B67"><strong style="color:#1A1A18">Why it matters — </strong>${a.why}</div>
+      ${affectedHtml(a.affected)}
+      ${a.context ? `<div style="font-size:12.5px;line-height:1.55;color:#9E9E9A;margin-top:14px;padding-top:13px;border-top:1px solid #eee"><strong style="color:#6B6B67">Historically — </strong>${a.context}</div>` : ''}
+      ${next ? `<div style="font-size:12.5px;line-height:1.55;color:#9E9E9A;margin-top:6px"><strong style="color:#6B6B67">Watching next — </strong>${next}</div>` : ''}
+      <a href="${site()}/?tab=${a.tab}" style="display:inline-block;margin-top:13px;font-size:13px;font-weight:600;color:${tier.text};text-decoration:none">View the full ${a.tabLabel.toLowerCase()} breakdown →</a>
+    </div>`
+}
+
+function gaugeHtml(n: number | null): string {
+  if (n == null) return ''
+  const info = n < 25 ? { w: 'calm', c: '#639922' } : n < 45 ? { w: 'guarded', c: '#BA7517' }
+    : n < 65 ? { w: 'elevated', c: '#BA7517' } : n < 85 ? { w: 'high', c: '#E24B4A' } : { w: 'severe', c: '#E24B4A' }
+  const pct = Math.max(3, Math.min(100, Math.round(n)))
+  return `
+    <table width="100%" style="border-collapse:collapse;margin:0 0 20px"><tr>
+      <td style="width:99%;padding-right:14px">
+        <div style="height:5px;background:#EFEDE8;border-radius:3px;overflow:hidden">
+          <table width="100%" style="border-collapse:collapse"><tr><td style="height:5px;background:${info.c};width:${pct}%"></td><td style="height:5px"></td></tr></table>
+        </div>
+      </td>
+      <td style="white-space:nowrap;font-size:12px;color:#6B6B67;font-family:monospace">break level ${Math.round(n)} · ${info.w}</td>
+    </tr></table>`
+}
+
+function statusRowHtml(sections: SectionTone[]): string {
+  if (!sections.length) return ''
+  const ranked = [...sections].sort((a, b) => (TONE_RANK[b.tone] ?? 0) - (TONE_RANK[a.tone] ?? 0))
+  const items = ranked.map(s =>
+    `<a href="${site()}/?tab=${s.tab}" style="text-decoration:none;color:#6B6B67;font-size:12px;font-family:monospace;display:inline-block;margin:0 16px 8px 0;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${toneColor(s.tone)};margin-right:6px"></span>${s.tabLabel.toLowerCase()}</a>`
+  ).join('')
+  return `<div style="margin:0 0 22px;padding:14px 0;border-top:1px solid #eee;border-bottom:1px solid #eee">${items}</div>`
+}
+
+function mastheadHtml(): string {
+  const now = new Date()
+  const d = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+  const t = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+  return `
+    <table width="100%" style="border-collapse:collapse;margin:0 0 20px"><tr>
+      <td style="font-family:monospace;font-size:13px;letter-spacing:0.04em;color:#6b9576">is the world breaking?</td>
+      <td style="text-align:right;font-family:monospace;font-size:12px;color:#9E9E9A">${d} · ${t} ET</td>
+    </tr></table>`
+}
+
+export type DigestContext = { breakLevel: number | null; sections: SectionTone[] }
+
+export async function sendDigest(alerts: FiredAlert[], recipient: { email: string; token: string }, ctx: DigestContext): Promise<boolean> {
   const r = await client(); if (!r || alerts.length === 0) return false
   const unsub = `${site()}/api/unsubscribe?token=${recipient.token}`
-  const lead = alerts.slice(0, 2).map(a => a.title).join(', ') + (alerts.length > 2 ? '…' : '')
-  const heading = alerts.length === 1 ? '1 macro alert' : `${alerts.length} macro alerts`
+  const n = alerts.length
+  const heading = n === 1 ? 'One indicator crossed its line today.' : `${n} indicators crossed their lines today.`
+  const subject = n === 1 ? alerts[0].title : `${n} indicators crossed their thresholds`
+  const movers = Array.from(new Set(alerts.slice(0, 3).map(a => a.tabLabel.toLowerCase()))).join(', ')
 
   const html = shell(`
-    <p style="font-size:12px;color:#9E9E9A;margin:0 0 4px">${new Date().toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET</p>
-    <h2 style="font-size:18px;font-weight:500;margin:0 0 16px">${heading}</h2>
-    ${alertCards(alerts)}
-    <a href="${site()}" style="display:inline-block;margin-top:6px;background:#1A1A18;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:11px 22px;border-radius:8px">Open the dashboard →</a>
+    <span style="display:none;max-height:0;overflow:hidden;opacity:0">${movers} moved — here's what it means and whether to worry.</span>
+    ${mastheadHtml()}
+    <div style="font-size:20px;font-weight:600;color:#1A1A18;line-height:1.4;margin:0 0 14px">${heading}</div>
+    ${gaugeHtml(ctx.breakLevel)}
+    ${statusRowHtml(ctx.sections)}
+    ${alerts.map(cardHtml).join('')}
+    <div style="font-size:15px;color:#1A1A18;line-height:1.6;margin:8px 0 16px">We'll keep watching. You don't have to.</div>
+    <a href="${site()}" style="display:inline-block;background:#1A1A18;color:#fff;text-decoration:none;font-size:14px;font-weight:500;padding:11px 22px;border-radius:8px">See the full picture →</a>
     <p style="font-size:11px;color:#9E9E9A;line-height:1.6;margin:24px 0 0;border-top:1px solid #eee;padding-top:12px">
-      You're getting this because you subscribed to Macro Monitor alerts.
-      <a href="${unsub}" style="color:#9E9E9A">Unsubscribe</a>.
+      You're getting this because you signed up at IsTheWorldBreaking.com.
+      <a href="${unsub}" style="color:#9E9E9A">Unsubscribe</a>. · Informational only — not financial advice.
     </p>
   `)
 
-  await r.emails.send({ from: FROM(), to: recipient.email, subject: `🔔 ${heading}: ${lead}`, html })
+  await r.emails.send({ from: FROM(), to: recipient.email, subject, html })
   return true
 }

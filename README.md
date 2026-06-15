@@ -1,4 +1,4 @@
-# Macro Monitor
+# is the world breaking?
 
 A calm macro dashboard. Shows the state of key economic indicators at a glance. Sends email + in-app alerts only when thresholds are breached — no noise otherwise.
 
