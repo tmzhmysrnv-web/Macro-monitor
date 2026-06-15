@@ -23,10 +23,10 @@ export type MetricCardData = {
 // stress. Value text is tinted only on the danger side (like the raw cards,
 // which leave an "ok" value the default color).
 const TONE_DOT: Record<Tone, string> = {
-  good: '#639922', neutral: 'var(--text-muted)', warn: '#BA7517', bad: '#E24B4A', crisis: '#A32D2D',
+  good: 'var(--good)', neutral: 'var(--text-muted)', warn: 'var(--warn)', bad: 'var(--bad)', crisis: 'var(--crisis)',
 }
 const TONE_VALUE: Record<Tone, string> = {
-  good: 'var(--text-primary)', neutral: 'var(--text-primary)', warn: '#854F0B', bad: '#A32D2D', crisis: '#A32D2D',
+  good: 'var(--text-primary)', neutral: 'var(--text-primary)', warn: 'var(--warn)', bad: 'var(--bad)', crisis: 'var(--crisis)',
 }
 
 function Sparkline({ vals, color = 'var(--text-secondary)' }: { vals: number[]; color?: string }) {
@@ -135,7 +135,7 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
         </div>
       )}
       {m.alertText && (
-        <div className="dc-alert" style={{ color: (m.alertProximity ?? 0) > 0.85 ? '#A32D2D' : (m.alertProximity ?? 0) > 0.6 ? '#BA7517' : 'var(--text-muted)' }}>
+        <div className="dc-alert" style={{ color: (m.alertProximity ?? 0) > 0.85 ? 'var(--bad)' : (m.alertProximity ?? 0) > 0.6 ? 'var(--warn)' : 'var(--text-muted)' }}>
           {(m.alertProximity ?? 0) > 0.7 ? '🔥' : '⚠️'} {m.alertText}
         </div>
       )}

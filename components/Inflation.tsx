@@ -25,7 +25,7 @@ type InflationResponse = {
 }
 
 const TONE_COLORS: Record<Tone, string> = {
-  good: '#639922', neutral: '#9E9E2E', warn: '#BA7517', bad: '#E24B4A', crisis: '#A32D2D',
+  good: 'var(--good)', neutral: 'var(--neutral)', warn: 'var(--warn)', bad: 'var(--bad)', crisis: 'var(--crisis)',
 }
 const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',

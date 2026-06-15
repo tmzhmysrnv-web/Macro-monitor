@@ -44,20 +44,23 @@ function agoLabel(ts: number): string {
   if (m >= 1) return `${m} min ago`
   return 'just now'
 }
+// Dark-tuned tier chip for the graphite drawer. Keeps the TIERS labels but
+// overrides color/bg/border to the bright tone scale (TIERS itself stays light
+// because the email digest shares it).
 function tierStyle(sev: number) {
-  if (sev >= 3) return { ...TIERS[3 as Severity], border: '#E24B4A' }
-  if (sev === 1) return { ...TIERS[1 as Severity], border: '#97C459' }
-  return { ...TIERS[2 as Severity], border: '#EF9F27' }
+  if (sev >= 3) return { label: TIERS[3 as Severity].label, color: 'var(--bad)', bg: 'rgba(239,107,94,0.14)', border: 'var(--bad)' }
+  if (sev === 1) return { label: TIERS[1 as Severity].label, color: 'var(--good)', bg: 'rgba(138,184,74,0.14)', border: 'var(--good)' }
+  return { label: TIERS[2 as Severity].label, color: 'var(--warn)', bg: 'rgba(216,139,47,0.14)', border: 'var(--warn)' }
 }
 const TONE_RANK: Record<string, number> = { crisis: 5, bad: 4, warn: 3, neutral: 2, good: 1, unknown: 0 }
 // Mirror the per-tab TONE_COLORS scale exactly so the status row agrees with
 // what each tab's own status badge shows (neutral is yellow, not green).
 function toneColor(tone: string): string {
-  if (tone === 'crisis') return '#A32D2D'
-  if (tone === 'bad') return '#E24B4A'
-  if (tone === 'warn') return '#BA7517'
-  if (tone === 'neutral') return '#9E9E2E'
-  if (tone === 'good') return '#639922'
+  if (tone === 'crisis') return 'var(--crisis)'
+  if (tone === 'bad') return 'var(--bad)'
+  if (tone === 'warn') return 'var(--warn)'
+  if (tone === 'neutral') return 'var(--neutral)'
+  if (tone === 'good') return 'var(--good)'
   return '#9E9E9A'
 }
 

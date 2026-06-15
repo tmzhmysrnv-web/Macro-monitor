@@ -344,6 +344,27 @@ export default function Dashboard() {
     } catch {}
   }, [])
 
+  // Lantern: a soft light follows the cursor across the graphite surfaces. One
+  // delegated listener tags whichever surface is under the cursor with .lantern
+  // (so late-mounted tab cards are covered too) and updates its light position.
+  useEffect(() => {
+    const SEL = '.card,.panel,.ts-card,.bm-hero,.alerts-box,.cal-col,.dc,.np-card,'
+      + '.inf-hero,.inf-callout,.inf-driver,.bn-hero,.bn-callout,.bn-driver,'
+      + '.cr-hero,.cr-callout,.cr-driver,.hs-hero,.hs-callout,.hs-driver,'
+      + '.gl-hero,.gl-callout,.gl-driver,.lb-hero,.lb-callout,.lb-driver,'
+      + '.mk-hero,.mk-callout,.mk-driver,.gl-exp,.lb-exp,.mk-doing'
+    const onMove = (e: PointerEvent) => {
+      const el = (e.target as Element | null)?.closest?.(SEL) as HTMLElement | null
+      if (!el) return
+      el.classList.add('lantern')
+      const r = el.getBoundingClientRect()
+      el.style.setProperty('--mx', `${e.clientX - r.left}px`)
+      el.style.setProperty('--my', `${e.clientY - r.top}px`)
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
+
   useEffect(() => {
     fetch('/api/data')
       .then(r => r.json())
@@ -521,6 +542,18 @@ export default function Dashboard() {
           --good: #8AB84A; --neutral: #C7C24E; --warn: #D88B2F; --bad: #EF6B5E; --crisis: #E24B4A;
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+
+        /* Lantern — a soft pool of warm light follows the cursor across the
+           graphite surfaces. A single pointermove listener tags whichever
+           surface the cursor is over with .lantern and sets --mx/--my; the glow
+           sits behind content (z-index:-1 in the card's own stacking context). */
+        .lantern { position: relative; isolation: isolate; }
+        .lantern::before {
+          content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+          opacity: 0; transition: opacity 0.45s ease;
+          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214,0.11), transparent 210px);
+        }
+        .lantern:hover::before { opacity: 1; }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
