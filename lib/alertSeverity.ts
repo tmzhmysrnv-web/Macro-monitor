@@ -32,3 +32,30 @@ export function severityOf(id: string, title: string): Severity {
   if (CRISIS.has(id)) return 3
   return 2
 }
+
+// ── Alert ladders ──────────────────────────────────────────────────────
+// Mutually-exclusive tiers of the SAME underlying metric grouped into a family
+// with an ordinal rank. The cron emails only when a family's rank goes UP (or
+// the family first appears) — a step DOWN (e.g. CPI 5% → 4%) is an improvement
+// and stays silent. Ids not listed here are their own singleton family, ranked
+// by severity (same-id title ladders like market-selloff/yield-spike included).
+const LADDER: Record<string, { family: string; rank: number }> = {
+  'cpi-4': { family: 'cpi', rank: 1 }, 'cpi-5': { family: 'cpi', rank: 2 }, 'cpi-severe': { family: 'cpi', rank: 3 },
+  'wti-100': { family: 'wti', rank: 1 }, 'wti-shock': { family: 'wti', rank: 2 },
+  'sp-correction': { family: 'sp-dd', rank: 1 }, 'sp-bear': { family: 'sp-dd', rank: 2 },
+  'vix-30': { family: 'vix', rank: 1 }, 'vix-40': { family: 'vix', rank: 2 },
+  'oil-100': { family: 'oil', rank: 1 }, 'oil-shock': { family: 'oil', rank: 2 },
+  'dxy-warn': { family: 'dxy', rank: 1 }, 'dxy-stress': { family: 'dxy', rank: 2 },
+  'em-stress': { family: 'em', rank: 1 }, 'em-contagion': { family: 'em', rank: 2 },
+  'hy-5': { family: 'hy', rank: 1 }, 'hy-7': { family: 'hy', rank: 2 },
+  'mortgage-7': { family: 'mortgage', rank: 1 }, 'mortgage-8': { family: 'mortgage', rank: 2 },
+  'thirtY-high': { family: 'thirtY', rank: 1 }, 'thirtY-6': { family: 'thirtY', rank: 2 },
+}
+
+export function alertFamily(id: string): string {
+  return LADDER[id]?.family ?? id
+}
+
+export function alertRank(id: string, severity: number): number {
+  return LADDER[id]?.rank ?? severity
+}

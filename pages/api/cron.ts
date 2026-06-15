@@ -3,17 +3,19 @@
 // figures out which are NEW or ESCALATED since last run, writes those to the
 // in-app feed, and emails a single digest to each active subscriber.
 //
-// Dedup model (Redis hash `alertstate`, keyed `<tab>:<id>`):
-//   • new key                          → notify
-//   • severity increased               → notify (escalation, e.g. CPI 4% → 5%)
-//   • same severity, title changed      → notify (same-id ladder, e.g. sell-off
-//                                         "on edge" → "panic" is caught here)
-//   • key no longer firing             → cleared, so a future re-fire notifies
+// Dedup model (Redis hash `alertstate`, keyed by FAMILY `<tab>:<family>`, where a
+// family groups a metric's mutually-exclusive tiers — see lib/alertSeverity). The
+// stored `severity` field holds the family RANK:
+//   • new family                       → notify
+//   • rank increased                   → notify (escalation, e.g. CPI 4% → 5%)
+//   • rank decreased (downgrade)       → SILENT — an improvement isn't a new break
+//   • family no longer firing          → cleared, so a future re-fire notifies
 // Without Redis configured, nothing persists and no email is sent — the run is a
 // safe no-op that still reports what it found.
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { buildAlertReport } from '../../lib/alertEngine'
+import { buildAlertReport, type FiredAlert } from '../../lib/alertEngine'
+import { alertFamily, alertRank } from '../../lib/alertSeverity'
 import {
   getAlertStates, setAlertStates, clearAlertStates, pushFeed,
   listActiveSubscribers, type AlertState, type FeedItem,
@@ -32,30 +34,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const prior = await getAlertStates()
     const now = Date.now()
 
-    const firingKeys = new Set(alerts.map(a => a.key))
-    const toNotify = alerts.filter(a => {
-      const p = prior[a.key]
-      if (!p) return true                                   // newly firing
-      if (a.severity > p.severity) return true              // escalated
-      if (a.severity === p.severity && a.title !== p.title) return true // same-id ladder step
-      return false
-    })
-
-    // Refresh state for everything firing now. Keep the original timestamp unless
-    // this alert is (re)notifying, so `ts` marks when the current tier began.
-    const notifyKeys = new Set(toNotify.map(a => a.key))
-    const nextStates: Record<string, AlertState> = {}
+    // Collapse firing alerts into families, keeping the highest-rank tier of each
+    // (tiers are mutually exclusive, but this is safe if two ever co-fire).
+    const famNow = new Map<string, { alert: FiredAlert; rank: number }>()
     for (const a of alerts) {
-      const p = prior[a.key]
-      nextStates[a.key] = {
-        title: a.title,
-        severity: a.severity,
-        ts: notifyKeys.has(a.key) ? now : (p?.ts ?? now),
-      }
+      const fam = `${a.tab}:${alertFamily(a.id)}`
+      const rank = alertRank(a.id, a.severity)
+      const cur = famNow.get(fam)
+      if (!cur || rank > cur.rank) famNow.set(fam, { alert: a, rank })
     }
 
-    // Alerts that were firing but have now cleared — drop so they can re-notify later.
-    const clearedKeys = Object.keys(prior).filter(k => !firingKeys.has(k))
+    // Notify only on a new family or a rank increase — never a downgrade.
+    const toNotify: FiredAlert[] = []
+    const nextStates: Record<string, AlertState> = {}
+    for (const [fam, { alert, rank }] of famNow) {
+      const p = prior[fam]
+      const notify = !p || rank > p.severity   // `severity` field stores the family rank
+      if (notify) toNotify.push(alert)
+      nextStates[fam] = { title: alert.title, severity: rank, ts: notify ? now : (p?.ts ?? now) }
+    }
+
+    // Families that were firing but have now cleared — drop so a future re-fire notifies.
+    const clearedKeys = Object.keys(prior).filter(k => !famNow.has(k))
 
     await Promise.all([
       setAlertStates(nextStates),
