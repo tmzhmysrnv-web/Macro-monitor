@@ -114,3 +114,26 @@ export async function getFeed(limit = FEED_MAX): Promise<FeedItem[]> {
   const r = getRedis(); if (!r) return []
   return (await r.lrange<FeedItem>(FEED, 0, limit - 1)) ?? []
 }
+
+// ── Admin / testing maintenance ───────────────────────────────────────
+// Removes every subscriber (sub:*, tok:*, and the index set). Returns the count.
+export async function resetSubscribers(): Promise<number> {
+  const r = getRedis(); if (!r) return 0
+  const emails = await r.smembers(SUBSET)
+  let n = 0
+  for (const e of emails) {
+    const sub = await getSubscriber(e)
+    const keys = [subKey(e)]
+    if (sub?.token) keys.push(tokKey(sub.token))
+    await r.del(...keys)
+    n++
+  }
+  await r.del(SUBSET)
+  return n
+}
+
+// Clears the in-app feed + per-alert dedup state (so the next cron re-notifies).
+export async function resetFeedAndAlertState(): Promise<void> {
+  const r = getRedis(); if (!r) return
+  await r.del(FEED, ALERT_STATE)
+}
