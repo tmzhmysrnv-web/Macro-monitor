@@ -118,7 +118,10 @@ function MonitorCard({ a, onOpen }: { a: PanelAlert; onOpen: () => void }) {
       {a.what && <div className="np-line"><span className="np-lab">What — </span>{a.what}</div>}
       {a.why && <div className="np-line"><span className="np-lab">Why — </span>{a.why}</div>}
       {a.affected && a.affected.length > 0 && (
-        <div className="np-areas">{a.affected.map(x => <span key={x} className="np-area">{x.toLowerCase()}</span>)}</div>
+        <>
+          <div className="np-areas-label">areas affected</div>
+          <div className="np-areas">{a.affected.map(x => <span key={x} className="np-area">{x.toLowerCase()}</span>)}</div>
+        </>
       )}
       {a.context && <div className="np-ctx"><span className="np-lab" style={{ color: 'var(--text-secondary)' }}>Historically — </span>{a.context}</div>}
       <button className="np-open" style={{ color: tier.color }} onClick={onOpen}>Open {a.tabLabel.toLowerCase()} →</button>
@@ -278,7 +281,8 @@ export default function NotificationPanel({
         .np-stats { font-family: var(--mono); font-size: 11px; line-height: 1.55; }
         .np-line { font-size: 13px; line-height: 1.55; color: var(--text-secondary); margin-bottom: 7px; }
         .np-lab { color: var(--text-primary); font-weight: 500; }
-        .np-areas { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 9px; }
+        .np-areas-label { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin: 12px 0 7px; }
+        .np-areas { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 9px; }
         .np-area { font-size: 11px; color: var(--text-secondary); background: var(--bg); padding: 3px 8px; border-radius: 5px; font-family: var(--mono); }
         .np-ctx { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); margin-bottom: 10px; }
         .np-open { background: none; border: none; cursor: pointer; padding: 0; font-family: var(--sans); font-size: 12px; font-weight: 500; }
