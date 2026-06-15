@@ -76,9 +76,9 @@ function jobsOutcome(payrolls: number, avg: number | null): string {
 }
 
 const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: string; bg: string; note: string }> = {
-  ok:    { dot: '#639922', value: 'inherit',  border: 'var(--border)',    bg: 'var(--card-bg)',  note: '#888' },
-  warn:  { dot: '#BA7517', value: '#854F0B',  border: '#EF9F27',          bg: 'var(--warn-bg)', note: '#BA7517' },
-  alert: { dot: '#E24B4A', value: '#A32D2D',  border: '#E24B4A',          bg: 'var(--alert-bg)',note: '#A32D2D' },
+  ok:    { dot: 'var(--good)', value: 'inherit',      border: 'var(--border)', bg: 'var(--card-bg)',  note: 'var(--text-muted)' },
+  warn:  { dot: 'var(--warn)', value: 'var(--warn)',  border: 'var(--warn)',   bg: 'var(--warn-bg)',  note: 'var(--warn)' },
+  alert: { dot: 'var(--bad)',  value: 'var(--bad)',   border: 'var(--bad)',    bg: 'var(--alert-bg)', note: 'var(--bad)' },
 }
 
 const SECTIONS = [
@@ -308,26 +308,6 @@ function AlertBell({ count, onClick }: { count: number; onClick?: () => void }) 
   )
 }
 
-// Light/dark toggle — shows the moon in light mode (click → dark) and the sun
-// in dark mode (click → light). Muted to sit quietly beside the bell.
-function ThemeToggle({ theme, onToggle }: { theme: 'light' | 'dark' | null; onToggle: () => void }) {
-  const dark = theme === 'dark'
-  return (
-    <button className="theme-toggle" onClick={onToggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
-      {dark ? (
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
-        </svg>
-      ) : (
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3a6 6 0 0 0 9 9a9 9 0 1 1 -9 -9" />
-        </svg>
-      )}
-    </button>
-  )
-}
-
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -347,8 +327,6 @@ export default function Dashboard() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [alertHistory, setAlertHistory] = useState<AlertHistoryItem[]>([])
   const [alertsSeenAt, setAlertsSeenAt] = useState(0)
-  // Theme: null = follow OS until we read the saved choice; then explicit.
-  const [theme, setTheme] = useState<'light' | 'dark' | null>(null)
 
   // Deep-link: open the tab named in ?tab= (used by the alert email's links).
   useEffect(() => {
@@ -365,18 +343,6 @@ export default function Dashboard() {
       if (s) setAlertsSeenAt(Number(s) || 0)
     } catch {}
   }, [])
-
-  useEffect(() => {
-    const saved = (() => { try { return localStorage.getItem('theme') } catch { return null } })()
-    if (saved === 'light' || saved === 'dark') setTheme(saved)
-    else setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-  }, [])
-
-  useEffect(() => {
-    if (!theme) return
-    document.documentElement.setAttribute('data-theme', theme)
-    try { localStorage.setItem('theme', theme) } catch {}
-  }, [theme])
 
   useEffect(() => {
     fetch('/api/data')
@@ -546,27 +512,13 @@ export default function Dashboard() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         :root {
-          --bg: #F7F6F3; --card-bg: #FFFFFF;
-          --text-primary: #1A1A18; --text-secondary: #6B6B67; --text-muted: #9E9E9A;
-          --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.15);
-          --warn-bg: #FFFBF2; --alert-bg: #FFF5F5; --term: #6b9576;
+          --bg: #1B1C1F; --card-bg: #24262B;
+          --text-primary: #ECECEA; --text-secondary: #9A9C9E; --text-muted: #66686C;
+          --border: rgba(255,255,255,0.09); --border-med: rgba(255,255,255,0.17);
+          --warn-bg: #272013; --alert-bg: #2A1E1D; --good-bg: #1C2616; --term: #6fae7d;
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
-        }
-        /* Dark palette — applied when the OS prefers dark (and no manual
-           light override), or when the user explicitly picks dark. */
-        @media (prefers-color-scheme: dark) {
-          :root:not([data-theme='light']) {
-            --bg: #111110; --card-bg: #1C1C1A;
-            --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
-            --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
-            --warn-bg: #1E1A10; --alert-bg: #1E1010; --term: #6fae7d;
-          }
-        }
-        :root[data-theme='dark'] {
-          --bg: #111110; --card-bg: #1C1C1A;
-          --text-primary: #EEEEE8; --text-secondary: #8A8A84; --text-muted: #5A5A56;
-          --border: rgba(255,255,255,0.07); --border-med: rgba(255,255,255,0.14);
-          --warn-bg: #1E1A10; --alert-bg: #1E1010; --term: #6fae7d;
+          /* Single tone scale — one source for every status color on the site. */
+          --good: #8AB84A; --neutral: #C7C24E; --warn: #D88B2F; --bad: #EF6B5E; --crisis: #E24B4A;
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
@@ -576,8 +528,6 @@ export default function Dashboard() {
         .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
         .topbar-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .theme-toggle { background: none; border: none; padding: 5px; cursor: pointer; color: var(--text-muted); line-height: 0; transition: color 0.15s; }
-        .theme-toggle:hover { color: var(--text-secondary); }
         .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.85; line-height: 0; transition: opacity 0.15s; }
         .alert-bell:hover { opacity: 1; }
         /* soft green glow — helps the crack read against the stroke */
@@ -595,9 +545,9 @@ export default function Dashboard() {
         .topbar-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
         .pill { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); display: inline-flex; align-items: center; gap: 5px; }
-        .pill-ok { background: #EAF3DE; color: #3B6D11; }
-        .pill-warn { background: #FAEEDA; color: #854F0B; }
-        .pill-alert { background: #FCEBEB; color: #A32D2D; }
+        .pill-ok { background: var(--good-bg); color: var(--good); }
+        .pill-warn { background: var(--warn-bg); color: var(--warn); }
+        .pill-alert { background: var(--alert-bg); color: var(--bad); }
         .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
         .dot-pulse { animation: pulse 1.6s ease-in-out infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -607,8 +557,8 @@ export default function Dashboard() {
           padding: 14px 16px; border-radius: 8px; margin: 1.25rem 0 1.75rem;
           border: 0.5px solid var(--border); background: var(--card-bg);
         }
-        .summary-box.warn { border-color: #EF9F27; background: var(--warn-bg); }
-        .summary-box.alert { border-color: #E24B4A; background: var(--alert-bg); }
+        .summary-box.warn { border-color: var(--warn); background: var(--warn-bg); }
+        .summary-box.alert { border-color: var(--bad); background: var(--alert-bg); }
         .summary-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 6px; color: var(--text-muted); font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
         .summary-text { font-size: 13px; line-height: 1.65; color: var(--text-secondary); }
         .summary-time { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 8px; }
@@ -630,11 +580,11 @@ export default function Dashboard() {
         .card:hover .card-expand { opacity: 1; }
         .card-value { font-family: var(--mono); font-size: 20px; font-weight: 500; line-height: 1; }
         .card-change { font-size: 11px; margin-top: 3px; font-family: var(--mono); }
-        .card-change.pos { color: #3B6D11; }
-        .card-change.neg { color: #A32D2D; }
+        .card-change.pos { color: var(--good); }
+        .card-change.neg { color: var(--bad); }
         .card-context { font-size: 11px; margin-top: 7px; padding-top: 7px; border-top: 0.5px solid var(--border); line-height: 1.45; }
         .card-threshold { font-size: 10px; margin-top: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); font-family: var(--mono); color: var(--text-muted); }
-        .opportunity-banner { font-size: 11px; padding: 6px 9px; border-radius: 5px; margin-top: 6px; background: #EAF3DE; color: #3B6D11; border: 0.5px solid #B8DCA0; font-family: var(--mono); line-height: 1.5; }
+        .opportunity-banner { font-size: 11px; padding: 6px 9px; border-radius: 5px; margin-top: 6px; background: var(--good-bg); color: var(--good); border: 0.5px solid rgba(138,184,74,0.3); font-family: var(--mono); line-height: 1.5; }
 
         .stress-box { border: 0.5px solid var(--border); background: var(--card-bg); border-radius: 10px; padding: 1.25rem; margin-bottom: 1.75rem; }
         .stress-grid { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
@@ -663,7 +613,7 @@ export default function Dashboard() {
         .cal-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
         .cal-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
         .cal-when { font-size: 11px; color: var(--text-muted); font-family: var(--mono); white-space: nowrap; }
-        .cal-when.soon { color: #854F0B; }
+        .cal-when.soon { color: var(--warn); }
         .cal-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
         .cal-outcome { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
         .cal-go { color: var(--text-muted); font-size: 10px; }
@@ -677,8 +627,8 @@ export default function Dashboard() {
           background: var(--card-bg); color: var(--text-secondary);
           display: flex; align-items: center; gap: 5px;
         }
-        .event-pill.soon { border-color: #EF9F27; background: var(--warn-bg); color: #854F0B; }
-        .event-pill.today { border-color: #E24B4A; background: var(--alert-bg); color: #A32D2D; }
+        .event-pill.soon { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+        .event-pill.today { border-color: var(--bad); background: var(--alert-bg); color: var(--bad); }
         @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:0.4} }
         .sk-val { height: 20px; width: 60%; margin-bottom: 6px; }
         .sk-sub { height: 11px; width: 40%; }
@@ -702,7 +652,6 @@ export default function Dashboard() {
             <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
           </div>
           <div className="topbar-actions">
-            <ThemeToggle theme={theme} onToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))} />
             <AlertBell count={unreadCount} onClick={toggleNotifications} />
           </div>
         </div>

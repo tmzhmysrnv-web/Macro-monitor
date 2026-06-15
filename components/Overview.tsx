@@ -33,16 +33,16 @@ type BreakMeter = {
 }
 
 const CAT_COLORS: Record<string, string> = {
-  calm: '#639922', watch: '#8FA31E', elevated: '#BA7517', stressed: '#D9622B', breaking: '#E24B4A',
+  calm: '#8AB84A', watch: '#A9C24E', elevated: '#D88B2F', stressed: '#E07A4A', breaking: '#EF6B5E',
 }
 
 // Spec severity scale — drives the prominent status label and the legend.
 const SEVERITY_BANDS = [
-  { lo: 0, hi: 20, label: 'Healthy', color: '#639922' },
-  { lo: 21, hi: 40, label: 'Worth Watching', color: '#8FA31E' },
-  { lo: 41, hi: 60, label: 'Elevated', color: '#BA7517' },
-  { lo: 61, hi: 80, label: 'High Risk', color: '#D9622B' },
-  { lo: 81, hi: 100, label: 'Breaking', color: '#E24B4A' },
+  { lo: 0, hi: 20, label: 'Healthy', color: '#8AB84A' },
+  { lo: 21, hi: 40, label: 'Worth Watching', color: '#A9C24E' },
+  { lo: 41, hi: 60, label: 'Elevated', color: '#D88B2F' },
+  { lo: 61, hi: 80, label: 'High Risk', color: '#E07A4A' },
+  { lo: 81, hi: 100, label: 'Breaking', color: '#EF6B5E' },
 ]
 function severity(total: number): { label: string; color: string } {
   const b = SEVERITY_BANDS.find(b => total >= b.lo && total <= b.hi) ?? SEVERITY_BANDS[0]
@@ -161,11 +161,14 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
   // Shared "past 7 days" delta, reconstructed server-side — same for everyone.
   const delta = bm?.weekChange ?? null
 
-  const sev = bm ? severity(bm.total) : { label: '', color: '#639922' }
+  const sev = bm ? severity(bm.total) : { label: '', color: '#8AB84A' }
   const color = sev.color
   const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
   const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
+  // Split the recent-event feed by tone: red breaks vs. green "recently cleared".
+  const breaks = (bm?.recentBreaks ?? []).filter(e => e.tone === 'bad')
+  const cleared = (bm?.recentBreaks ?? []).filter(e => e.tone === 'good')
 
   // Stitch the trend: immutable deep snapshot → fresh trailing year (recomputed
   // live, no extra fetch) → today's live reading. The deep history renders
@@ -206,7 +209,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
           tabIndex={activeCount ? 0 : undefined}
           onKeyDown={activeCount ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenAlerts?.() } } : undefined}
         >
-          <span className={`alerts-dot ${activeCount ? 'is-pulse' : ''}`} style={{ background: activeCount ? '#E24B4A' : '#639922' }} />
+          <span className={`alerts-dot ${activeCount ? 'is-pulse' : ''}`} style={{ background: activeCount ? 'var(--bad)' : 'var(--good)' }} />
           <span className="alerts-head-text">
             {!dataReady ? 'Checking alerts…'
               : activeCount ? `${activeCount} Active Alert${activeCount > 1 ? 's' : ''}`
@@ -225,7 +228,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
       </div>
 
       {/* ── 2. Break Meter ── */}
-      <div className="bm-hero">
+      <div className="bm-hero" style={{ borderLeft: `3px solid ${color}`, borderRadius: '0 10px 10px 0' }}>
         <div className="bm-gauge">
           <svg width="160" height="96" viewBox="0 0 160 96">
             <path d={`M ${CX-R} ${CY} A ${R} ${R} 0 0 1 ${CX+R} ${CY}`} fill="none" stroke="var(--border-med)" strokeWidth="9" strokeLinecap="round" />
@@ -238,7 +241,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
           {bm && delta != null && (
             delta === 0
               ? <div className="bm-delta bm-delta-flat">No change this week</div>
-              : <div className="bm-delta" style={{ color: delta > 0 ? '#A32D2D' : '#3B6D11' }}>
+              : <div className="bm-delta" style={{ color: delta > 0 ? 'var(--bad)' : 'var(--good)' }}>
                   {delta > 0 ? '↑' : '↓'} {delta > 0 ? '+' : '−'}{Math.abs(delta)} in the past week
                 </div>
           )}
@@ -265,134 +268,9 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
         </div>
       </div>
 
-      {/* ── 3 + 4. Recent Breaks · Watching Closely ── */}
-      <div className="panels">
-        <div className="panel">
-          <div className="panel-title">Recent breaks</div>
-          {loading && <div className="panel-loading">Loading…</div>}
-          {bm && bm.recentBreaks.length === 0 && <div className="panel-empty">No notable thresholds crossed recently.</div>}
-          {bm && bm.recentBreaks.map((e, i) => (
-            <div
-              className={`rb-row ${onViewCard ? 'is-click' : ''}`}
-              key={i}
-              onClick={onViewCard ? () => onViewCard(e.key, RB_LABEL[e.key] ?? e.key) : undefined}
-              role={onViewCard ? 'button' : undefined}
-              tabIndex={onViewCard ? 0 : undefined}
-              onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
-            >
-              <span className="rb-dot" style={{ background: e.tone === 'bad' ? '#E24B4A' : '#639922' }} />
-              <div className="rb-main">
-                <div className="rb-top">
-                  <span className="rb-text">{e.text}</span>
-                  <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
-                  {onViewCard && <span className="rb-go">↗</span>}
-                </div>
-                {e.why && <div className="rb-why">{e.why}</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Watching closely</div>
-          {loading && <div className="panel-loading">Loading…</div>}
-          {bm && bm.watching.length === 0 && <div className="panel-empty">Nothing close to an alert threshold.</div>}
-          {bm && bm.watching.map(w => {
-            const nav = onNavigate && w.category ? () => onNavigate(w.category!.tab) : undefined
-            return (
-              <div
-                className={`wc-row ${nav ? 'is-click' : ''}`}
-                key={w.key}
-                onClick={nav}
-                role={nav ? 'button' : undefined}
-                tabIndex={nav ? 0 : undefined}
-                onKeyDown={nav ? (ev) => { if (ev.key === 'Enter') nav() } : undefined}
-              >
-                <span className="wc-icon">{w.heat === 'hot' ? '🔥' : '⚠️'}</span>
-                <div className="wc-main">
-                  <div className="wc-top">
-                    <span className="wc-label">{w.label}</span>
-                    <span className="wc-dist">{w.text}</span>
-                  </div>
-                  <div className="wc-sub">
-                    {w.category && <span className="wc-cat">{w.category.label}</span>}
-                    {w.why && <span className="wc-why">{w.why}</span>}
-                    {nav && <span className="wc-go">→</span>}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── 5 + 6. Drivers · What Changed ── */}
-      <div className="panels">
-        <div className="panel">
-          <div className="panel-title">Drivers of the Break Meter</div>
-          {loading && <div className="panel-loading">Loading…</div>}
-          {bm && bm.drivers.map(d => {
-            const arrow = d.trend === 'up' ? '↑' : d.trend === 'down' ? '↓' : ''
-            const arrowColor = d.trend === 'up' ? '#A32D2D' : d.trend === 'down' ? '#3B6D11' : 'var(--text-muted)'
-            return (
-              <div className="driver-row" key={d.key}>
-                <div className="driver-head">
-                  <span className="driver-label">
-                    {d.label}
-                    {arrow && <span className="driver-arrow" style={{ color: arrowColor }}> {arrow}</span>}
-                    {d.driver ? <span className="driver-sub"> · {d.driver}</span> : null}
-                  </span>
-                  <span className="driver-pct" style={{ color: CAT_COLORS[d.status] }}>{d.share}%</span>
-                </div>
-                <div className="driver-bar">
-                  <div className="driver-fill" style={{ width: `${d.share}%`, background: CAT_COLORS[d.status] }} />
-                </div>
-              </div>
-            )
-          })}
-          {bm && <div className="driver-note">Share of the current stress picture. Color shows how close each subsystem is to breaking; arrows mark subsystems that moved over the past week (no arrow = unchanged).</div>}
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">What changed this week</div>
-          {loading && <div className="panel-loading">Loading…</div>}
-          {bm && bm.whatChanged.length === 0 && <div className="panel-empty">Quiet week — no major moves.</div>}
-          {bm && bm.whatChanged.map(row => {
-            // Color reflects meaning, not sign: toward-danger = red, toward-safety = green.
-            const c = row.direction === 'toward-danger' ? '#A32D2D' : row.direction === 'toward-safety' ? '#3B6D11' : 'var(--text-muted)'
-            const base = Math.abs(row.weekAgo) > 1e-6 ? Math.abs(row.weekAgo) : null
-            const pct = base ? ((row.current - row.weekAgo) / base) * 100 : null
-            const absPct = pct == null ? null : Math.abs(pct)
-            const pctStr = absPct == null ? '—' : `${absPct >= 100 ? absPct.toFixed(0) : absPct.toFixed(1)}%`
-            const arrow = row.current > row.weekAgo ? '↑' : row.current < row.weekAgo ? '↓' : ''
-            return (
-              <div
-                className={`change-row ${onViewCard ? 'is-click' : ''}`}
-                key={row.key}
-                onClick={onViewCard ? () => onViewCard(row.key, row.label) : undefined}
-                role={onViewCard ? 'button' : undefined}
-                tabIndex={onViewCard ? 0 : undefined}
-                onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(row.key, row.label) } : undefined}
-              >
-                <div className="change-main">
-                  <span className="change-label">{row.label}</span>
-                  <span className="change-why">{row.why}</span>
-                </div>
-                <div className="change-vals">
-                  {fmt(row.key, row.weekAgo)} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}
-                </div>
-                <div className="change-pct" style={{ color: c }}>
-                  {arrow && <span className="change-arrow">{arrow}</span>}{pctStr}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ── 7. Today's Situation ── */}
-      <div className="ts-card">
-        <div className="panel-title">Today&apos;s situation</div>
+      {/* ── 3. Current situation — plain-language context, right under the meter ── */}
+      <div className="ts-card" style={bm ? { borderLeft: `3px solid ${color}`, borderRadius: '0 10px 10px 0' } : undefined}>
+        <div className="panel-title">Current situation</div>
         {loading && <div className="panel-loading">Loading…</div>}
         {bm && (
           <>
@@ -432,6 +310,158 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
         )}
       </div>
 
+      {/* ── 4. Recent breaks · Recently cleared ── */}
+      <div className="panels">
+        <div className="panel edge-bad">
+          <div className="panel-title">Recent breaks</div>
+          {loading && <div className="panel-loading">Loading…</div>}
+          {bm && breaks.length === 0 && <div className="panel-empty">No notable thresholds crossed recently.</div>}
+          {bm && breaks.map((e, i) => (
+            <div
+              className={`rb-row ${onViewCard ? 'is-click' : ''}`}
+              key={i}
+              onClick={onViewCard ? () => onViewCard(e.key, RB_LABEL[e.key] ?? e.key) : undefined}
+              role={onViewCard ? 'button' : undefined}
+              tabIndex={onViewCard ? 0 : undefined}
+              onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
+            >
+              <span className="rb-dot" style={{ background: 'var(--bad)' }} />
+              <div className="rb-main">
+                <div className="rb-top">
+                  <span className="rb-text">{e.text}</span>
+                  <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
+                  {onViewCard && <span className="rb-go">↗</span>}
+                </div>
+                {e.why && <div className="rb-why">{e.why}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="panel edge-good">
+          <div className="panel-title">Recently cleared</div>
+          {loading && <div className="panel-loading">Loading…</div>}
+          {bm && cleared.length === 0 && <div className="panel-empty">Nothing has cleared recently.</div>}
+          {bm && cleared.map((e, i) => (
+            <div
+              className={`rb-row ${onViewCard ? 'is-click' : ''}`}
+              key={i}
+              onClick={onViewCard ? () => onViewCard(e.key, RB_LABEL[e.key] ?? e.key) : undefined}
+              role={onViewCard ? 'button' : undefined}
+              tabIndex={onViewCard ? 0 : undefined}
+              onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
+            >
+              <span className="rb-dot" style={{ background: 'var(--good)' }} />
+              <div className="rb-main">
+                <div className="rb-top">
+                  <span className="rb-text">{e.text}</span>
+                  <span className="rb-ago">{e.daysAgo <= 0 ? 'today' : e.daysAgo === 1 ? '1d ago' : `${e.daysAgo}d ago`}</span>
+                  {onViewCard && <span className="rb-go">↗</span>}
+                </div>
+                {e.why && <div className="rb-why">{e.why}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 5. Drivers · What Changed ── */}
+      <div className="panels">
+        <div className="panel">
+          <div className="panel-title">Drivers of the Break Meter</div>
+          {loading && <div className="panel-loading">Loading…</div>}
+          {bm && bm.drivers.map(d => {
+            const arrow = d.trend === 'up' ? '↑' : d.trend === 'down' ? '↓' : ''
+            const arrowColor = d.trend === 'up' ? 'var(--bad)' : d.trend === 'down' ? 'var(--good)' : 'var(--text-muted)'
+            return (
+              <div className="driver-row" key={d.key}>
+                <div className="driver-head">
+                  <span className="driver-label">
+                    {d.label}
+                    {arrow && <span className="driver-arrow" style={{ color: arrowColor }}> {arrow}</span>}
+                    {d.driver ? <span className="driver-sub"> · {d.driver}</span> : null}
+                  </span>
+                  <span className="driver-pct" style={{ color: CAT_COLORS[d.status] }}>{d.share}%</span>
+                </div>
+                <div className="driver-bar">
+                  <div className="driver-fill" style={{ width: `${d.share}%`, background: CAT_COLORS[d.status] }} />
+                </div>
+              </div>
+            )
+          })}
+          {bm && <div className="driver-note">Share of the current stress picture. Color shows how close each subsystem is to breaking; arrows mark subsystems that moved over the past week (no arrow = unchanged).</div>}
+        </div>
+
+        <div className="panel">
+          <div className="panel-title">What changed this week</div>
+          {loading && <div className="panel-loading">Loading…</div>}
+          {bm && bm.whatChanged.length === 0 && <div className="panel-empty">Quiet week — no major moves.</div>}
+          {bm && bm.whatChanged.map(row => {
+            // Color reflects meaning, not sign: toward-danger = red, toward-safety = green.
+            const c = row.direction === 'toward-danger' ? 'var(--bad)' : row.direction === 'toward-safety' ? 'var(--good)' : 'var(--text-muted)'
+            const base = Math.abs(row.weekAgo) > 1e-6 ? Math.abs(row.weekAgo) : null
+            const pct = base ? ((row.current - row.weekAgo) / base) * 100 : null
+            const absPct = pct == null ? null : Math.abs(pct)
+            const pctStr = absPct == null ? '—' : `${absPct >= 100 ? absPct.toFixed(0) : absPct.toFixed(1)}%`
+            const arrow = row.current > row.weekAgo ? '↑' : row.current < row.weekAgo ? '↓' : ''
+            return (
+              <div
+                className={`change-row ${onViewCard ? 'is-click' : ''}`}
+                key={row.key}
+                onClick={onViewCard ? () => onViewCard(row.key, row.label) : undefined}
+                role={onViewCard ? 'button' : undefined}
+                tabIndex={onViewCard ? 0 : undefined}
+                onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(row.key, row.label) } : undefined}
+              >
+                <div className="change-main">
+                  <span className="change-label">{row.label}</span>
+                  <span className="change-why">{row.why}</span>
+                </div>
+                <div className="change-vals">
+                  {fmt(row.key, row.weekAgo)} <span style={{ opacity: 0.5 }}>→</span> {fmt(row.key, row.current)}
+                </div>
+                <div className="change-pct" style={{ color: c }}>
+                  {arrow && <span className="change-arrow">{arrow}</span>}{pctStr}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── 6. Watching closely — forward-looking, sits just above the calendar ── */}
+      <div className="panel edge-warn wc-solo">
+        <div className="panel-title">Watching closely</div>
+        {loading && <div className="panel-loading">Loading…</div>}
+        {bm && bm.watching.length === 0 && <div className="panel-empty">Nothing close to an alert threshold.</div>}
+        {bm && bm.watching.map(w => {
+          const nav = onNavigate && w.category ? () => onNavigate(w.category!.tab) : undefined
+          return (
+            <div
+              className={`wc-row ${nav ? 'is-click' : ''}`}
+              key={w.key}
+              onClick={nav}
+              role={nav ? 'button' : undefined}
+              tabIndex={nav ? 0 : undefined}
+              onKeyDown={nav ? (ev) => { if (ev.key === 'Enter') nav() } : undefined}
+            >
+              <span className="wc-icon">{w.heat === 'hot' ? '🔥' : '⚠️'}</span>
+              <div className="wc-main">
+                <div className="wc-top">
+                  <span className="wc-label">{w.label}</span>
+                  <span className="wc-dist">{w.text}</span>
+                </div>
+                <div className="wc-sub">
+                  {w.category && <span className="wc-cat">{w.category.label}</span>}
+                  {w.why && <span className="wc-why">{w.why}</span>}
+                  {nav && <span className="wc-go">→</span>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
       <style>{ovStyles}</style>
     </div>
   )
@@ -439,8 +469,14 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
 
 const ovStyles = `
   .alerts-box { border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; border: 0.5px solid var(--border); background: var(--card-bg); }
-  .alerts-box.is-alert { border-color: #E24B4A; background: var(--alert-bg); }
-  .alerts-box.is-clear { border-color: #B8DCA0; }
+  .alerts-box.is-alert { border-color: var(--bad); border-left: 3px solid var(--bad); border-radius: 0 10px 10px 0; background: var(--alert-bg); }
+  .alerts-box.is-clear { border-left: 3px solid var(--good); border-radius: 0 10px 10px 0; }
+
+  /* Signature status edge — colored left border keyed to tone (matches the email + alerts drawer) */
+  .edge-bad { border-left: 3px solid var(--bad); border-radius: 0 10px 10px 0; }
+  .edge-good { border-left: 3px solid var(--good); border-radius: 0 10px 10px 0; }
+  .edge-warn { border-left: 3px solid var(--warn); border-radius: 0 10px 10px 0; }
+  .wc-solo { margin-bottom: 1rem; }
   .alerts-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--text-primary); }
   .alerts-head.is-toggle { cursor: pointer; user-select: none; }
   .alerts-head-text { flex: 1; }
@@ -451,33 +487,6 @@ const ovStyles = `
   @keyframes ovpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
   .alerts-clear-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
   .alerts-concern-inline { font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
-
-  /* Rich alert card */
-  .ac { border: 0.5px solid #E24B4A; border-left: 3px solid #E24B4A; background: var(--card-bg); border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
-  .ac-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .ac-icon { font-size: 22px; line-height: 1; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: var(--alert-bg); border-radius: 9px; flex-shrink: 0; }
-  .ac-head-main { display: flex; flex-direction: column; gap: 2px; }
-  .ac-title { font-size: 16px; font-weight: 500; color: var(--text-primary); }
-  .ac-new { font-size: 11px; font-family: var(--mono); color: #A32D2D; display: flex; align-items: center; gap: 5px; }
-  .ac-new-dot { width: 6px; height: 6px; border-radius: 50%; background: #E24B4A; animation: ovpulse 1.6s ease-in-out infinite; }
-  .ac-body { display: grid; grid-template-columns: 160px 1fr 1fr 1fr; gap: 1.25rem; }
-  @media (max-width: 860px) { .ac-body { grid-template-columns: 1fr 1fr; } }
-  @media (max-width: 560px) { .ac-body { grid-template-columns: 1fr; } }
-  .ac-stats { display: flex; flex-direction: column; gap: 8px; }
-  .ac-stat { display: flex; flex-direction: column; gap: 1px; }
-  .ac-stat-k { font-size: 9px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
-  .ac-stat-v { font-size: 14px; font-weight: 500; color: var(--text-primary); font-family: var(--mono); }
-  .ac-col-h { font-size: 9px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-bottom: 7px; }
-  .ac-why { font-size: 12px; line-height: 1.55; color: var(--text-secondary); }
-  .ac-areas { display: flex; flex-direction: column; gap: 7px; }
-  .ac-area { display: flex; gap: 7px; align-items: baseline; }
-  .ac-area-icon { font-size: 12px; flex-shrink: 0; }
-  .ac-area-text { font-size: 11px; line-height: 1.45; color: var(--text-secondary); }
-  .ac-area-text strong { color: var(--text-primary); font-weight: 500; }
-  .ac-ctx { font-size: 11px; line-height: 1.5; color: var(--text-secondary); margin-bottom: 5px; padding-left: 10px; position: relative; }
-  .ac-ctx::before { content: '·'; position: absolute; left: 2px; color: var(--text-muted); }
-  .ac-view { margin-top: 6px; font-family: var(--mono); font-size: 11px; color: #A32D2D; background: none; border: 0.5px solid #E24B4A; border-radius: 6px; padding: 5px 10px; cursor: pointer; transition: background 0.15s; }
-  .ac-view:hover { background: var(--alert-bg); }
 
   .bm-hero { display: flex; gap: 1.75rem; align-items: center; background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .bm-gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 160px; }
