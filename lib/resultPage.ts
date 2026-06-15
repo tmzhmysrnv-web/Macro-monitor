@@ -2,7 +2,11 @@
 // Minimal standalone HTML page for the confirm / unsubscribe landing screens.
 // Honors the same light/dark palette as the app via prefers-color-scheme.
 
-const SITE = () => (process.env.SITE_URL || 'https://macromonitor.vercel.app').replace(/\/$/, '')
+const CANONICAL_URL = 'https://istheworldbreaking.com'
+const SITE = () => {
+  const s = (process.env.SITE_URL || '').replace(/\/$/, '')
+  return s && !/\.vercel\.app$/i.test(s) ? s : CANONICAL_URL
+}
 
 export function resultPage(title: string, body: string): string {
   return `<!doctype html>

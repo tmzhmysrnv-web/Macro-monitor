@@ -7,7 +7,13 @@
 import type { FiredAlert, SectionTone } from './alertEngine'
 import { barFor, nextFor, type AlertBar } from './alertMeta'
 
-const site = () => (process.env.SITE_URL || 'https://istheworldbreaking.com').replace(/\/$/, '')
+// Customer-facing emails must always use the branded domain — never a
+// *.vercel.app deployment URL, even if SITE_URL is misconfigured to one.
+const CANONICAL_URL = 'https://istheworldbreaking.com'
+const site = () => {
+  const s = (process.env.SITE_URL || '').replace(/\/$/, '')
+  return s && !/\.vercel\.app$/i.test(s) ? s : CANONICAL_URL
+}
 const FROM = () => process.env.ALERT_EMAIL_FROM || 'alerts@istheworldbreaking.com'
 
 async function client() {
