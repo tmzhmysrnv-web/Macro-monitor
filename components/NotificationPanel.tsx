@@ -50,10 +50,14 @@ function tierStyle(sev: number) {
   return { ...TIERS[2 as Severity], border: '#EF9F27' }
 }
 const TONE_RANK: Record<string, number> = { crisis: 5, bad: 4, warn: 3, neutral: 2, good: 1, unknown: 0 }
+// Mirror the per-tab TONE_COLORS scale exactly so the status row agrees with
+// what each tab's own status badge shows (neutral is yellow, not green).
 function toneColor(tone: string): string {
-  if (tone === 'bad' || tone === 'crisis') return '#E24B4A'
+  if (tone === 'crisis') return '#A32D2D'
+  if (tone === 'bad') return '#E24B4A'
   if (tone === 'warn') return '#BA7517'
-  if (tone === 'good' || tone === 'neutral') return '#639922'
+  if (tone === 'neutral') return '#9E9E2E'
+  if (tone === 'good') return '#639922'
   return '#9E9E9A'
 }
 

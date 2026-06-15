@@ -73,10 +73,14 @@ function tierStyle(sev: number): Tier {
 }
 
 const TONE_RANK: Record<string, number> = { crisis: 5, bad: 4, warn: 3, neutral: 2, good: 1, unknown: 0 }
+// Mirror the per-tab TONE_COLORS scale exactly (neutral is yellow, not green)
+// so the email's status row agrees with each tab and the in-app monitor.
 function toneColor(tone: string): string {
-  if (tone === 'bad' || tone === 'crisis') return '#E24B4A'
+  if (tone === 'crisis') return '#A32D2D'
+  if (tone === 'bad') return '#E24B4A'
   if (tone === 'warn') return '#BA7517'
-  if (tone === 'good' || tone === 'neutral') return '#639922'
+  if (tone === 'neutral') return '#9E9E2E'
+  if (tone === 'good') return '#639922'
   return '#C9C7BF'
 }
 
