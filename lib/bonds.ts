@@ -238,14 +238,49 @@ function scoreGrowth(d: BondData): Omit<Category, 'fill'> {
   return { key: 'growth', label: 'Growth Expectations', status, tone, signals, metrics }
 }
 
+// Most recent Fed policy move from the monthly effective rate. A mid-month
+// decision smears across two monthly averages, so we measure each month against
+// ~2 months earlier to resolve a clean ≥1-notch (25bp) step; otherwise the rate
+// is "holding". Gives the Fed Funds card a hike/cut annotation + how long it's
+// held, alongside the historical percentile the other cards already show.
+function fedPolicyMove(obs: Obs[]): { sub: string; signal: string | null } {
+  if (obs.length < 4) return { sub: 'policy rate', signal: null }
+  const cur = obs[0].value
+  let moveIdx = -1, moveDelta = 0
+  for (let i = 0; i + 2 < obs.length; i++) {
+    const delta = obs[i].value - obs[i + 2].value
+    if (Math.abs(delta) >= 0.18) { moveIdx = i; moveDelta = delta; break }
+  }
+  // How many months the rate has been essentially unchanged (≤12bp drift).
+  let held = 0
+  for (let i = 1; i < obs.length; i++) { if (Math.abs(cur - obs[i].value) <= 0.12) held++; else break }
+  if (moveIdx < 0) {
+    return { sub: held >= 1 ? `held ${held}mo at ${fPct(cur)}` : 'policy rate',
+             signal: held >= 2 ? `Fed has held rates at ${fPct(cur)} for ${held} months` : null }
+  }
+  const hiked = moveDelta > 0
+  const bp = Math.round(Math.abs(moveDelta) * 100)
+  // The move completes ~1mo after the meeting; date it one month inside the span.
+  const when = new Date(obs[Math.min(moveIdx + 1, obs.length - 1)].date + 'T00:00:00')
+    .toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+  return {
+    sub: `${hiked ? 'hiked' : 'cut'} ~${bp}bp · ${when}`,
+    signal: `Fed ${hiked ? 'raised' : 'cut'} rates to ${fPct(cur)} (${hiked ? '+' : '−'}${bp}bp, ${when})`,
+  }
+}
+
 // 2 ── Interest Rate Environment (how restrictive financing is) ────────
 function scoreRates(d: BondData): Omit<Category, 'fill'> {
   const signals: string[] = []
   const ry = d.realYield, ten = d.tenY
+  const fed = fedPolicyMove(d.fedFundsObs)
   if (ten != null) signals.push(`10Y Treasury at ${fPct(ten)}`)
   if (d.thirtY != null) signals.push(`30Y Treasury at ${fPct(d.thirtY)}`)
   if (ry != null) signals.push(`10Y real yield ${fPct(ry)} — ${ry >= 1.5 ? 'firmly positive and restrictive' : ry >= 0.5 ? 'positive' : 'low'}`)
-  if (d.fedFunds != null) signals.push(`Fed funds at ${fPct(d.fedFunds)}`)
+  if (d.fedFunds != null) {
+    signals.push(`Fed funds at ${fPct(d.fedFunds)}`)
+    if (fed.signal) signals.push(fed.signal)
+  }
 
   let status: string, tone: Tone
   if ((ry != null && ry >= 2.5) || (ten != null && ten >= 5.0)) { status = 'Restrictive Financing'; tone = 'bad' }
@@ -257,7 +292,7 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
     { label: '10Y Treasury', value: fPct(ten), unit: '%', tone: toneHigh(ten, 5, 6), points: spark(d.tenYHistory), ...hist(d.tenYHistory), ...alertAbove(ten, 5) },
     { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', tone: toneHigh(d.thirtY, 6, 7), points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(d.thirtY, 6) },
     { label: '10Y Real Yield', value: fPct(ry), unit: '%', tone: toneHigh(ry, 2.5, 3.5), points: spark(d.realYieldObs), ...hist(d.realYieldObs), sub: 'TIPS' },
-    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
+    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', sub: fed.sub, points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
   ]
   return { key: 'rates', label: 'Interest Rate Environment', status, tone, signals, metrics }
 }

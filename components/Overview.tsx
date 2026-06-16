@@ -71,13 +71,21 @@ function fmt(key: string, v: number): string {
   return v.toFixed(1)
 }
 
-const MARKERS = [
-  { date: '2008-09', label: '2008 crisis' },
-  { date: '2020-03', label: 'COVID' },
-  { date: '2022-06', label: 'rate hikes' },
-]
+// The "Breaking" line. Any time the meter crosses up through it, the trend gets
+// a marked event — the way COVID and the 2022 inflation shock are marked.
+const BREACH = 81
+// Curated cause labels for past breaches (keyed by the crossing month). A live /
+// ongoing breach with no curated label is named by the current top concern, so a
+// future event (e.g. a housing-market crash) self-marks with no code change.
+const BREACH_LABELS: Record<string, string> = {
+  '2020-03': 'COVID crash',
+  '2022-02': 'Inflation shock',
+}
+function breachDateLabel(date: string): string {
+  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', " '")
+}
 
-function BreakMeterTrend({ history, color }: { history: { date: string; value: number }[]; color: string }) {
+function BreakMeterTrend({ history, color, concernLabel }: { history: { date: string; value: number }[]; color: string; concernLabel?: string }) {
   const [hover, setHover] = useState<number | null>(null)
   if (!history || history.length < 2) {
     return <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--mono)', padding: '2rem 0', textAlign: 'center' }}>Building history…</div>
@@ -91,9 +99,20 @@ function BreakMeterTrend({ history, color }: { history: { date: string; value: n
   const line = history.map((h, i) => `${toX(i).toFixed(1)},${toY(h.value).toFixed(1)}`).join(' ')
   const area = `${line} ${toX(history.length - 1).toFixed(1)},${(PAD.t + ih).toFixed(1)} ${PAD.l},${(PAD.t + ih).toFixed(1)}`
 
-  const markerIdx = MARKERS.map(m => ({
-    ...m, idx: history.findIndex(h => h.date.slice(0, 7) === m.date),
-  })).filter(m => m.idx >= 0)
+  // Mark every up-crossing of the Breaking line (81). Past breaches get a curated
+  // cause; the most recent one, if still breaking, is named by the live concern.
+  const lastBreaching = history[history.length - 1].value >= BREACH
+  const crossings: number[] = []
+  for (let i = 1; i < history.length; i++) {
+    if (history[i - 1].value < BREACH && history[i].value >= BREACH) crossings.push(i)
+  }
+  const breaches = crossings.map((idx, n) => {
+    const ym = history[idx].date.slice(0, 7)
+    const isLatest = n === crossings.length - 1
+    const label = BREACH_LABELS[ym]
+      ?? (isLatest && lastBreaching && concernLabel ? `${concernLabel} crisis` : breachDateLabel(history[idx].date))
+    return { idx, label }
+  })
 
   const hv = hover != null ? history[hover] : null
 
@@ -128,10 +147,13 @@ function BreakMeterTrend({ history, color }: { history: { date: string; value: n
             <text x={PAD.l - 5} y={toY(t) + 3} textAnchor="end" fontSize="8" fill="var(--text-muted)" fontFamily="monospace">{t}</text>
           </g>
         ))}
-        {markerIdx.map((m, i) => (
+        {/* The Breaking line (81) — what the breach markers are crossing. */}
+        <line x1={PAD.l} y1={toY(BREACH)} x2={PAD.l + iw} y2={toY(BREACH)} stroke="var(--crisis)" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.5" />
+        <text x={PAD.l + iw} y={toY(BREACH) - 3} textAnchor="end" fontSize="8" fill="var(--crisis)" fontFamily="monospace" opacity="0.75">breaking · {BREACH}</text>
+        {breaches.map((b, i) => (
           <g key={i}>
-            <line x1={toX(m.idx)} y1={PAD.t} x2={toX(m.idx)} y2={PAD.t + ih} stroke="var(--text-muted)" strokeWidth="0.5" strokeDasharray="2,2" opacity="0.5" />
-            <text x={toX(m.idx)} y={PAD.t + 8} textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontFamily="monospace">{m.label}</text>
+            <line x1={toX(b.idx)} y1={PAD.t} x2={toX(b.idx)} y2={PAD.t + ih} stroke="var(--crisis)" strokeWidth="0.75" strokeDasharray="2,2" opacity="0.6" />
+            <text x={toX(b.idx)} y={PAD.t + 8} textAnchor="middle" fontSize="8" fill="var(--crisis)" fontFamily="monospace">{b.label}</text>
           </g>
         ))}
         <polygon points={area} fill="url(#bmgrad)" />
@@ -166,7 +188,12 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
   const color = sev.color
   const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
-  const nextEvent = events.length ? [...events].sort((a, b) => a.daysUntil - b.daysUntil)[0] : null
+  // Watch next = the soonest event still ahead of us (today counts). Once a date
+  // passes it drops out and the next one takes the slot.
+  const nextEvent = events.filter(e => e.daysUntil >= 0).sort((a, b) => a.daysUntil - b.daysUntil)[0] ?? null
+  // Latest release = the most recently passed event; carries its result + a
+  // "new" badge for the first day after it lands.
+  const lastRelease = events.filter(e => e.daysUntil < 0).sort((a, b) => b.daysUntil - a.daysUntil)[0] ?? null
   // Split the recent-event feed by tone: red breaks vs. green "recently cleared".
   const breaks = (bm?.recentBreaks ?? []).filter(e => e.tone === 'bad')
   const cleared = (bm?.recentBreaks ?? []).filter(e => e.tone === 'good')
@@ -265,7 +292,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
           )}
         </div>
         <div className="bm-trend">
-          <BreakMeterTrend history={trendLine} color={color} />
+          <BreakMeterTrend history={trendLine} color={color} concernLabel={bm?.briefing.concern?.label} />
         </div>
       </div>
 
@@ -297,12 +324,23 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
                   </div>
                 )
               })()}
-              {(() => {
-                const wNav = onViewCard && nextEvent?.metricKey ? () => onViewCard(nextEvent.metricKey!, nextEvent.name) : undefined
+              {/* Watch next is purely "what's coming" — no result exists yet, so
+                  it isn't clickable. The result shows up under Latest release. */}
+              <div className="ts-cell">
+                <div className="ts-k">Watch next</div>
+                <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span></> : 'No major releases scheduled'}</div>
+              </div>
+              {lastRelease && (() => {
+                const key = lastRelease.metricKey
+                const val = key && data ? (data as unknown as Record<string, number | null>)[key] ?? null : null
+                const rNav = onViewCard && key && val != null ? () => onViewCard(key, lastRelease.name) : undefined
+                const isNew = lastRelease.daysUntil >= -1          // "new" for the first day after release
+                const ago = -lastRelease.daysUntil
+                const when = val != null ? fmt(key!, val) : ago <= 1 ? 'yesterday' : `${ago}d ago`
                 return (
-                  <div className={`ts-cell ${wNav ? 'is-click' : ''}`} onClick={wNav} role={wNav ? 'button' : undefined} tabIndex={wNav ? 0 : undefined} onKeyDown={wNav ? (e) => { if (e.key === 'Enter') wNav() } : undefined}>
-                    <div className="ts-k">Watch next</div>
-                    <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span>{wNav && <span className="ts-go"> ↗</span>}</> : 'No major releases scheduled'}</div>
+                  <div className={`ts-cell ${rNav ? 'is-click' : ''}`} onClick={rNav} role={rNav ? 'button' : undefined} tabIndex={rNav ? 0 : undefined} onKeyDown={rNav ? (e) => { if (e.key === 'Enter') rNav() } : undefined}>
+                    <div className="ts-k">Latest release</div>
+                    <div className="ts-v">{lastRelease.name}<span className="ts-detail"> — {when}</span>{isNew && <span className="ts-new">new</span>}{rNav && <span className="ts-go"> ↗</span>}</div>
                   </div>
                 )
               })()}
@@ -577,6 +615,7 @@ const ovStyles = `
   .ts-k { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
   .ts-v { font-size: 13px; color: var(--text-primary); font-weight: 500; line-height: 1.4; }
   .ts-detail { color: var(--text-secondary); font-weight: 400; }
+  .ts-new { display: inline-block; margin-left: 7px; font-size: 8.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-family: var(--mono); color: var(--good); background: var(--good-bg); border: 0.5px solid var(--good); border-radius: 4px; padding: 0 5px; vertical-align: 1px; }
   .ts-go { color: var(--text-muted); opacity: 0; transition: opacity 0.12s; font-family: var(--mono); }
   .ts-cell.is-click:hover .ts-go { opacity: 1; }
   .ts-full-wrap { margin-top: 14px; padding-top: 12px; border-top: 0.5px solid var(--border); }
