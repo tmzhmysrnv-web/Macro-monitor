@@ -396,13 +396,17 @@ export default function Dashboard() {
       el.classList.add('lantern')
       const r = el.getBoundingClientRect()
       const x = e.clientX - r.left, y = e.clientY - r.top
-      el.style.setProperty('--mx', `${x}px`)
-      el.style.setProperty('--my', `${y}px`)
-      // nearest edge + intensity (1 at the edge, fading to 0 ~60px inward)
       const dTop = y, dBottom = r.height - y, dLeft = x, dRight = r.width - x
       const min = Math.min(dTop, dBottom, dLeft, dRight)
-      el.dataset.edge = min === dTop ? 'top' : min === dBottom ? 'bottom' : min === dLeft ? 'left' : 'right'
-      el.style.setProperty('--ei', Math.max(0, 1 - min / 60).toFixed(2))
+      // anchor the glow at the cursor's projection onto the nearest edge
+      let gx = x, gy = y
+      if (min === dTop) gy = 0
+      else if (min === dBottom) gy = r.height
+      else if (min === dLeft) gx = 0
+      else gx = r.width
+      el.style.setProperty('--gx', `${gx}px`)
+      el.style.setProperty('--gy', `${gy}px`)
+      el.style.setProperty('--ei', Math.max(0, 1 - min / 55).toFixed(2))
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => window.removeEventListener('pointermove', onMove)
@@ -587,27 +591,18 @@ export default function Dashboard() {
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 
-        /* Cursor glow — a small golden "pierce" of light brightest under the
-           cursor, plus a brief golden flare on the card's nearest edge. The
-           pointermove listener tags the grey card under the cursor with .lantern
-           and sets --mx/--my (cursor), data-edge (nearest side) and --ei (edge
-           intensity). Both layers sit behind content (z-index:-1), grey cards only. */
+        /* Edge glow — ONLY the card's nearest edge lights (golden), brightest at
+           the point under the cursor and hugging the border. No cursor pool, no
+           cast: the listener sets --gx/--gy (the cursor projected onto the nearest
+           edge) and --ei (how close the cursor is to it); inset:0 clips the outer
+           half so the glow can't spill beyond the card. Grey cards only. */
         .lantern { position: relative; isolation: isolate; }
-        .lantern::before, .lantern::after {
+        .lantern::after {
           content: ''; position: absolute; inset: 0; border-radius: inherit;
-          pointer-events: none; z-index: -1; opacity: 0;
+          pointer-events: none; z-index: -1; opacity: 0; transition: opacity 0.45s ease-out;
+          background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0), rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r));
         }
-        .lantern::before {
-          transition: opacity 0.25s ease;
-          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r));
-        }
-        .lantern:hover::before { opacity: 1; }
-        .lantern::after { transition: opacity 0.5s ease-out; }
         .lantern:hover::after { opacity: var(--ei, 0); }
-        .lantern[data-edge="top"]::after { background: linear-gradient(to bottom, rgba(var(--glow-c), 0.5), transparent 32%); }
-        .lantern[data-edge="bottom"]::after { background: linear-gradient(to top, rgba(var(--glow-c), 0.5), transparent 32%); }
-        .lantern[data-edge="left"]::after { background: linear-gradient(to right, rgba(var(--glow-c), 0.5), transparent 32%); }
-        .lantern[data-edge="right"]::after { background: linear-gradient(to left, rgba(var(--glow-c), 0.5), transparent 32%); }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
