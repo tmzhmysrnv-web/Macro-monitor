@@ -308,6 +308,31 @@ function AlertBell({ count, onClick }: { count: number; onClick?: () => void }) 
   )
 }
 
+// Dev-only lantern tuner (visible only with ?lantern in the URL). Drag to taste,
+// read the two values back, then bake them into :root and remove this.
+function LanternTuner() {
+  const [r, setR] = useState(75)
+  const [a, setA] = useState(0.06)
+  useEffect(() => {
+    document.documentElement.style.setProperty('--lantern-r', r + 'px')
+    document.documentElement.style.setProperty('--lantern-a', String(a))
+  }, [r, a])
+  return (
+    <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 200, width: 240, background: '#24262B', border: '0.5px solid rgba(255,255,255,0.16)', borderRadius: 10, padding: '13px 15px', fontFamily: 'var(--mono)', color: '#ECECEA', boxShadow: '0 10px 34px rgba(0,0,0,0.45)' }}>
+      <div style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9A9C9E', marginBottom: 10 }}>Lantern tuner</div>
+      <label style={{ display: 'block', fontSize: 11, marginBottom: 12 }}>
+        radius <b style={{ color: '#8AB84A' }}>{r}px</b>
+        <input type="range" min={20} max={300} step={1} value={r} onChange={e => setR(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+      </label>
+      <label style={{ display: 'block', fontSize: 11, marginBottom: 10 }}>
+        opacity <b style={{ color: '#8AB84A' }}>{a.toFixed(3)}</b>
+        <input type="range" min={0} max={0.25} step={0.005} value={a} onChange={e => setA(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+      </label>
+      <div style={{ fontSize: 9.5, color: '#66686C', lineHeight: 1.4 }}>hover a card to see it · read both numbers back to me</div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -325,13 +350,16 @@ export default function Dashboard() {
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [notifOpen, setNotifOpen] = useState(false)
+  const [tuner, setTuner] = useState(false)
   const [alertHistory, setAlertHistory] = useState<AlertHistoryItem[]>([])
   const [alertsSeenAt, setAlertsSeenAt] = useState(0)
 
   // Deep-link: open the tab named in ?tab= (used by the alert email's links).
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get('tab')
+    const sp = new URLSearchParams(window.location.search)
+    const t = sp.get('tab')
     if (t && TABS.some(x => x.id === t)) setActiveTab(t)
+    if (sp.has('lantern')) setTuner(true)
   }, [])
 
   // Restore notification history + last-seen marker on mount.
@@ -348,11 +376,12 @@ export default function Dashboard() {
   // delegated listener tags whichever surface is under the cursor with .lantern
   // (so late-mounted tab cards are covered too) and updates its light position.
   useEffect(() => {
-    const SEL = '.card,.panel,.ts-card,.bm-hero,.alerts-box,.cal-col,.dc,.np-card,'
-      + '.inf-hero,.inf-callout,.inf-driver,.bn-hero,.bn-callout,.bn-driver,'
-      + '.cr-hero,.cr-callout,.cr-driver,.hs-hero,.hs-callout,.hs-driver,'
-      + '.gl-hero,.gl-callout,.gl-driver,.lb-hero,.lb-callout,.lb-driver,'
-      + '.mk-hero,.mk-callout,.mk-driver,.gl-exp,.lb-exp,.mk-doing'
+    // Grey graphite surfaces only — exclude tinted backgrounds (the active
+    // alert strip, the risk/stabilizer callouts, the experiencing/doing boxes).
+    const SEL = '.card,.panel,.ts-card,.bm-hero,.cal-col,.dc,.np-card,'
+      + '.inf-hero,.inf-driver,.bn-hero,.bn-driver,.cr-hero,.cr-driver,'
+      + '.hs-hero,.hs-driver,.gl-hero,.gl-driver,.lb-hero,.lb-driver,'
+      + '.mk-hero,.mk-driver'
     const onMove = (e: PointerEvent) => {
       const el = (e.target as Element | null)?.closest?.(SEL) as HTMLElement | null
       if (!el) return
@@ -540,6 +569,7 @@ export default function Dashboard() {
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
           /* Single tone scale — one source for every status color on the site. */
           --good: #8AB84A; --neutral: #C7C24E; --warn: #D88B2F; --bad: #EF6B5E; --crisis: #E24B4A;
+          --lantern-r: 75px; --lantern-a: 0.06;
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 
@@ -551,7 +581,7 @@ export default function Dashboard() {
         .lantern::before {
           content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
           opacity: 0; transition: opacity 0.45s ease;
-          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214,0.06), transparent 75px);
+          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214, var(--lantern-a)), transparent var(--lantern-r));
         }
         .lantern:hover::before { opacity: 1; }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
@@ -679,6 +709,7 @@ export default function Dashboard() {
       )}
 
       <div className="page">
+        {tuner && <LanternTuner />}
         <div className="topbar">
           <div className="topbar-left">
             <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
