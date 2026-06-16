@@ -551,7 +551,7 @@ export default function Dashboard() {
         .lantern::before {
           content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
           opacity: 0; transition: opacity 0.45s ease;
-          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214,0.13), transparent 120px);
+          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214,0.06), transparent 75px);
         }
         .lantern:hover::before { opacity: 1; }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }

@@ -476,9 +476,11 @@ const ovStyles = `
   .alerts-box.is-clear { border-left: 3px solid var(--good); border-radius: 0 10px 10px 0; }
 
   /* Signature status edge — colored left border keyed to tone (matches the email + alerts drawer) */
-  .edge-bad { border-left: 3px solid var(--bad); border-radius: 0 10px 10px 0; }
-  .edge-good { border-left: 3px solid var(--good); border-radius: 0 10px 10px 0; }
-  .edge-warn { border-left: 3px solid var(--warn); border-radius: 0 10px 10px 0; }
+  /* Scoped to .panel so they outrank .panel's own border shorthand (which is
+     defined later and would otherwise wipe the colored left edge). */
+  .panel.edge-bad { border-left: 3px solid var(--bad); border-radius: 0 10px 10px 0; }
+  .panel.edge-good { border-left: 3px solid var(--good); border-radius: 0 10px 10px 0; }
+  .panel.edge-warn { border-left: 3px solid var(--warn); border-radius: 0 10px 10px 0; }
   .wc-solo { margin-bottom: 1rem; }
   .alerts-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--text-primary); }
   .alerts-head.is-toggle { cursor: pointer; user-select: none; }
