@@ -380,9 +380,9 @@ export default function Dashboard() {
     } catch {}
   }, [])
 
-  // Lantern: a soft light follows the cursor across the graphite surfaces. One
-  // delegated listener tags whichever surface is under the cursor with .lantern
-  // (so late-mounted tab cards are covered too) and updates its light position.
+  // Edge pierce: crossing a grey card's border briefly lights the edge you cross.
+  // One delegated pointermove tracks which card the cursor is inside; only a change
+  // (enter or leave) fires a one-shot flash — never on plain hover.
   useEffect(() => {
     // Grey graphite surfaces only — exclude tinted backgrounds (the active
     // alert strip, the risk/stabilizer callouts, the experiencing/doing boxes).
@@ -390,23 +390,25 @@ export default function Dashboard() {
       + '.inf-hero,.inf-driver,.bn-hero,.bn-driver,.cr-hero,.cr-driver,'
       + '.hs-hero,.hs-driver,.gl-hero,.gl-driver,.lb-hero,.lb-driver,'
       + '.mk-hero,.mk-driver'
-    const onMove = (e: PointerEvent) => {
-      const el = (e.target as Element | null)?.closest?.(SEL) as HTMLElement | null
-      if (!el) return
+    let lastCard: HTMLElement | null = null
+    const flash = (el: HTMLElement, e: PointerEvent) => {
       el.classList.add('lantern')
       const r = el.getBoundingClientRect()
-      const x = e.clientX - r.left, y = e.clientY - r.top
-      const dTop = y, dBottom = r.height - y, dLeft = x, dRight = r.width - x
+      const dx = e.clientX - r.left, dy = e.clientY - r.top
+      const dTop = dy, dBottom = r.height - dy, dLeft = dx, dRight = r.width - dx
       const min = Math.min(dTop, dBottom, dLeft, dRight)
-      // anchor the glow at the cursor's projection onto the nearest edge
-      let gx = x, gy = y
-      if (min === dTop) gy = 0
-      else if (min === dBottom) gy = r.height
-      else if (min === dLeft) gx = 0
-      else gx = r.width
-      el.style.setProperty('--gx', `${gx}px`)
-      el.style.setProperty('--gy', `${gy}px`)
-      el.style.setProperty('--ei', Math.max(0, 1 - min / 55).toFixed(2))
+      el.dataset.edge = min === dTop ? 'top' : min === dBottom ? 'bottom' : min === dLeft ? 'left' : 'right'
+      el.style.setProperty('--gx', `${Math.max(0, Math.min(r.width, dx))}px`)
+      el.style.setProperty('--gy', `${Math.max(0, Math.min(r.height, dy))}px`)
+      // restart the one-shot flash animation
+      el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash')
+    }
+    const onMove = (e: PointerEvent) => {
+      const card = ((e.target as Element | null)?.closest?.(SEL) as HTMLElement | null) || null
+      if (card === lastCard) return       // still inside the same card (or still outside) → no pierce
+      if (lastCard) flash(lastCard, e)    // crossed out of a card
+      if (card) flash(card, e)            // crossed into a card
+      lastCard = card
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => window.removeEventListener('pointermove', onMove)
@@ -591,18 +593,23 @@ export default function Dashboard() {
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 
-        /* Edge glow — ONLY the card's nearest edge lights (golden), brightest at
-           the point under the cursor and hugging the border. No cursor pool, no
-           cast: the listener sets --gx/--gy (the cursor projected onto the nearest
-           edge) and --ei (how close the cursor is to it); inset:0 clips the outer
-           half so the glow can't spill beyond the card. Grey cards only. */
-        .lantern { position: relative; isolation: isolate; }
-        .lantern::after {
-          content: ''; position: absolute; inset: 0; border-radius: inherit;
-          pointer-events: none; z-index: -1; opacity: 0; transition: opacity 0.45s ease-out;
-          background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0), rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r));
-        }
-        .lantern:hover::after { opacity: var(--ei, 0); }
+        /* Edge pierce — crossing a grey card's border briefly lights THAT edge
+           golden (a 1.5px line, brightest where you crossed, fading along it), then
+           it fades to nothing. Fires only on the crossing, never on plain hover. */
+        .lantern { position: relative; }
+        .lantern::after { content: ''; position: absolute; pointer-events: none; opacity: 0; }
+        .lantern[data-edge="top"]::after,
+        .lantern[data-edge="bottom"]::after { left: 0; right: 0; height: 1.5px;
+          background: radial-gradient(circle at var(--gx, 50%) 50%, rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r)); }
+        .lantern[data-edge="left"]::after,
+        .lantern[data-edge="right"]::after { top: 0; bottom: 0; width: 1.5px;
+          background: radial-gradient(circle at 50% var(--gy, 50%), rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r)); }
+        .lantern[data-edge="top"]::after { top: -0.5px; }
+        .lantern[data-edge="bottom"]::after { bottom: -0.5px; }
+        .lantern[data-edge="left"]::after { left: -0.5px; }
+        .lantern[data-edge="right"]::after { right: -0.5px; }
+        .lantern.flash::after { animation: edgeflash 0.6s ease-out; }
+        @keyframes edgeflash { 0% { opacity: 0; } 16% { opacity: 1; } 100% { opacity: 0; } }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
