@@ -308,27 +308,35 @@ function AlertBell({ count, onClick }: { count: number; onClick?: () => void }) 
   )
 }
 
-// Dev-only lantern tuner (visible only with ?lantern in the URL). Drag to taste,
-// read the two values back, then bake them into :root and remove this.
-function LanternTuner() {
-  const [r, setR] = useState(75)
-  const [a, setA] = useState(0.06)
+// Dev-only glow tuner (visible only with ?glow in the URL). Drag to taste,
+// read the three values back, then bake them into :root and remove this.
+function GlowTuner() {
+  const [core, setCore] = useState(0.5)
+  const [r, setR] = useState(42)
+  const [warm, setWarm] = useState(50)
+  const g = Math.round(224 - warm * 0.5), b = Math.round(176 - warm * 0.9)
   useEffect(() => {
-    document.documentElement.style.setProperty('--lantern-r', r + 'px')
-    document.documentElement.style.setProperty('--lantern-a', String(a))
-  }, [r, a])
+    const root = document.documentElement
+    root.style.setProperty('--glow-core', String(core))
+    root.style.setProperty('--glow-r', r + 'px')
+    root.style.setProperty('--glow-c', `255,${g},${b}`)
+  }, [core, r, g, b])
   return (
     <div style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 200, width: 240, background: '#24262B', border: '0.5px solid rgba(255,255,255,0.16)', borderRadius: 10, padding: '13px 15px', fontFamily: 'var(--mono)', color: '#ECECEA', boxShadow: '0 10px 34px rgba(0,0,0,0.45)' }}>
-      <div style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9A9C9E', marginBottom: 10 }}>Lantern tuner</div>
+      <div style={{ fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9A9C9E', marginBottom: 10 }}>Glow tuner</div>
       <label style={{ display: 'block', fontSize: 11, marginBottom: 12 }}>
-        radius <b style={{ color: '#8AB84A' }}>{r}px</b>
-        <input type="range" min={20} max={300} step={1} value={r} onChange={e => setR(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+        brightness <b style={{ color: '#8AB84A' }}>{core.toFixed(2)}</b>
+        <input type="range" min={0} max={1} step={0.02} value={core} onChange={e => setCore(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+      </label>
+      <label style={{ display: 'block', fontSize: 11, marginBottom: 12 }}>
+        size <b style={{ color: '#8AB84A' }}>{r}px</b>
+        <input type="range" min={10} max={150} step={1} value={r} onChange={e => setR(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
       </label>
       <label style={{ display: 'block', fontSize: 11, marginBottom: 10 }}>
-        opacity <b style={{ color: '#8AB84A' }}>{a.toFixed(3)}</b>
-        <input type="range" min={0} max={0.25} step={0.005} value={a} onChange={e => setA(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
+        warmth <b style={{ color: '#8AB84A' }}>255,{g},{b}</b>
+        <input type="range" min={0} max={100} step={1} value={warm} onChange={e => setWarm(+e.target.value)} style={{ width: '100%', marginTop: 4 }} />
       </label>
-      <div style={{ fontSize: 9.5, color: '#66686C', lineHeight: 1.4 }}>hover a card to see it · read both numbers back to me</div>
+      <div style={{ fontSize: 9.5, color: '#66686C', lineHeight: 1.4 }}>hover a card · read brightness / size / warmth back to me</div>
     </div>
   )
 }
@@ -359,7 +367,7 @@ export default function Dashboard() {
     const sp = new URLSearchParams(window.location.search)
     const t = sp.get('tab')
     if (t && TABS.some(x => x.id === t)) setActiveTab(t)
-    if (sp.has('lantern')) setTuner(true)
+    if (sp.has('glow')) setTuner(true)
   }, [])
 
   // Restore notification history + last-seen marker on mount.
@@ -387,8 +395,14 @@ export default function Dashboard() {
       if (!el) return
       el.classList.add('lantern')
       const r = el.getBoundingClientRect()
-      el.style.setProperty('--mx', `${e.clientX - r.left}px`)
-      el.style.setProperty('--my', `${e.clientY - r.top}px`)
+      const x = e.clientX - r.left, y = e.clientY - r.top
+      el.style.setProperty('--mx', `${x}px`)
+      el.style.setProperty('--my', `${y}px`)
+      // nearest edge + intensity (1 at the edge, fading to 0 ~60px inward)
+      const dTop = y, dBottom = r.height - y, dLeft = x, dRight = r.width - x
+      const min = Math.min(dTop, dBottom, dLeft, dRight)
+      el.dataset.edge = min === dTop ? 'top' : min === dBottom ? 'bottom' : min === dLeft ? 'left' : 'right'
+      el.style.setProperty('--ei', Math.max(0, 1 - min / 60).toFixed(2))
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => window.removeEventListener('pointermove', onMove)
@@ -569,21 +583,31 @@ export default function Dashboard() {
           --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
           /* Single tone scale — one source for every status color on the site. */
           --good: #8AB84A; --neutral: #C7C24E; --warn: #D88B2F; --bad: #EF6B5E; --crisis: #E24B4A;
-          --lantern-r: 75px; --lantern-a: 0.06;
+          --glow-c: 255,193,122; --glow-core: 0.5; --glow-r: 42px;
         }
         html, body { background: var(--bg); color: var(--text-primary); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
 
-        /* Lantern — a soft pool of warm light follows the cursor across the
-           graphite surfaces. A single pointermove listener tags whichever
-           surface the cursor is over with .lantern and sets --mx/--my; the glow
-           sits behind content (z-index:-1 in the card's own stacking context). */
+        /* Cursor glow — a small golden "pierce" of light brightest under the
+           cursor, plus a brief golden flare on the card's nearest edge. The
+           pointermove listener tags the grey card under the cursor with .lantern
+           and sets --mx/--my (cursor), data-edge (nearest side) and --ei (edge
+           intensity). Both layers sit behind content (z-index:-1), grey cards only. */
         .lantern { position: relative; isolation: isolate; }
+        .lantern::before, .lantern::after {
+          content: ''; position: absolute; inset: 0; border-radius: inherit;
+          pointer-events: none; z-index: -1; opacity: 0;
+        }
         .lantern::before {
-          content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
-          opacity: 0; transition: opacity 0.45s ease;
-          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255,239,214, var(--lantern-a)), transparent var(--lantern-r));
+          transition: opacity 0.25s ease;
+          background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(var(--glow-c), var(--glow-core)), transparent var(--glow-r));
         }
         .lantern:hover::before { opacity: 1; }
+        .lantern::after { transition: opacity 0.5s ease-out; }
+        .lantern:hover::after { opacity: var(--ei, 0); }
+        .lantern[data-edge="top"]::after { background: linear-gradient(to bottom, rgba(var(--glow-c), 0.5), transparent 32%); }
+        .lantern[data-edge="bottom"]::after { background: linear-gradient(to top, rgba(var(--glow-c), 0.5), transparent 32%); }
+        .lantern[data-edge="left"]::after { background: linear-gradient(to right, rgba(var(--glow-c), 0.5), transparent 32%); }
+        .lantern[data-edge="right"]::after { background: linear-gradient(to left, rgba(var(--glow-c), 0.5), transparent 32%); }
         .page { width: 100%; max-width: none; margin: 0; padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem; }
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
@@ -709,7 +733,7 @@ export default function Dashboard() {
       )}
 
       <div className="page">
-        {tuner && <LanternTuner />}
+        {tuner && <GlowTuner />}
         <div className="topbar">
           <div className="topbar-left">
             <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
