@@ -5,6 +5,7 @@
 //   Status → Summary → What Investors Are Doing → Risk/Stabilizer →
 //   Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -34,7 +35,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Markets({ initialData = null }: { initialData?: MarketsResponse | null }) {
   const [mk, setMk] = useState<MarketsResponse | null>(initialData)
@@ -68,7 +68,7 @@ export default function Markets({ initialData = null }: { initialData?: MarketsR
       <div>
         <div className="mk-hero mk-unavail">
           <div className="mk-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="mk-badge-emoji">⚪</span> Data Unavailable
+            <span className="mk-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="mk-summary">{mk.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -92,7 +92,7 @@ export default function Markets({ initialData = null }: { initialData?: MarketsR
           <>
             <div className="mk-eyebrow">What level of risk are investors willing to take?</div>
             <div className="mk-badge" style={{ color: TONE_COLORS[mk.status.tone] }}>
-              <span className="mk-badge-emoji">{mk.status.emoji}</span> {mk.status.label}
+              <span className="mk-badge-emoji"><Icon name="activity" size={22} /></span> {mk.status.label}
             </div>
             {mk.subtitle && <div className="mk-subtitle">{mk.subtitle}</div>}
             <p className="mk-summary">{mk.summary}</p>
@@ -105,7 +105,7 @@ export default function Markets({ initialData = null }: { initialData?: MarketsR
         <div className="mk-doing" style={{ borderColor: TONE_COLORS[mk.doing.tone], background: TONE_BG[mk.doing.tone] }}>
           <span className="mk-doing-label">What investors are doing</span>
           <span className="mk-doing-text" style={{ color: TONE_COLORS[mk.doing.tone] }}>
-            {TONE_DOT[mk.doing.tone]} {mk.doing.text}
+            <Icon name={STATUS_ICON[mk.doing.tone]} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4 }} />{mk.doing.text}
           </span>
         </div>
       )}
@@ -149,7 +149,7 @@ export default function Markets({ initialData = null }: { initialData?: MarketsR
                 {cat.label}<span className="mk-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="mk-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                {TONE_DOT[cat.tone]} {cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
               </span>
             </div>
             <div className="mk-driver-bar">
@@ -202,7 +202,7 @@ export default function Markets({ initialData = null }: { initialData?: MarketsR
       {(mk?.watching || []).map(w => (
         <div className="mk-watch" key={w.label}>
           <div className="mk-watch-head">
-            <span className="mk-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="mk-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="mk-watch-text">{w.text}</span>
           </div>
           <div className="mk-watch-bar">

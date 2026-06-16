@@ -3,6 +3,7 @@
 // detail — same look/feel as the site's indicator cards: chrome, a large mono
 // value, a sparkline, and a click-to-expand inline history chart.
 import { useState } from 'react'
+import Icon from './Icon'
 
 export type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
 
@@ -136,7 +137,7 @@ export default function DriverMetricCard({ m }: { m: MetricCardData }) {
       )}
       {m.alertText && (
         <div className="dc-alert" style={{ color: (m.alertProximity ?? 0) > 0.85 ? 'var(--bad)' : (m.alertProximity ?? 0) > 0.6 ? 'var(--warn)' : 'var(--text-muted)' }}>
-          {(m.alertProximity ?? 0) > 0.7 ? '🔥' : '⚠️'} {m.alertText}
+          <Icon name={(m.alertProximity ?? 0) > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4 }} />{m.alertText}
         </div>
       )}
 

@@ -4,6 +4,7 @@
 //   Status → Summary → Workers Are Experiencing → Risk/Stabilizer →
 //   Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -33,7 +34,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Labor({ initialData = null }: { initialData?: LaborResponse | null }) {
   const [lb, setLb] = useState<LaborResponse | null>(initialData)
@@ -67,7 +67,7 @@ export default function Labor({ initialData = null }: { initialData?: LaborRespo
       <div>
         <div className="lb-hero lb-unavail">
           <div className="lb-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="lb-badge-emoji">⚪</span> Data Unavailable
+            <span className="lb-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="lb-summary">{lb.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -91,7 +91,7 @@ export default function Labor({ initialData = null }: { initialData?: LaborRespo
           <>
             <div className="lb-eyebrow">Is the job market strengthening or weakening?</div>
             <div className="lb-badge" style={{ color: TONE_COLORS[lb.status.tone] }}>
-              <span className="lb-badge-emoji">{lb.status.emoji}</span> {lb.status.label}
+              <span className="lb-badge-emoji"><Icon name="briefcase" size={22} /></span> {lb.status.label}
             </div>
             {lb.subtitle && <div className="lb-subtitle">{lb.subtitle}</div>}
             <p className="lb-summary">{lb.summary}</p>
@@ -104,7 +104,7 @@ export default function Labor({ initialData = null }: { initialData?: LaborRespo
         <div className="lb-exp" style={{ borderColor: TONE_COLORS[lb.experience.tone], background: TONE_BG[lb.experience.tone] }}>
           <span className="lb-exp-label">Workers are experiencing</span>
           <span className="lb-exp-text" style={{ color: TONE_COLORS[lb.experience.tone] }}>
-            {TONE_DOT[lb.experience.tone]} {lb.experience.text}
+            <Icon name={STATUS_ICON[lb.experience.tone]} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4 }} />{lb.experience.text}
           </span>
         </div>
       )}
@@ -148,7 +148,7 @@ export default function Labor({ initialData = null }: { initialData?: LaborRespo
                 {cat.label}<span className="lb-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="lb-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                {TONE_DOT[cat.tone]} {cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
               </span>
             </div>
             <div className="lb-driver-bar">
@@ -201,7 +201,7 @@ export default function Labor({ initialData = null }: { initialData?: LaborRespo
       {(lb?.watching || []).map(w => (
         <div className="lb-watch" key={w.label}>
           <div className="lb-watch-head">
-            <span className="lb-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="lb-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="lb-watch-text">{w.text}</span>
           </div>
           <div className="lb-watch-bar">

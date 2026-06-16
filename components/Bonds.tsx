@@ -3,6 +3,7 @@
 // trading terminal. Answers "what are bond investors telling us?" via:
 //   Status → Summary → Biggest Risk/Stabilizer → Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -31,7 +32,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Bonds({ initialData = null }: { initialData?: BondResponse | null }) {
   const [b, setB] = useState<BondResponse | null>(initialData)
@@ -67,7 +67,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
       <div>
         <div className="bn-hero bn-unavail">
           <div className="bn-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="bn-badge-emoji">⚪</span> Data Unavailable
+            <span className="bn-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="bn-summary">{b.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -91,7 +91,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
           <>
             <div className="bn-eyebrow">What are bond investors signalling?</div>
             <div className="bn-badge" style={{ color: TONE_COLORS[b.status.tone] }}>
-              <span className="bn-badge-emoji">{b.status.emoji}</span> {b.status.label}
+              <span className="bn-badge-emoji"><Icon name="chart-line" size={22} /></span> {b.status.label}
             </div>
             {b.subtitle && <div className="bn-subtitle">{b.subtitle}</div>}
             <p className="bn-summary">{b.summary}</p>
@@ -138,7 +138,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                 {c.label}<span className="bn-driver-caret">{openCat === c.key ? '▾' : '▸'}</span>
               </span>
               <span className="bn-badge-pill" style={{ color: TONE_COLORS[c.tone], background: TONE_BG[c.tone] }}>
-                {TONE_DOT[c.tone]} {c.status}
+                <Icon name={STATUS_ICON[c.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{c.status}
               </span>
             </div>
             <div className="bn-driver-bar">
@@ -191,7 +191,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
       {(b?.watching || []).map(w => (
         <div className="bn-watch" key={w.label}>
           <div className="bn-watch-head">
-            <span className="bn-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="bn-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="bn-watch-text">{w.text}</span>
           </div>
           <div className="bn-watch-bar">

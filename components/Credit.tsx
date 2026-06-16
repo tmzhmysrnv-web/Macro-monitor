@@ -3,6 +3,7 @@
 // Answers "are lenders becoming more fearful?" via:
 //   Status → Summary → Biggest Risk/Stabilizer → Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -31,7 +32,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Credit({ initialData = null }: { initialData?: CreditResponse | null }) {
   const [c, setC] = useState<CreditResponse | null>(initialData)
@@ -65,7 +65,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
       <div>
         <div className="cr-hero cr-unavail">
           <div className="cr-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="cr-badge-emoji">⚪</span> Data Unavailable
+            <span className="cr-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="cr-summary">{c.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -89,7 +89,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
           <>
             <div className="cr-eyebrow">Are lenders becoming more fearful?</div>
             <div className="cr-badge" style={{ color: TONE_COLORS[c.status.tone] }}>
-              <span className="cr-badge-emoji">{c.status.emoji}</span> {c.status.label}
+              <span className="cr-badge-emoji"><Icon name="bank" size={22} /></span> {c.status.label}
             </div>
             {c.subtitle && <div className="cr-subtitle">{c.subtitle}</div>}
             <p className="cr-summary">{c.summary}</p>
@@ -136,7 +136,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
                 {cat.label}<span className="cr-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="cr-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                {TONE_DOT[cat.tone]} {cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
               </span>
             </div>
             <div className="cr-driver-bar">
@@ -189,7 +189,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
       {(c?.watching || []).map(w => (
         <div className="cr-watch" key={w.label}>
           <div className="cr-watch-head">
-            <span className="cr-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="cr-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="cr-watch-text">{w.text}</span>
           </div>
           <div className="cr-watch-bar">

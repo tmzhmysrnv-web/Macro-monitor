@@ -4,6 +4,7 @@
 //   Status → Summary → What The World Is Experiencing → Risk/Stabilizer →
 //   Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -33,7 +34,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Global({ initialData = null }: { initialData?: GlobalResponse | null }) {
   const [gl, setGl] = useState<GlobalResponse | null>(initialData)
@@ -67,7 +67,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
       <div>
         <div className="gl-hero gl-unavail">
           <div className="gl-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="gl-badge-emoji">⚪</span> Data Unavailable
+            <span className="gl-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="gl-summary">{gl.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -91,7 +91,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
           <>
             <div className="gl-eyebrow">Are global forces creating new risks for the economy?</div>
             <div className="gl-badge" style={{ color: TONE_COLORS[gl.status.tone] }}>
-              <span className="gl-badge-emoji">{gl.status.emoji}</span> {gl.status.label}
+              <span className="gl-badge-emoji"><Icon name="globe" size={22} /></span> {gl.status.label}
             </div>
             {gl.subtitle && <div className="gl-subtitle">{gl.subtitle}</div>}
             <p className="gl-summary">{gl.summary}</p>
@@ -104,7 +104,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
         <div className="gl-exp" style={{ borderColor: TONE_COLORS[gl.experiencing.tone], background: TONE_BG[gl.experiencing.tone] }}>
           <span className="gl-exp-label">What the world is experiencing</span>
           <span className="gl-exp-text" style={{ color: TONE_COLORS[gl.experiencing.tone] }}>
-            {TONE_DOT[gl.experiencing.tone]} {gl.experiencing.text}
+            <Icon name={STATUS_ICON[gl.experiencing.tone]} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4 }} />{gl.experiencing.text}
           </span>
         </div>
       )}
@@ -148,7 +148,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
                 {cat.label}<span className="gl-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="gl-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                {TONE_DOT[cat.tone]} {cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
               </span>
             </div>
             <div className="gl-driver-bar">
@@ -201,7 +201,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
       {(gl?.watching || []).map(w => (
         <div className="gl-watch" key={w.label}>
           <div className="gl-watch-head">
-            <span className="gl-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="gl-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="gl-watch-text">{w.text}</span>
           </div>
           <div className="gl-watch-bar">

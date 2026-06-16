@@ -3,6 +3,7 @@
 // dashboard. Answers "is inflation getting better or worse?" via:
 //   Status → Summary → Biggest Risk/Stabilizer → Key Drivers → Recent Alerts → Watching
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -31,7 +32,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '🟡', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Inflation({ initialData = null }: { initialData?: InflationResponse | null }) {
   const [inf, setInf] = useState<InflationResponse | null>(initialData)
@@ -65,7 +65,7 @@ export default function Inflation({ initialData = null }: { initialData?: Inflat
       <div>
         <div className="inf-hero inf-unavail">
           <div className="inf-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="inf-badge-emoji">⚪</span> Data Unavailable
+            <span className="inf-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="inf-summary">{inf.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -89,7 +89,7 @@ export default function Inflation({ initialData = null }: { initialData?: Inflat
           <>
             <div className="inf-eyebrow">Is inflation getting better or worse?</div>
             <div className="inf-badge" style={{ color: TONE_COLORS[inf.status.tone] }}>
-              <span className="inf-badge-emoji">{inf.status.emoji}</span> {inf.status.label}
+              <span className="inf-badge-emoji"><Icon name="flame" size={22} /></span> {inf.status.label}
             </div>
             {inf.subtitle && <div className="inf-subtitle">{inf.subtitle}</div>}
             <p className="inf-summary">{inf.summary}</p>
@@ -136,7 +136,7 @@ export default function Inflation({ initialData = null }: { initialData?: Inflat
                 {cat.label}<span className="inf-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="inf-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                {TONE_DOT[cat.tone]} {cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
               </span>
             </div>
             <div className="inf-driver-bar">
@@ -189,7 +189,7 @@ export default function Inflation({ initialData = null }: { initialData?: Inflat
       {(inf?.watching || []).map(w => (
         <div className="inf-watch" key={w.label}>
           <div className="inf-watch-head">
-            <span className="inf-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="inf-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="inf-watch-text">{w.text}</span>
           </div>
           <div className="inf-watch-bar">

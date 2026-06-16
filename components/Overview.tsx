@@ -3,6 +3,7 @@
 // Order answers the page's question fastest: Alerts → Break Meter → Recent
 // Breaks → Watching → Drivers → What Changed → Today's Situation.
 import { useEffect, useState } from 'react'
+import Icon, { TAB_ICON, KEY_ICON } from './Icon'
 import type { MacroData } from '../lib/fetchData'
 import trendSnapshot from '../data/trendSnapshot.json'
 
@@ -325,7 +326,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
               tabIndex={onViewCard ? 0 : undefined}
               onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
             >
-              <span className="rb-dot" style={{ background: 'var(--bad)' }} />
+              <span className="rb-ic" style={{ color: 'var(--bad)' }}><Icon name={KEY_ICON[e.key] || 'alert-circle'} size={15} /></span>
               <div className="rb-main">
                 <div className="rb-top">
                   <span className="rb-text">{e.text}</span>
@@ -351,7 +352,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
               tabIndex={onViewCard ? 0 : undefined}
               onKeyDown={onViewCard ? (ev) => { if (ev.key === 'Enter') onViewCard(e.key, RB_LABEL[e.key] ?? e.key) } : undefined}
             >
-              <span className="rb-dot" style={{ background: 'var(--good)' }} />
+              <span className="rb-ic" style={{ color: 'var(--good)' }}><Icon name={KEY_ICON[e.key] || 'circle-check'} size={15} /></span>
               <div className="rb-main">
                 <div className="rb-top">
                   <span className="rb-text">{e.text}</span>
@@ -445,7 +446,9 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
               tabIndex={nav ? 0 : undefined}
               onKeyDown={nav ? (ev) => { if (ev.key === 'Enter') nav() } : undefined}
             >
-              <span className="wc-icon">{w.heat === 'hot' ? '🔥' : '⚠️'}</span>
+              <span className="wc-icon" style={{ color: w.heat === 'hot' ? 'var(--bad)' : 'var(--warn)' }}>
+                <Icon name={(w.category && TAB_ICON[w.category.tab]) || (w.heat === 'hot' ? 'flame' : 'alert-triangle')} size={15} />
+              </span>
               <div className="wc-main">
                 <div className="wc-top">
                   <span className="wc-label">{w.label}</span>
@@ -504,7 +507,7 @@ const ovStyles = `
   .bm-scale-label { font-size: 11px; color: var(--text-secondary); }
   .bm-scale-row.is-active .bm-scale-label { color: var(--text-primary); font-weight: 500; }
   /* The trend is context, not a focal point — keep it modest, not full-bleed */
-  .bm-trend { flex: 1 1 320px; min-width: 240px; max-width: 460px; }
+  .bm-trend { flex: 1 1 320px; min-width: 240px; }
 
   .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
   @media (max-width: 640px) { .panels { grid-template-columns: 1fr; } .bm-hero { justify-content: center; } }
@@ -516,7 +519,7 @@ const ovStyles = `
   .rb-row:last-child { border-bottom: none; padding-bottom: 0; }
   .rb-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
   .rb-row.is-click:hover { background: var(--border); }
-  .rb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .rb-ic { flex-shrink: 0; display: flex; align-items: center; margin-top: 1px; }
   .rb-main { flex: 1; min-width: 0; }
   .rb-top { display: flex; align-items: baseline; gap: 9px; }
   .rb-text { font-size: 13px; color: var(--text-primary); flex: 1; }
@@ -529,7 +532,7 @@ const ovStyles = `
   .wc-row:last-child { border-bottom: none; padding-bottom: 0; }
   .wc-row.is-click { cursor: pointer; margin: 0 -6px; padding: 8px 6px; border-radius: 6px; transition: background 0.12s; }
   .wc-row.is-click:hover { background: var(--border); }
-  .wc-icon { font-size: 13px; flex-shrink: 0; width: 18px; text-align: center; margin-top: 1px; }
+  .wc-icon { flex-shrink: 0; width: 18px; display: flex; justify-content: center; margin-top: 1px; }
   .wc-main { flex: 1; min-width: 0; }
   .wc-top { display: flex; align-items: baseline; gap: 9px; }
   .wc-label { font-size: 13px; color: var(--text-primary); flex: 1; }

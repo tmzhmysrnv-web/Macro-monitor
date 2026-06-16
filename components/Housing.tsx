@@ -4,6 +4,7 @@
 //   2. Why?                  → short summary + biggest risk / stabilizer + key drivers
 //   3. What to watch next?   → recent alerts + watching-closely thresholds
 import { useEffect, useState } from 'react'
+import Icon, { STATUS_ICON } from './Icon'
 import DriverMetricCard, { type MetricCardData } from './DriverMetricCard'
 
 type Tone = 'good' | 'neutral' | 'warn' | 'bad' | 'crisis'
@@ -32,7 +33,6 @@ const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(150,150,150,0.14)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
-const TONE_DOT: Record<Tone, string> = { good: '🟢', neutral: '⚪', warn: '🟠', bad: '🔴', crisis: '🚨' }
 
 export default function Housing({ initialData = null }: { initialData?: HousingResponse | null }) {
   const [h, setH] = useState<HousingResponse | null>(initialData)
@@ -69,7 +69,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
       <div>
         <div className="hs-hero hs-unavail">
           <div className="hs-badge" style={{ color: 'var(--text-muted)' }}>
-            <span className="hs-badge-emoji">⚪</span> Data Unavailable
+            <span className="hs-badge-emoji"><Icon name="circle" size={20} /></span> Data Unavailable
           </div>
           <p className="hs-summary">{h.subtitle} The data source is rate-limited or briefly down — refresh in a minute.</p>
         </div>
@@ -92,7 +92,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
         ) : (
           <>
             <div className="hs-badge" style={{ color: TONE_COLORS[h.status.tone] }}>
-              <span className="hs-badge-emoji">{h.status.emoji}</span> {h.status.label}
+              <span className="hs-badge-emoji"><Icon name="home" size={22} /></span> {h.status.label}
             </div>
             {h.subtitle && <div className="hs-subtitle">{h.subtitle}</div>}
             <p className="hs-summary">{h.summary}</p>
@@ -142,7 +142,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
                 className="hs-badge-pill"
                 style={{ color: TONE_COLORS[c.tone], background: TONE_BG[c.tone] }}
               >
-                {TONE_DOT[c.tone]} {c.status}
+                <Icon name={STATUS_ICON[c.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{c.status}
               </span>
             </div>
             <div className="hs-driver-bar">
@@ -195,7 +195,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
       {(h?.watching || []).map(w => (
         <div className="hs-watch" key={w.label}>
           <div className="hs-watch-head">
-            <span className="hs-watch-label">{w.proximity > 0.7 ? '🔥' : '⚠️'} {w.label}</span>
+            <span className="hs-watch-label"><Icon name={w.proximity > 0.7 ? 'flame' : 'alert-triangle'} size={13} style={{ display: 'inline-block', verticalAlign: -2, marginRight: 4, color: w.proximity > 0.7 ? 'var(--bad)' : 'var(--warn)' }} />{w.label}</span>
             <span className="hs-watch-text">{w.text}</span>
           </div>
           <div className="hs-watch-bar">
