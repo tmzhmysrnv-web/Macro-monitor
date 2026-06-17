@@ -216,6 +216,7 @@ export type FedPolicyData = {
   lastChangeDate: string | null
   daysSinceChange: number | null
   latestMeetingResult: string           // "No Change" | "+0.25%" | "−0.25%"
+  latestMeetingDate: string | null      // date of that most-recent meeting (so a hold still registers)
   fresh: boolean                        // moved within the last few days → breaking-news state
   history: { date: string; value: number }[]  // rate path, for the banner context line
 }
@@ -230,7 +231,7 @@ function buildFedPolicy(obs: Obs[], announcement?: FedDecisionStore | null): Fed
 // once FRED catches up the override naturally stops and we use the real series.
 function applyAnnouncement(base: FedPolicyData, a: FedDecisionStore | null | undefined, obs: Obs[]): FedPolicyData {
   if (!a || a.date <= (obs[0]?.date ?? '')) return base
-  if (a.direction === 'hold') return { ...base, currentRate: a.upper, latestMeetingResult: 'No Change' }
+  if (a.direction === 'hold') return { ...base, currentRate: a.upper, latestMeetingResult: 'No Change', latestMeetingDate: a.date }
   const prevUpper = base.currentRate ?? a.upper
   const amount = parseFloat((a.upper - prevUpper).toFixed(2))
   const daysSinceChange = Math.round((Date.now() - new Date(a.date + 'T00:00:00').getTime()) / 86400000)
@@ -238,6 +239,7 @@ function applyAnnouncement(base: FedPolicyData, a: FedDecisionStore | null | und
     ...base, currentRate: a.upper, lastChangeAmount: amount, lastChangeDirection: a.direction,
     lastChangeDate: a.date, daysSinceChange,
     latestMeetingResult: `${amount > 0 ? '+' : '−'}${Math.abs(amount).toFixed(2)}%`,
+    latestMeetingDate: a.date,
     fresh: daysSinceChange <= 5,
   }
 }
@@ -260,7 +262,8 @@ function computeFedPolicyFromObs(obs: Obs[]): FedPolicyData {
   const history = spark(obs, 80) ?? []   // oldest→newest target-rate path (~10y)
   const none: FedPolicyData = {
     currentRate: obs[0]?.value ?? null, lastChangeAmount: 0, lastChangeDirection: 'none',
-    lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change', fresh: false, history,
+    lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change',
+    latestMeetingDate: lastFomc?.date ?? null, fresh: false, history,
   }
   if (obs.length < 2) return none
 
@@ -286,6 +289,7 @@ function computeFedPolicyFromObs(obs: Obs[]): FedPolicyData {
     lastChangeDate: changeDate,
     daysSinceChange,
     latestMeetingResult: movedAtLastMeeting ? signed : 'No Change',
+    latestMeetingDate: lastFomc?.date ?? null,
     fresh: daysSinceChange <= 5,
     history,
   }

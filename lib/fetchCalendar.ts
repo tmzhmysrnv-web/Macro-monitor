@@ -7,7 +7,8 @@
 export type EconomicEvent = {
   name: string
   date: string        // ISO date string
-  daysUntil: number   // negative = in the past
+  daysUntil: number   // negative = in the past (calendar-day granularity, for display)
+  released: boolean   // has the release time actually passed? (FOMC posts 2pm ET)
   importance: 'high' | 'medium'
   description: string
   metricKey?: string  // indicator this release moves (for the "outcome" + chart)
@@ -66,11 +67,17 @@ const SCHEDULE: Sched[] = [
 
 function buildEvents(minDays: number, maxDays: number): EconomicEvent[] {
   const now = new Date()
+  // "Now" in ET wall-clock (DST-aware) so `released` flips at the true release
+  // time regardless of the server's timezone: FOMC posts 2pm ET, the rest ~8:30am.
+  const nowET = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
   return SCHEDULE
     .map(e => {
       const eventDate = new Date(e.date + 'T08:30:00-05:00')
       const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      return { ...e, daysUntil, metricKey: METRIC_BY_EVENT[e.name] }
+      const relAt = new Date(e.date + 'T00:00:00')
+      if (e.name === 'FOMC Decision') relAt.setHours(14, 0, 0, 0); else relAt.setHours(8, 30, 0, 0)
+      const released = nowET.getTime() >= relAt.getTime()
+      return { ...e, daysUntil, released, metricKey: METRIC_BY_EVENT[e.name] }
     })
     .filter(e => e.daysUntil >= minDays && e.daysUntil <= maxDays)
     .sort((a, b) => a.daysUntil - b.daysUntil)

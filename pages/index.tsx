@@ -348,7 +348,7 @@ export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; description: string; metricKey?: string }>>([])
+  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; released?: boolean; description: string; metricKey?: string }>>([])
   // Prefetched Bonds/Housing/Credit payloads so switching to those tabs is instant.
   const [bondsData, setBondsData] = useState<any>(null)
   const [housingData, setHousingData] = useState<any>(null)
@@ -778,8 +778,9 @@ export default function Dashboard() {
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {
-              const past = events.filter(e => e.daysUntil < 0).sort((a, b) => b.daysUntil - a.daysUntil)
-              const upcoming = events.filter(e => e.daysUntil >= 0)
+              const isReleased = (e: { released?: boolean; daysUntil: number }) => e.released ?? e.daysUntil < 0
+              const past = events.filter(isReleased).sort((a, b) => b.daysUntil - a.daysUntil)
+              const upcoming = events.filter(e => !isReleased(e))
               return (
                 <div className="cal">
                   <div className="cal-col">

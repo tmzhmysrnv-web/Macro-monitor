@@ -17,7 +17,7 @@ type Alert = { key: string; label: string; message: string }
 type WatchItem = { key: string; label: string; text: string; heat: 'hot' | 'near'; why: string; category: { tab: string; label: string } | null }
 type BreakEvent = { key: string; text: string; why: string; tone: 'bad' | 'good'; date: string; daysAgo: number }
 type Briefing = { headline: string; concern: { label: string; detail: string; tab: string } | null; stabilizer: { label: string; detail: string; tab: string } | null }
-type EventItem = { name: string; date: string; daysUntil: number; description: string; metricKey?: string }
+type EventItem = { name: string; date: string; daysUntil: number; released?: boolean; description: string; metricKey?: string }
 type BreakMeter = {
   available: boolean
   total: number; level: string; verdict: string
@@ -188,12 +188,14 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
   const color = sev.color
   const dataReady = data != null
   const primaryRisks = (bm?.drivers ?? []).filter(d => d.stress >= 25).slice(0, 2).map(d => d.label)
-  // Watch next = the soonest event still ahead of us (today counts). Once a date
-  // passes it drops out and the next one takes the slot.
-  const nextEvent = events.filter(e => e.daysUntil >= 0).sort((a, b) => a.daysUntil - b.daysUntil)[0] ?? null
-  // Latest release = the most recently passed event; carries its result + a
+  // Watch next = the soonest event whose release time hasn't passed yet. The
+  // moment it's released (e.g. a 2pm FOMC decision) it drops out and the next
+  // event takes the slot — same-day, not when the calendar date rolls over.
+  const isReleased = (e: EventItem) => e.released ?? e.daysUntil < 0
+  const nextEvent = events.filter(e => !isReleased(e)).sort((a, b) => a.daysUntil - b.daysUntil)[0] ?? null
+  // Latest release = the most recently released event; carries its result + a
   // "new" badge for the first day after it lands.
-  const lastRelease = events.filter(e => e.daysUntil < 0).sort((a, b) => b.daysUntil - a.daysUntil)[0] ?? null
+  const lastRelease = events.filter(isReleased).sort((a, b) => b.daysUntil - a.daysUntil)[0] ?? null
   // Split the recent-event feed by tone: red breaks vs. green "recently cleared".
   const breaks = (bm?.recentBreaks ?? []).filter(e => e.tone === 'bad')
   const cleared = (bm?.recentBreaks ?? []).filter(e => e.tone === 'good')

@@ -18,6 +18,7 @@ type FedPolicy = {
   lastChangeDate: string | null
   daysSinceChange: number | null
   latestMeetingResult: string
+  latestMeetingDate?: string | null
   fresh: boolean
   history?: { date: string; value: number }[]
 }
@@ -282,7 +283,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                   </div>
                   <div className="fp-meta-item">
                     <span className="fp-k">Latest meeting</span>
-                    <span className="fp-v">{fp.latestMeetingResult}</span>
+                    <span className="fp-v">{fp.latestMeetingResult}{fp.latestMeetingDate ? ` · ${new Date(fp.latestMeetingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}</span>
                   </div>
                 </div>
               </>
