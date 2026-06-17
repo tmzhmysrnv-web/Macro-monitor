@@ -86,6 +86,19 @@ export function getUpcomingEvents(): EconomicEvent[] {
   return buildEvents(0, 30)
 }
 
+// Most recent FOMC meeting already in the past — for the Fed Policy banner's
+// "latest meeting" read (did they move, or hold?). Meetings announce ~2pm ET.
+export function getLastFomc(): { date: string; daysAgo: number } | null {
+  const now = Date.now()
+  const past = SCHEDULE
+    .filter(e => e.name === 'FOMC Decision')
+    .map(e => ({ date: e.date, t: new Date(e.date + 'T14:00:00-05:00').getTime() }))
+    .filter(e => e.t <= now)
+    .sort((a, b) => b.t - a.t)
+  if (!past.length) return null
+  return { date: past[0].date, daysAgo: Math.floor((now - past[0].t) / 86400000) }
+}
+
 export function getCalendarContext(): string {
   const events = getUpcomingEvents()
   if (events.length === 0) return 'No major economic releases in the next 30 days.'

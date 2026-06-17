@@ -30,6 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       alerts: model.alerts,
       lastAlert: model.lastAlert,
       watching: model.watching,
+      fedPolicy: model.fedPolicy,
       fetchedAt: new Date().toISOString(),
     })
   } catch (err) {

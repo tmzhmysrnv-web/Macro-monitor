@@ -16,6 +16,7 @@
 
 import { fredFetch } from './fred'
 import { toneHigh, toneLow } from './metricTone'
+import { getLastFomc } from './fetchCalendar'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -130,10 +131,12 @@ export type BondData = {
   fedFundsObs: Obs[]
   spread2_10Obs: Obs[]
   debtObs: Obs[]
+  targetUpper: number | null     // DFEDTARU — daily upper bound of the fed-funds target range
+  targetObs: Obs[]               // for clean policy-step detection (banner)
 }
 
 export async function fetchBondData(): Promise<BondData> {
-  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt, tp, foreign, totalDebt] = await Promise.all([
+  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt, tp, foreign, totalDebt, target] = await Promise.all([
     fredSeries('DGS10', 1300),    // ~5y daily — vol, trend, alert lookback, sparkline, percentile
     fredSeries('DGS30', 9000),    // long window for the multi-decade-high check
     fredSeries('DGS2', 1300),
@@ -146,6 +149,7 @@ export async function fetchBondData(): Promise<BondData> {
     fredSeries('THREEFYTP10', 1300), // 10Y ACM term premium (daily)
     fredSeries('FDHBFIN', 44),    // foreign-held federal debt ($B, quarterly)
     fredSeries('GFDEBTN', 60),    // total public debt ($M, quarterly) — for foreign share
+    fredSeries('DFEDTARU', 1300), // daily fed-funds target upper — steps exactly on decision day
   ])
 
   // Foreign share of total debt — date-aligned (FDHBFIN lags GFDEBTN by ~1 quarter).
@@ -187,6 +191,57 @@ export async function fetchBondData(): Promise<BondData> {
     fedFundsObs: ff,
     spread2_10Obs: t10y2y,
     debtObs: debt,
+    targetUpper: target[0]?.value ?? null,
+    targetObs: target,
+  }
+}
+
+// ── Fed Policy event (the banner) ─────────────────────────────────────
+// Rate decisions are events, not statistics. Detected from the DAILY target
+// upper bound, which steps cleanly on decision day (the monthly effective rate
+// lags by up to a month and smears the step). Pairs with the FOMC calendar to
+// say whether the latest meeting actually moved or held.
+export type FedPolicyData = {
+  currentRate: number | null
+  lastChangeAmount: number              // signed pp, e.g. +0.25 / −0.25 (0 if none found)
+  lastChangeDirection: 'hike' | 'cut' | 'none'
+  lastChangeDate: string | null
+  daysSinceChange: number | null
+  latestMeetingResult: string           // "No Change" | "+0.25%" | "−0.25%"
+  fresh: boolean                        // moved within the last few days → breaking-news state
+}
+
+function buildFedPolicy(obs: Obs[]): FedPolicyData {
+  const lastFomc = getLastFomc()
+  const none: FedPolicyData = {
+    currentRate: obs[0]?.value ?? null, lastChangeAmount: 0, lastChangeDirection: 'none',
+    lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change', fresh: false,
+  }
+  if (obs.length < 2) return none
+
+  // obs are newest-first; the first place the value differs from the prior day
+  // is the most recent step (a hike or a cut).
+  let i = 0
+  while (i + 1 < obs.length && obs[i].value === obs[i + 1].value) i++
+  if (i + 1 >= obs.length) return none
+
+  const amount = parseFloat((obs[i].value - obs[i + 1].value).toFixed(2))
+  if (amount === 0) return none
+  const changeDate = obs[i].date
+  const daysSinceChange = Math.round((Date.now() - new Date(changeDate + 'T00:00:00').getTime()) / 86400000)
+  // The latest meeting "moved" if its date lines up with this step (±5 days);
+  // otherwise the most recent decision was a hold.
+  const movedAtLastMeeting = lastFomc != null &&
+    Math.abs(new Date(changeDate).getTime() - new Date(lastFomc.date).getTime()) / 86400000 <= 5
+  const signed = `${amount > 0 ? '+' : '−'}${Math.abs(amount).toFixed(2)}%`
+  return {
+    currentRate: obs[0].value,
+    lastChangeAmount: amount,
+    lastChangeDirection: amount > 0 ? 'hike' : 'cut',
+    lastChangeDate: changeDate,
+    daysSinceChange,
+    latestMeetingResult: movedAtLastMeeting ? signed : 'No Change',
+    fresh: daysSinceChange <= 5,
   }
 }
 
@@ -238,49 +293,14 @@ function scoreGrowth(d: BondData): Omit<Category, 'fill'> {
   return { key: 'growth', label: 'Growth Expectations', status, tone, signals, metrics }
 }
 
-// Most recent Fed policy move from the monthly effective rate. A mid-month
-// decision smears across two monthly averages, so we measure each month against
-// ~2 months earlier to resolve a clean ≥1-notch (25bp) step; otherwise the rate
-// is "holding". Gives the Fed Funds card a hike/cut annotation + how long it's
-// held, alongside the historical percentile the other cards already show.
-function fedPolicyMove(obs: Obs[]): { sub: string; signal: string | null } {
-  if (obs.length < 4) return { sub: 'policy rate', signal: null }
-  const cur = obs[0].value
-  let moveIdx = -1, moveDelta = 0
-  for (let i = 0; i + 2 < obs.length; i++) {
-    const delta = obs[i].value - obs[i + 2].value
-    if (Math.abs(delta) >= 0.18) { moveIdx = i; moveDelta = delta; break }
-  }
-  // How many months the rate has been essentially unchanged (≤12bp drift).
-  let held = 0
-  for (let i = 1; i < obs.length; i++) { if (Math.abs(cur - obs[i].value) <= 0.12) held++; else break }
-  if (moveIdx < 0) {
-    return { sub: held >= 1 ? `held ${held}mo at ${fPct(cur)}` : 'policy rate',
-             signal: held >= 2 ? `Fed has held rates at ${fPct(cur)} for ${held} months` : null }
-  }
-  const hiked = moveDelta > 0
-  const bp = Math.round(Math.abs(moveDelta) * 100)
-  // The move completes ~1mo after the meeting; date it one month inside the span.
-  const when = new Date(obs[Math.min(moveIdx + 1, obs.length - 1)].date + 'T00:00:00')
-    .toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
-  return {
-    sub: `${hiked ? 'hiked' : 'cut'} ~${bp}bp · ${when}`,
-    signal: `Fed ${hiked ? 'raised' : 'cut'} rates to ${fPct(cur)} (${hiked ? '+' : '−'}${bp}bp, ${when})`,
-  }
-}
-
 // 2 ── Interest Rate Environment (how restrictive financing is) ────────
 function scoreRates(d: BondData): Omit<Category, 'fill'> {
   const signals: string[] = []
   const ry = d.realYield, ten = d.tenY
-  const fed = fedPolicyMove(d.fedFundsObs)
   if (ten != null) signals.push(`10Y Treasury at ${fPct(ten)}`)
   if (d.thirtY != null) signals.push(`30Y Treasury at ${fPct(d.thirtY)}`)
   if (ry != null) signals.push(`10Y real yield ${fPct(ry)} — ${ry >= 1.5 ? 'firmly positive and restrictive' : ry >= 0.5 ? 'positive' : 'low'}`)
-  if (d.fedFunds != null) {
-    signals.push(`Fed funds at ${fPct(d.fedFunds)}`)
-    if (fed.signal) signals.push(fed.signal)
-  }
+  if (d.fedFunds != null) signals.push(`Fed funds at ${fPct(d.fedFunds)}`)
 
   let status: string, tone: Tone
   if ((ry != null && ry >= 2.5) || (ten != null && ten >= 5.0)) { status = 'Restrictive Financing'; tone = 'bad' }
@@ -292,7 +312,7 @@ function scoreRates(d: BondData): Omit<Category, 'fill'> {
     { label: '10Y Treasury', value: fPct(ten), unit: '%', tone: toneHigh(ten, 5, 6), points: spark(d.tenYHistory), ...hist(d.tenYHistory), ...alertAbove(ten, 5) },
     { label: '30Y Treasury', value: fPct(d.thirtY), unit: '%', tone: toneHigh(d.thirtY, 6, 7), points: spark(d.thirtYObs), ...hist(d.thirtYObs), ...alertAbove(d.thirtY, 6) },
     { label: '10Y Real Yield', value: fPct(ry), unit: '%', tone: toneHigh(ry, 2.5, 3.5), points: spark(d.realYieldObs), ...hist(d.realYieldObs), sub: 'TIPS' },
-    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', sub: fed.sub, points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
+    { label: 'Fed Funds', value: fPct(d.fedFunds), unit: '%', points: spark(d.fedFundsObs), ...hist(d.fedFundsObs) },
   ]
   return { key: 'rates', label: 'Interest Rate Environment', status, tone, signals, metrics }
 }
@@ -611,6 +631,7 @@ export type BondModel = {
   alerts: BondAlert[]
   lastAlert: string | null
   watching: WatchItem[]
+  fedPolicy: FedPolicyData
   data: BondData
 }
 
@@ -645,7 +666,7 @@ export async function buildBondModel(): Promise<BondModel> {
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
       risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
-      categories: [], alerts: [], lastAlert: null, watching: [], data,
+      categories: [], alerts: [], lastAlert: null, watching: [], fedPolicy: buildFedPolicy(data.targetObs), data,
     }
   }
 
@@ -667,6 +688,6 @@ export async function buildBondModel(): Promise<BondModel> {
     risk, stabilizer,
     categories, alerts,
     lastAlert: buildLastAlert(data),
-    watching, data,
+    watching, fedPolicy: buildFedPolicy(data.targetObs), data,
   }
 }

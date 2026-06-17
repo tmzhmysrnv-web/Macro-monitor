@@ -11,6 +11,15 @@ type Category = { key: string; label: string; status: string; tone: Tone; fill: 
 type Alert = { id: string; title: string; what: string; why: string; affected: string[]; context: string }
 type WatchItem = { label: string; text: string; proximity: number }
 type Callout = { text: string; why: string; key: string }
+type FedPolicy = {
+  currentRate: number | null
+  lastChangeAmount: number
+  lastChangeDirection: 'hike' | 'cut' | 'none'
+  lastChangeDate: string | null
+  daysSinceChange: number | null
+  latestMeetingResult: string
+  fresh: boolean
+}
 type BondResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
@@ -22,6 +31,7 @@ type BondResponse = {
   alerts: Alert[]
   lastAlert: string | null
   watching: WatchItem[]
+  fedPolicy?: FedPolicy
   fetchedAt: string
 }
 
@@ -98,6 +108,57 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
           </>
         )}
       </div>
+
+      {/* ── 2b. Fed Policy banner — rate decisions as events, not a KPI card ── */}
+      {b && b.fedPolicy && b.fedPolicy.currentRate != null && (() => {
+        const fp = b.fedPolicy
+        const alert = fp.fresh && fp.lastChangeDirection !== 'none'
+        const hike = fp.lastChangeDirection === 'hike'
+        const state = alert ? (hike ? 'hike' : 'cut') : 'neutral'
+        const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`
+        const ago = fp.daysSinceChange
+        const agoText = ago == null ? '—' : ago <= 0 ? 'today' : ago === 1 ? 'yesterday' : `${ago} days ago`
+        return (
+          <div className={`fp-banner fp-${state}`}>
+            {alert ? (
+              <>
+                <div className="fp-left">
+                  <span className="fp-head">
+                    <span className="fp-dot" />
+                    <Icon name={hike ? 'alert-circle' : 'circle-check'} size={15} style={{ verticalAlign: -2.5, marginRight: 6 }} />
+                    Rate {hike ? 'hike' : 'cut'} detected
+                  </span>
+                  <span className="fp-big">{signed(fp.lastChangeAmount)}</span>
+                </div>
+                <div className="fp-right">
+                  <div className="fp-now">Federal funds rate now <strong>{fp.currentRate!.toFixed(2)}%</strong></div>
+                  <div className="fp-when">{agoText}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="fp-left">
+                  <span className="fp-head fp-head-neutral">
+                    <Icon name="bank" size={15} style={{ verticalAlign: -2.5, marginRight: 6 }} />
+                    Fed policy
+                  </span>
+                  <span className="fp-rate">Current rate <strong>{fp.currentRate!.toFixed(2)}%</strong></span>
+                </div>
+                <div className="fp-meta">
+                  <div className="fp-meta-item">
+                    <span className="fp-k">Last change</span>
+                    <span className="fp-v">{fp.lastChangeDirection === 'none' ? '—' : `${signed(fp.lastChangeAmount)} · ${agoText}`}</span>
+                  </div>
+                  <div className="fp-meta-item">
+                    <span className="fp-k">Latest meeting</span>
+                    <span className="fp-v">{fp.latestMeetingResult}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── 3. Biggest risk / biggest stabilizer (click → its driver) ── */}
       {b && (
@@ -221,6 +282,33 @@ function Styles() {
       .bn-badge-emoji { font-size: 24px; }
       .bn-subtitle { font-size: 13.5px; color: var(--text-primary); font-weight: 500; margin-bottom: 10px; }
       .bn-summary { font-size: 13px; line-height: 1.65; color: var(--text-secondary); margin: 0; max-width: 78ch; }
+
+      /* Fed Policy banner — event, not statistic. Higher prominence than cards. */
+      .fp-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; min-height: 76px; border-radius: 10px; padding: 14px 20px; margin-bottom: 14px; border: 0.5px solid var(--border); background: var(--card-bg); }
+      .fp-hike { border: 1px solid var(--crisis); border-left: 4px solid var(--crisis); background: var(--alert-bg); }
+      .fp-cut { border: 1px solid var(--good); border-left: 4px solid var(--good); background: var(--good-bg); }
+      .fp-left { display: flex; flex-direction: column; gap: 6px; }
+      .fp-head { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; font-family: var(--mono); display: inline-flex; align-items: center; }
+      .fp-hike .fp-head { color: var(--crisis); }
+      .fp-cut .fp-head { color: var(--good); }
+      .fp-head-neutral { color: var(--text-muted); }
+      .fp-big { font-size: 30px; font-weight: 600; font-family: var(--mono); line-height: 1; }
+      .fp-hike .fp-big { color: var(--crisis); }
+      .fp-cut .fp-big { color: var(--good); }
+      .fp-rate { font-size: 15px; color: var(--text-secondary); }
+      .fp-rate strong, .fp-now strong { color: var(--text-primary); font-weight: 600; font-family: var(--mono); }
+      .fp-right { text-align: right; }
+      .fp-now { font-size: 14px; color: var(--text-primary); }
+      .fp-when { font-size: 11px; color: var(--text-muted); font-family: var(--mono); margin-top: 4px; }
+      .fp-meta { display: flex; gap: 28px; }
+      .fp-meta-item { display: flex; flex-direction: column; gap: 3px; }
+      .fp-k { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
+      .fp-v { font-size: 13px; color: var(--text-primary); font-family: var(--mono); }
+      .fp-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 9px; flex-shrink: 0; animation: fppulse 1.5s ease-in-out infinite; }
+      .fp-hike .fp-dot { background: var(--crisis); }
+      .fp-cut .fp-dot { background: var(--good); }
+      @keyframes fppulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+      @media (max-width: 520px) { .fp-banner { flex-direction: column; align-items: flex-start; gap: 12px; } .fp-right, .fp-meta { text-align: left; } }
 
       .bn-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
       .bn-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
