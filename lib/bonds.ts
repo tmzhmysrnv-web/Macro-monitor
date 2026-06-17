@@ -17,6 +17,8 @@
 import { fredFetch } from './fred'
 import { toneHigh, toneLow } from './metricTone'
 import { getLastFomc, getNextFomc } from './fetchCalendar'
+import { getFedDecision, setFedDecision, type FedDecisionStore } from './redis'
+import { fetchFedAnnouncement } from './fedAnnouncement'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -218,7 +220,42 @@ export type FedPolicyData = {
   history: { date: string; value: number }[]  // rate path, for the banner context line
 }
 
-function buildFedPolicy(obs: Obs[]): FedPolicyData {
+function buildFedPolicy(obs: Obs[], announcement?: FedDecisionStore | null): FedPolicyData {
+  return applyAnnouncement(computeFedPolicyFromObs(obs), announcement, obs)
+}
+
+// Override the FRED-derived reading with a freshly announced decision the data
+// provider hasn't published yet — the 2pm FOMC statement vs DFEDTARU's ~1-day
+// lag. Only applies while the announcement is newer than FRED's latest point;
+// once FRED catches up the override naturally stops and we use the real series.
+function applyAnnouncement(base: FedPolicyData, a: FedDecisionStore | null | undefined, obs: Obs[]): FedPolicyData {
+  if (!a || a.date <= (obs[0]?.date ?? '')) return base
+  if (a.direction === 'hold') return { ...base, currentRate: a.upper, latestMeetingResult: 'No Change' }
+  const prevUpper = base.currentRate ?? a.upper
+  const amount = parseFloat((a.upper - prevUpper).toFixed(2))
+  const daysSinceChange = Math.round((Date.now() - new Date(a.date + 'T00:00:00').getTime()) / 86400000)
+  return {
+    ...base, currentRate: a.upper, lastChangeAmount: amount, lastChangeDirection: a.direction,
+    lastChangeDate: a.date, daysSinceChange,
+    latestMeetingResult: `${amount > 0 ? '+' : '−'}${Math.abs(amount).toFixed(2)}%`,
+    fresh: daysSinceChange <= 5,
+  }
+}
+
+// Latest decision for the override: the Redis store, refreshed live as a
+// backstop right after a meeting if the store hasn't caught up (so the first
+// visitor after 2pm triggers the parse even without a cron).
+async function resolveFedDecision(): Promise<FedDecisionStore | null> {
+  let a = await getFedDecision()
+  const last = getLastFomc()
+  if (last && last.daysAgo <= 1 && (!a || a.date < last.date)) {
+    const fresh = await fetchFedAnnouncement()
+    if (fresh) { a = fresh; await setFedDecision(fresh) }
+  }
+  return a
+}
+
+function computeFedPolicyFromObs(obs: Obs[]): FedPolicyData {
   const lastFomc = getLastFomc()
   const history = spark(obs, 80) ?? []   // oldest→newest target-rate path (~10y)
   const none: FedPolicyData = {
@@ -852,10 +889,11 @@ const SUBTITLES: Record<string, string> = {
 
 export async function buildBondModel(): Promise<BondModel> {
   const data = await fetchBondData()
+  const fedDecision = await resolveFedDecision()
 
   // Data-unavailable guard — the 10Y is the keystone series.
   if (data.tenY == null) {
-    const fp = buildFedPolicy(data.targetObs)
+    const fp = buildFedPolicy(data.targetObs, fedDecision)
     return {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
@@ -876,7 +914,7 @@ export async function buildBondModel(): Promise<BondModel> {
   const alerts = buildAlerts(data)
   const watching = buildWatching(data, alerts)
   const { risk, stabilizer } = riskAndStabilizer(categories, watching)
-  const fedPolicy = buildFedPolicy(data.targetObs)
+  const fedPolicy = buildFedPolicy(data.targetObs, fedDecision)
 
   // Activate the watch list only inside the post-decision window — so the extra
   // impact-series fetches happen for ~60 days after a move, not on every load.

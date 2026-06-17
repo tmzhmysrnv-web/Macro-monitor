@@ -117,6 +117,29 @@ export async function getFeed(limit = FEED_MAX): Promise<FeedItem[]> {
   return (await r.lrange<FeedItem>(FEED, 0, limit - 1)) ?? []
 }
 
+// ── Latest Fed decision (parsed from the FOMC statement) ──────────────
+// Lets the Fed Policy banner flip the moment the 2pm statement posts, before
+// FRED's DFEDTARU publishes the new target (which lags ~a day).
+const FED_DECISION = 'fed:lastDecision'
+export type FedDecisionStore = {
+  upper: number
+  lower: number
+  direction: 'hike' | 'cut' | 'hold'
+  date: string          // YYYY-MM-DD (decision day)
+  statementUrl: string
+  fetchedAt: number
+}
+
+export async function getFedDecision(): Promise<FedDecisionStore | null> {
+  const r = getRedis(); if (!r) return null
+  return (await r.get<FedDecisionStore>(FED_DECISION)) ?? null
+}
+
+export async function setFedDecision(d: FedDecisionStore): Promise<void> {
+  const r = getRedis(); if (!r) return
+  await r.set(FED_DECISION, d)
+}
+
 // ── Admin / testing maintenance ───────────────────────────────────────
 // Removes every subscriber (sub:*, tok:*, and the index set). Returns the count.
 export async function resetSubscribers(): Promise<number> {

@@ -18,7 +18,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildBondModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    // Short edge cache so a fresh FOMC decision (the 2pm statement override)
+    // surfaces within minutes rather than the prior hour-long window.
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
     res.status(200).json({
       available: model.available,
       status: model.status,
