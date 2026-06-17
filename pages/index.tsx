@@ -30,7 +30,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
     dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper, silver: data.silver,
-    mortgage30: data.mortgage30,
+    mortgage30: data.mortgage30, treasury2y: data.treasury2y, payrolls: data.payrolls, homePriceYoY: data.homePriceYoY,
   }
   return map[key] ?? null
 }
@@ -53,7 +53,9 @@ function formatValue(key: string, value: number | null): string {
   if (key === 'dxy') return value.toFixed(2)
   if (key === 'joblessClaims') return `${value.toFixed(0)}k`
   if (key === 'yieldCurve') return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
-  if (['treasury10y', 'fedfunds', 'cpi', 'hySpread', 'igSpread', 'mortgage30'].includes(key)) return `${value.toFixed(2)}%`
+  if (key === 'payrolls') return `${value > 0 ? '+' : ''}${Math.round(value)}k`
+  if (key === 'homePriceYoY') return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
+  if (['treasury10y', 'treasury2y', 'fedfunds', 'cpi', 'hySpread', 'igSpread', 'mortgage30'].includes(key)) return `${value.toFixed(2)}%`
   return value.toFixed(1)
 }
 
@@ -84,8 +86,8 @@ const STATUS_STYLES: Record<AlertStatus, { dot: string; value: string; border: s
 
 const SECTIONS = [
   { label: 'Volatility & Risk',    keys: ['vix', 'hySpread', 'igSpread'] },
-  { label: 'Rates & Housing',      keys: ['treasury10y', 'fedfunds', 'yieldCurve', 'mortgage30'] },
-  { label: 'Inflation & Labor',    keys: ['cpi', 'joblessClaims'] },
+  { label: 'Rates & Housing',      keys: ['treasury10y', 'treasury2y', 'fedfunds', 'yieldCurve', 'mortgage30', 'homePriceYoY'] },
+  { label: 'Inflation & Labor',    keys: ['cpi', 'joblessClaims', 'payrolls'] },
   { label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'silver', 'oil', 'copper'] },
   { label: 'Markets',              keys: ['sp500'] },
 ]

@@ -69,6 +69,15 @@ async function fetchJoblessHistory(years = 10, freq: Freq = 'd'): Promise<DataPo
   return raw.map(d => ({ date: d.date, value: parseFloat((d.value / 1000).toFixed(1)) }))
 }
 
+// Non-farm payrolls as the monthly job change (thousands) — PAYEMS is the level,
+// diff it month-over-month so the card charts the metric people actually watch.
+async function fetchPayrollsHistory(years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
+  const raw = await fetchFredHistory('PAYEMS', years + 1, freq)
+  const out: DataPoint[] = []
+  for (let i = 1; i < raw.length; i++) out.push({ date: raw[i].date, value: Math.round(raw[i].value - raw[i - 1].value) })
+  return out
+}
+
 async function fetchYieldCurveHistory(years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
   const [t10, t2] = await Promise.all([
     fetchFredHistory('DGS10', years, freq),
@@ -87,13 +96,15 @@ export type HistoryMap = Record<string, DataPoint[]>
 // full 10y daily series, but the Overview only needs ~1y for what-changed and
 // monthly points for the long-range trend.
 export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<HistoryMap> {
-  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY] =
+  const [vix, t10y, t2y, fedfunds, cpi, jobless, payrolls, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY] =
     await Promise.all([
       fetchYahooHistory('^VIX', years, freq),
       fetchFredHistory('DGS10', years, freq),
+      fetchFredHistory('DGS2', years, freq),
       fetchFredHistory('FEDFUNDS', years, freq),
       fetchFredYoYHistory('CPIAUCSL', years, freq),
       fetchJoblessHistory(years, freq),
+      fetchPayrollsHistory(years, freq),
       fetchYieldCurveHistory(years, freq),
       fetchFredHistory('BAMLH0A0HYM2', years, freq),
       fetchFredHistory('BAMLC0A0CM', years, freq),
@@ -107,5 +118,5 @@ export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<His
       fetchFredYoYHistory('CSUSHPINSA', years, freq),  // home-price YoY (crash signal for the Break Meter)
     ])
 
-  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY }
+  return { vix, treasury10y: t10y, treasury2y: t2y, fedfunds, cpi, joblessClaims: jobless, payrolls, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY }
 }
