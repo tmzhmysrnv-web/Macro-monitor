@@ -23,6 +23,9 @@ function parseRate(s: string): number | null {
   return parseFloat(v.toFixed(4))
 }
 
+// RSS values are wrapped in CDATA (e.g. <link><![CDATA[https://…]]></link>).
+const stripCdata = (s: string) => s.replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim()
+
 function dateFromUrl(url: string): string | null {
   const m = url.match(/monetary(\d{4})(\d{2})(\d{2})/)
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null
@@ -40,9 +43,9 @@ export async function fetchFedAnnouncement(): Promise<FedDecisionStore | null> {
     // Find the first item that is an FOMC statement; grab its link.
     let link: string | null = null
     for (const block of xml.split(/<item>/i).slice(1)) {
-      const title = block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? ''
+      const title = stripCdata(block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? '')
       if (/FOMC statement/i.test(title)) {
-        link = (block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ?? '').trim()
+        link = stripCdata(block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ?? '')
         break
       }
     }
