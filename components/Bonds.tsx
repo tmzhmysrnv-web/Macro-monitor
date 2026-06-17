@@ -48,19 +48,29 @@ const TONE_BG: Record<Tone, string> = {
 }
 
 // Step-line of the policy-rate path — context for the banner ("what it means").
-function RateSpark({ points }: { points: { date: string; value: number }[] }) {
+// Filled like the site's other charts (area gradient + current-point dot) so it
+// doesn't read as a flat, contextless line.
+function RateSpark({ points, tone }: { points: { date: string; value: number }[]; tone: string }) {
   if (!points || points.length < 2) return null
-  const W = 188, H = 40
+  const W = 210, H = 44, top = 4, bot = H - 4
   const vals = points.map(p => p.value)
   const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1
   const xs = points.map((_, i) => (i / (points.length - 1)) * W)
-  const ys = points.map(p => H - 4 - (p.value - min) / range * (H - 8))
-  let d = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`
-  for (let i = 1; i < points.length; i++) d += ` L ${xs[i].toFixed(1)} ${ys[i - 1].toFixed(1)} L ${xs[i].toFixed(1)} ${ys[i].toFixed(1)}`
+  const ys = points.map(p => bot - (p.value - min) / range * (bot - top))
+  let line = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`
+  for (let i = 1; i < points.length; i++) line += ` L ${xs[i].toFixed(1)} ${ys[i - 1].toFixed(1)} L ${xs[i].toFixed(1)} ${ys[i].toFixed(1)}`
+  const area = `${line} L ${xs[xs.length - 1].toFixed(1)} ${bot} L ${xs[0].toFixed(1)} ${bot} Z`
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }} aria-hidden="true">
-      <path d={d} fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.6" fill="var(--text-primary)" />
+      <defs>
+        <linearGradient id="fpgrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={tone} stopOpacity="0.2" />
+          <stop offset="100%" stopColor={tone} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#fpgrad)" stroke="none" />
+      <path d={line} fill="none" stroke={tone} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.8" fill="var(--text-primary)" stroke="var(--card-bg)" strokeWidth="1.5" />
     </svg>
   )
 }
@@ -169,6 +179,17 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
         const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`
         const ago = fp.daysSinceChange
         const agoText = ago == null ? '—' : ago <= 0 ? 'today' : ago === 1 ? 'yesterday' : `${ago} days ago`
+        const hist = fp.history && fp.history.length > 1 ? fp.history : null
+        const sparkTone = state === 'hike' ? 'var(--crisis)' : state === 'cut' ? 'var(--good)' : 'var(--text-secondary)'
+        const spark = hist ? (() => {
+          const v = hist.map(p => p.value)
+          return (
+            <div className="fp-spark">
+              <RateSpark points={hist} tone={sparkTone} />
+              <div className="fp-spark-cap">{Math.min(...v).toFixed(2)}–{Math.max(...v).toFixed(2)}% range · ~5y</div>
+            </div>
+          )
+        })() : null
         return (
           <div className={`fp-banner fp-${state}`}>
             {alert ? (
@@ -181,9 +202,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                   </span>
                   <span className="fp-big">{signed(fp.lastChangeAmount)}</span>
                 </div>
-                {fp.history && fp.history.length > 1 && (
-                  <div className="fp-spark"><RateSpark points={fp.history} /><div className="fp-spark-cap">rate path · ~5y</div></div>
-                )}
+                {spark}
                 <div className="fp-right">
                   <div className="fp-now">Federal funds rate now <strong>{fp.currentRate!.toFixed(2)}%</strong></div>
                   <div className="fp-when">{agoText}</div>
@@ -198,9 +217,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                   </span>
                   <span className="fp-rate">Current rate <strong>{fp.currentRate!.toFixed(2)}%</strong></span>
                 </div>
-                {fp.history && fp.history.length > 1 && (
-                  <div className="fp-spark"><RateSpark points={fp.history} /><div className="fp-spark-cap">rate path · ~5y</div></div>
-                )}
+                {spark}
                 <div className="fp-meta">
                   <div className="fp-meta-item">
                     <span className="fp-k">Last change</span>
@@ -259,7 +276,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                 {c.label}<span className="bn-driver-caret">{openCat === c.key ? '▾' : '▸'}</span>
               </span>
               <span className="bn-badge-pill" style={{ color: TONE_COLORS[c.tone], background: TONE_BG[c.tone] }}>
-                <Icon name={STATUS_ICON[c.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{c.status}
+                <Icon name={STATUS_ICON[c.tone]} size={13} style={{ flexShrink: 0 }} />{c.status}
               </span>
             </div>
             <div className="bn-driver-bar">
@@ -410,7 +427,7 @@ function Styles() {
       .bn-driver-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
       .bn-driver-label { font-size: 13px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 7px; }
       .bn-driver-caret { font-size: 9px; color: var(--text-muted); }
-      .bn-badge-pill { font-size: 11px; font-weight: 600; font-family: var(--mono); padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+      .bn-badge-pill { font-size: 12px; font-weight: 600; font-family: var(--mono); padding: 3px 11px; border-radius: 20px; white-space: nowrap; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
       .bn-driver-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 9px; }
       .bn-driver-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
       .bn-driver-detail { margin-top: 12px; }

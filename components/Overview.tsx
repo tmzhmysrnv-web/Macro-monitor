@@ -152,8 +152,8 @@ function BreakMeterTrend({ history, color, concernLabel }: { history: { date: st
         <text x={PAD.l + iw} y={toY(BREACH) - 3} textAnchor="end" fontSize="8" fill="var(--crisis)" fontFamily="monospace" opacity="0.75">breaking · {BREACH}</text>
         {breaches.map((b, i) => (
           <g key={i}>
-            <line x1={toX(b.idx)} y1={PAD.t} x2={toX(b.idx)} y2={PAD.t + ih} stroke="var(--crisis)" strokeWidth="0.75" strokeDasharray="2,2" opacity="0.6" />
-            <text x={toX(b.idx)} y={PAD.t + 8} textAnchor="middle" fontSize="8" fill="var(--crisis)" fontFamily="monospace">{b.label}</text>
+            <line x1={toX(b.idx)} y1={PAD.t} x2={toX(b.idx)} y2={PAD.t + ih} stroke="var(--text-muted)" strokeWidth="0.5" strokeDasharray="2,2" opacity="0.45" />
+            <text x={toX(b.idx)} y={PAD.t + 8} textAnchor="middle" fontSize="8" fill="var(--text-muted)" fontFamily="monospace">{b.label}</text>
           </g>
         ))}
         <polygon points={area} fill="url(#bmgrad)" />

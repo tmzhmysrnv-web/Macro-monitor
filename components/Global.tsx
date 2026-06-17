@@ -148,7 +148,7 @@ export default function Global({ initialData = null }: { initialData?: GlobalRes
                 {cat.label}<span className="gl-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="gl-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={13} style={{ flexShrink: 0 }} />{cat.status}
               </span>
             </div>
             <div className="gl-driver-bar">
@@ -255,7 +255,7 @@ function Styles() {
       .gl-driver-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
       .gl-driver-label { font-size: 13px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 7px; }
       .gl-driver-caret { font-size: 9px; color: var(--text-muted); }
-      .gl-badge-pill { font-size: 11px; font-weight: 600; font-family: var(--mono); padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+      .gl-badge-pill { font-size: 12px; font-weight: 600; font-family: var(--mono); padding: 3px 11px; border-radius: 20px; white-space: nowrap; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
       .gl-driver-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 9px; }
       .gl-driver-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
       .gl-driver-detail { margin-top: 12px; }

@@ -142,7 +142,7 @@ export default function Housing({ initialData = null }: { initialData?: HousingR
                 className="hs-badge-pill"
                 style={{ color: TONE_COLORS[c.tone], background: TONE_BG[c.tone] }}
               >
-                <Icon name={STATUS_ICON[c.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{c.status}
+                <Icon name={STATUS_ICON[c.tone]} size={13} style={{ flexShrink: 0 }} />{c.status}
               </span>
             </div>
             <div className="hs-driver-bar">
@@ -247,7 +247,7 @@ function Styles() {
       .hs-driver-top { display: flex; justify-content: space-between; align-items: center; }
       .hs-driver-label { font-size: 13px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 7px; }
       .hs-driver-caret { font-size: 9px; color: var(--text-muted); }
-      .hs-badge-pill { font-size: 11px; font-weight: 600; font-family: var(--mono); padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+      .hs-badge-pill { font-size: 12px; font-weight: 600; font-family: var(--mono); padding: 3px 11px; border-radius: 20px; white-space: nowrap; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
       .hs-driver-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 9px; }
       .hs-driver-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
       .hs-driver-detail { margin-top: 12px; }

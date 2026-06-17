@@ -136,7 +136,7 @@ export default function Credit({ initialData = null }: { initialData?: CreditRes
                 {cat.label}<span className="cr-driver-caret">{openCat === cat.key ? '▾' : '▸'}</span>
               </span>
               <span className="cr-badge-pill" style={{ color: TONE_COLORS[cat.tone], background: TONE_BG[cat.tone] }}>
-                <Icon name={STATUS_ICON[cat.tone]} size={12} style={{ display: 'inline-block', verticalAlign: -1.5, marginRight: 3 }} />{cat.status}
+                <Icon name={STATUS_ICON[cat.tone]} size={13} style={{ flexShrink: 0 }} />{cat.status}
               </span>
             </div>
             <div className="cr-driver-bar">
@@ -239,7 +239,7 @@ function Styles() {
       .cr-driver-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
       .cr-driver-label { font-size: 13px; color: var(--text-primary); display: inline-flex; align-items: center; gap: 7px; }
       .cr-driver-caret { font-size: 9px; color: var(--text-muted); }
-      .cr-badge-pill { font-size: 11px; font-weight: 600; font-family: var(--mono); padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+      .cr-badge-pill { font-size: 12px; font-weight: 600; font-family: var(--mono); padding: 3px 11px; border-radius: 20px; white-space: nowrap; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
       .cr-driver-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 9px; }
       .cr-driver-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
       .cr-driver-detail { margin-top: 12px; }
