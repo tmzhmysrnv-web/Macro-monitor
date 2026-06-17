@@ -23,6 +23,7 @@ type FedPolicy = {
 }
 type FedWatchItem = { key: string; label: string; icon: string; status: 'monitoring' | 'impact' | 'stabilized'; severity: 'none' | 'amber' | 'red'; detail: string }
 type FedWatch = { active: boolean; eventType: 'hike' | 'cut' | null; items: FedWatchItem[]; impactCount: number; total: number }
+type RateExpectation = { method: 'futures' | 'treasury' | 'none'; expectedDirection: 'cut' | 'hike' | 'hold'; surprise: boolean; probabilities?: { cut50: number; cut25: number; hold: number; hike25: number }; impliedRate?: number; meetingDate?: string; basis: string }
 type BondResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
@@ -36,6 +37,7 @@ type BondResponse = {
   watching: WatchItem[]
   fedPolicy?: FedPolicy
   fedWatch?: FedWatch
+  rateExpectation?: RateExpectation
   fetchedAt: string
 }
 
@@ -100,6 +102,50 @@ function WatchListActivated({ fw }: { fw?: FedWatch }) {
         ))}
       </div>
       <div className="wl-foot">{fw.impactCount} of {fw.total} indicators showing impact</div>
+    </div>
+  )
+}
+
+// Market-implied odds for the next FOMC decision (from fed-funds futures).
+// Only shown for the futures method; hidden when it falls back to the 2Y proxy.
+function FedOdds({ re }: { re?: RateExpectation }) {
+  if (!re || re.method !== 'futures' || !re.probabilities) return null
+  const p = re.probabilities
+  const cut = Math.round((p.cut50 + p.cut25) * 10) / 10
+  const hold = p.hold
+  const hike = p.hike25
+  const when = re.meetingDate ? new Date(re.meetingDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''
+  const dom = hold >= cut && hold >= hike ? 'hold' : cut >= hike ? 'cut' : 'hike'
+  const cells: { key: string; label: string; sub: string; val: number; tone: string; bg: string }[] = [
+    { key: 'cut', label: 'Cut', sub: '−25 bp', val: cut, tone: 'var(--good)', bg: 'var(--good-bg)' },
+    { key: 'hold', label: 'Hold', sub: 'no change', val: hold, tone: 'var(--good)', bg: 'var(--good-bg)' },
+    { key: 'hike', label: 'Hike', sub: '+25 bp', val: hike, tone: 'var(--bad)', bg: 'var(--alert-bg)' },
+  ]
+  return (
+    <div className="fo">
+      <div className="fo-head">
+        <span className="fo-title">Rate decision odds</span>
+        <span className="fo-meta">market-implied · FOMC {when}</span>
+      </div>
+      <div className="fo-cells">
+        {cells.map(c => {
+          const isDom = dom === c.key
+          return (
+            <div className="fo-cell" key={c.key} style={isDom ? { border: `1px solid ${c.tone}`, background: c.bg } : undefined}>
+              <div className="fo-cell-k" style={isDom ? { color: c.tone } : undefined}>{c.label} · {c.sub}</div>
+              <div className="fo-cell-v" style={{ color: isDom ? c.tone : 'var(--text-secondary)' }}>{c.val}%</div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="fo-bar">
+        <div style={{ width: `${cut}%`, background: 'var(--good)' }} />
+        <div style={{ width: `${hold}%`, background: '#5b6470' }} />
+        <div style={{ width: `${hike}%`, background: 'var(--bad)' }} />
+      </div>
+      {re.impliedRate != null && (
+        <div className="fo-foot">Implied <strong>{re.impliedRate.toFixed(2)}%</strong> post-meeting · from 30-day fed-funds futures</div>
+      )}
     </div>
   )
 }
@@ -244,6 +290,9 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
           </div>
         )
       })()}
+
+      {/* ── 2b2. Market-implied odds for the next decision ── */}
+      {b && <FedOdds re={b.rateExpectation} />}
 
       {/* ── 2c. Watch List Activated — consequences of the Fed move ── */}
       {b && <WatchListActivated fw={b.fedWatch} />}
@@ -403,6 +452,19 @@ function Styles() {
       .fp-pctl-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--text-secondary); opacity: 0.45; border-radius: 2px; }
       .fp-pctl-dot { position: absolute; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); border: 1.5px solid var(--card-bg); transform: translateX(-50%); }
       @media (max-width: 520px) { .fp-banner { flex-direction: column; align-items: flex-start; gap: 12px; } .fp-right, .fp-meta { text-align: left; } .fp-spark { align-items: flex-start; } }
+
+      /* Market-implied rate-decision odds */
+      .fo { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+      .fo-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+      .fo-title { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-primary); }
+      .fo-meta { font-family: var(--mono); font-size: 11px; color: var(--text-secondary); }
+      .fo-cells { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+      .fo-cell { border: 0.5px solid var(--border); border-radius: 8px; padding: 10px 12px; text-align: center; }
+      .fo-cell-k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+      .fo-cell-v { font-family: var(--mono); font-size: 22px; font-weight: 600; line-height: 1; }
+      .fo-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,0.06); margin-bottom: 10px; }
+      .fo-foot { font-size: 11.5px; color: var(--text-secondary); padding-top: 10px; border-top: 0.5px solid var(--border); }
+      .fo-foot strong { color: var(--text-primary); font-family: var(--mono); font-weight: 600; }
 
       /* Watch List Activated — temporary consequence tracker after a Fed move */
       .wl { border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; background: var(--card-bg); }
