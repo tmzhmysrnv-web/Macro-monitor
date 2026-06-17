@@ -294,7 +294,7 @@ function expectationFromTreasury(twoYObs: Obs[], fp: FedPolicyData): RateExpecta
   const expectedDirection: RateExpectation['expectedDirection'] = gap <= -0.25 ? 'cut' : gap >= 0.25 ? 'hike' : 'hold'
   return {
     method: 'treasury', expectedDirection,
-    surprise: dir !== 'none' && dir !== expectedDirection,
+    surprise: fp.fresh && dir !== 'none' && dir !== expectedDirection,
     basis: `2Y ${gap >= 0 ? '+' : ''}${gap}pp vs policy rate → medium-term direction ${expectedDirection} (no next-meeting futures)`,
   }
 }
@@ -350,7 +350,9 @@ async function buildRateExpectation(d: BondData, fp: FedPolicyData): Promise<Rat
       const expectedDirection: RateExpectation['expectedDirection'] = top === 'hold' ? 'hold' : top.startsWith('cut') ? 'cut' : 'hike'
       return {
         method: 'futures', expectedDirection,
-        surprise: fp.lastChangeDirection !== 'none' && fp.lastChangeDirection !== expectedDirection,
+        // Only a FRESH actual move that contradicts the expectation is a surprise —
+        // not a stale prior move vs the current baseline.
+        surprise: fp.fresh && fp.lastChangeDirection !== 'none' && fp.lastChangeDirection !== expectedDirection,
         probabilities, impliedRate: parseFloat(afterRate.toFixed(3)), meetingDate: next.date,
         basis: `${contract} implies ${afterRate.toFixed(3)}% post-meeting vs ${mid.toFixed(3)}% mid → ${probabilities.hold}% hold`,
       }
