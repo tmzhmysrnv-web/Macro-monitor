@@ -154,6 +154,15 @@ export const INDICATORS: Indicator[] = [
     opportunityDirection: 'high-good',
   },
   {
+    key: 'silver',
+    label: 'Silver',
+    unit: '$',
+    unitPosition: 'prefix',
+    description: 'Silver price ($/oz) — industrial + precious; the gold/silver ratio tracks growth vs fear',
+    history: [12, 18, 24, 32, 50],
+    opportunityDirection: 'high-good',
+  },
+  {
     key: 'mortgage30',
     label: '30Y Mortgage',
     unit: '%',

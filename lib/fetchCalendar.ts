@@ -99,6 +99,18 @@ export function getLastFomc(): { date: string; daysAgo: number } | null {
   return { date: past[0].date, daysAgo: Math.floor((now - past[0].t) / 86400000) }
 }
 
+// Next upcoming FOMC meeting — for the futures-implied rate expectation.
+export function getNextFomc(): { date: string; daysUntil: number } | null {
+  const now = Date.now()
+  const fut = SCHEDULE
+    .filter(e => e.name === 'FOMC Decision')
+    .map(e => ({ date: e.date, t: new Date(e.date + 'T14:00:00-05:00').getTime() }))
+    .filter(e => e.t > now)
+    .sort((a, b) => a.t - b.t)
+  if (!fut.length) return null
+  return { date: fut[0].date, daysUntil: Math.ceil((fut[0].t - now) / 86400000) }
+}
+
 export function getCalendarContext(): string {
   const events = getUpcomingEvents()
   if (events.length === 0) return 'No major economic releases in the next 30 days.'

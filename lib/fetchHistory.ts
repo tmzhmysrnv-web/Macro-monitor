@@ -87,7 +87,7 @@ export type HistoryMap = Record<string, DataPoint[]>
 // full 10y daily series, but the Overview only needs ~1y for what-changed and
 // monthly points for the long-range trend.
 export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<HistoryMap> {
-  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY] =
+  const [vix, t10y, fedfunds, cpi, jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY] =
     await Promise.all([
       fetchYahooHistory('^VIX', years, freq),
       fetchFredHistory('DGS10', years, freq),
@@ -102,9 +102,10 @@ export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<His
       fetchYahooHistory('GC=F', years, freq),
       fetchYahooHistory('CL=F', years, freq),
       fetchYahooHistory('HG=F', years, freq),
+      fetchYahooHistory('SI=F', years, freq),
       fetchFredHistory('MORTGAGE30US', years, freq),
       fetchFredYoYHistory('CSUSHPINSA', years, freq),  // home-price YoY (crash signal for the Break Meter)
     ])
 
-  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, mortgage30, homePriceYoY }
+  return { vix, treasury10y: t10y, fedfunds, cpi, joblessClaims: jobless, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY }
 }

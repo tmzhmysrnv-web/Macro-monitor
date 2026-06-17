@@ -87,6 +87,8 @@ export type MacroData = {
   oilChange:     number | null
   copper:        number | null
   copperChange:  number | null
+  silver:        number | null
+  silverChange:  number | null
   mortgage30:    number | null
   homePriceYoY:  number | null   // Case-Shiller YoY % (home-price crash signal)
   payrolls:      number | null   // latest non-farm payrolls month change (thousands)
@@ -109,7 +111,7 @@ export function fetchAllData(): Promise<MacroData> {
 }
 
 async function _fetchAllData(): Promise<MacroData> {
-  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR] = await Promise.all([
+  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR, silverR] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
@@ -126,6 +128,7 @@ async function _fetchAllData(): Promise<MacroData> {
     fetchYahoo('GC=F'),
     fetchYahoo('CL=F'),
     fetchYahoo('HG=F'),
+    fetchYahoo('SI=F'),       // silver — industrial + precious, a strong growth/inflation signal
   ])
 
   return {
@@ -148,6 +151,8 @@ async function _fetchAllData(): Promise<MacroData> {
     oilChange:     oilR?.change ?? null,
     copper:        copperR != null ? parseFloat(copperR.value.toFixed(3)) : null,
     copperChange:  copperR?.change ?? null,
+    silver:        silverR != null ? parseFloat(silverR.value.toFixed(2)) : null,
+    silverChange:  silverR?.change ?? null,
     mortgage30:    mort,
     homePriceYoY:  hpi != null ? parseFloat(hpi.toFixed(1)) : null,
     payrolls:      payroll.change,

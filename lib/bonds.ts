@@ -16,7 +16,7 @@
 
 import { fredFetch } from './fred'
 import { toneHigh, toneLow } from './metricTone'
-import { getLastFomc } from './fetchCalendar'
+import { getLastFomc, getNextFomc } from './fetchCalendar'
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 const FRED_KEY = process.env.FRED_API_KEY
@@ -132,11 +132,13 @@ export type BondData = {
   spread2_10Obs: Obs[]
   debtObs: Obs[]
   targetUpper: number | null     // DFEDTARU — daily upper bound of the fed-funds target range
+  targetLower: number | null     // DFEDTARL — lower bound (for the target midpoint)
+  effr: number | null            // DFF — daily effective fed funds rate (futures math)
   targetObs: Obs[]               // for clean policy-step detection (banner)
 }
 
 export async function fetchBondData(): Promise<BondData> {
-  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt, tp, foreign, totalDebt, target] = await Promise.all([
+  const [dgs10, dgs30, dgs2, dgs3mo, dfii10, ff, t10y2y, t10y3m, debt, tp, foreign, totalDebt, target, targetLo, effrObs] = await Promise.all([
     fredSeries('DGS10', 1300),    // ~5y daily — vol, trend, alert lookback, sparkline, percentile
     fredSeries('DGS30', 9000),    // long window for the multi-decade-high check
     fredSeries('DGS2', 1300),
@@ -149,7 +151,9 @@ export async function fetchBondData(): Promise<BondData> {
     fredSeries('THREEFYTP10', 1300), // 10Y ACM term premium (daily)
     fredSeries('FDHBFIN', 44),    // foreign-held federal debt ($B, quarterly)
     fredSeries('GFDEBTN', 60),    // total public debt ($M, quarterly) — for foreign share
-    fredSeries('DFEDTARU', 1300), // daily fed-funds target upper — steps exactly on decision day
+    fredSeries('DFEDTARU', 2600), // daily fed-funds target upper (~10y) — steps exactly on decision day
+    fredSeries('DFEDTARL', 5),    // target lower bound (for the midpoint)
+    fredSeries('DFF', 5),         // daily effective fed funds rate (futures math)
   ])
 
   // Foreign share of total debt — date-aligned (FDHBFIN lags GFDEBTN by ~1 quarter).
@@ -192,6 +196,8 @@ export async function fetchBondData(): Promise<BondData> {
     spread2_10Obs: t10y2y,
     debtObs: debt,
     targetUpper: target[0]?.value ?? null,
+    targetLower: targetLo[0]?.value ?? null,
+    effr: effrObs[0]?.value ?? null,
     targetObs: target,
   }
 }
@@ -214,7 +220,7 @@ export type FedPolicyData = {
 
 function buildFedPolicy(obs: Obs[]): FedPolicyData {
   const lastFomc = getLastFomc()
-  const history = spark(obs, 64) ?? []   // oldest→newest target-rate path
+  const history = spark(obs, 80) ?? []   // oldest→newest target-rate path (~10y)
   const none: FedPolicyData = {
     currentRate: obs[0]?.value ?? null, lastChangeAmount: 0, lastChangeDirection: 'none',
     lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change', fresh: false, history,
@@ -256,23 +262,94 @@ function buildFedPolicy(obs: Obs[]): FedPolicyData {
 // was pricing, letting us flag when an actual move SURPRISED the market. Carried
 // in the API payload for later use; no UI swap needed if a licensed feed arrives.
 export type RateExpectation = {
+  method: 'futures' | 'treasury' | 'none'
   expectedDirection: 'cut' | 'hike' | 'hold'
   surprise: boolean
+  probabilities?: { cut50: number; cut25: number; hold: number; hike25: number }  // %, futures method only
+  impliedRate?: number          // implied post-meeting rate (futures)
+  meetingDate?: string
   basis: string
 }
 
-function marketExpectation(twoYObs: Obs[], fp: FedPolicyData): RateExpectation {
+// Latest price for a Yahoo symbol (used for the 30-day fed-funds future ZQ=F).
+async function yahooPrice(symbol: string): Promise<number | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
+    const res = await fetch(url, { next: { revalidate: 900 } })
+    if (!res.ok) return null
+    const data = await res.json()
+    const p = data?.chart?.result?.[0]?.meta?.regularMarketPrice
+    return typeof p === 'number' ? p : null
+  } catch { return null }
+}
+
+// Fallback proxy: the 2Y embeds the ~2-year average path, so 2Y vs the policy
+// rate gives a coarse direction when the futures method isn't applicable.
+function expectationFromTreasury(twoYObs: Obs[], fp: FedPolicyData): RateExpectation {
   const dir = fp.lastChangeDirection
-  const preRate = fp.currentRate != null ? fp.currentRate - fp.lastChangeAmount : null  // policy rate before the move
+  const preRate = fp.currentRate != null ? fp.currentRate - fp.lastChangeAmount : null
   const preTwoY = valueDaysBack(twoYObs, (fp.daysSinceChange ?? 0) + 5) ?? twoYObs[0]?.value ?? null
-  if (preTwoY == null || preRate == null) return { expectedDirection: 'hold', surprise: false, basis: 'insufficient data' }
-  const gap = parseFloat((preTwoY - preRate).toFixed(2))   // < 0 → market priced cuts
+  if (preTwoY == null || preRate == null) return { method: 'none', expectedDirection: 'hold', surprise: false, basis: 'insufficient data' }
+  const gap = parseFloat((preTwoY - preRate).toFixed(2))
   const expectedDirection: RateExpectation['expectedDirection'] = gap <= -0.25 ? 'cut' : gap >= 0.25 ? 'hike' : 'hold'
   return {
-    expectedDirection,
+    method: 'treasury', expectedDirection,
     surprise: dir !== 'none' && dir !== expectedDirection,
-    basis: `2Y ${gap >= 0 ? '+' : ''}${gap}pp vs policy rate pre-decision → market implied ${expectedDirection}`,
+    basis: `2Y ${gap >= 0 ? '+' : ''}${gap}pp vs policy rate → medium-term direction ${expectedDirection} (no next-meeting futures)`,
   }
+}
+
+// CME-FedWatch-style: the 30-day fed-funds future settles to the month's AVERAGE
+// daily EFFR. Split the meeting month into before/after the decision, back out
+// the implied post-meeting rate, then map it onto the 25bp outcome ladder for
+// hold/cut/hike probabilities. Works when the next meeting is in the current
+// month (front-month ZQ isolates it); otherwise falls back to the 2Y proxy.
+async function buildRateExpectation(d: BondData, fp: FedPolicyData): Promise<RateExpectation> {
+  const next = getNextFomc()
+  const now = new Date()
+  const sameMonth = next != null && (() => {
+    const m = new Date(next.date + 'T12:00:00Z')
+    return m.getUTCFullYear() === now.getUTCFullYear() && m.getUTCMonth() === now.getUTCMonth()
+  })()
+
+  if (next && sameMonth && d.targetUpper != null && d.targetLower != null && d.effr != null) {
+    const price = await yahooPrice('ZQ=F')
+    if (price != null) {
+      const monthlyRate = 100 - price
+      const mid = (d.targetUpper + d.targetLower) / 2
+      const meetingDay = parseInt(next.date.slice(8, 10), 10)
+      const y = now.getUTCFullYear(), mo = now.getUTCMonth()
+      const daysTotal = new Date(y, mo + 1, 0).getDate()
+      const daysBefore = meetingDay - 1
+      const daysAfter = daysTotal - daysBefore
+      const afterRate = (monthlyRate * daysTotal - d.effr * daysBefore) / daysAfter
+
+      const ladder = [
+        { k: 'cut50', r: mid - 0.50 }, { k: 'cut25', r: mid - 0.25 },
+        { k: 'hold', r: mid }, { k: 'hike25', r: mid + 0.25 }, { k: 'hike50', r: mid + 0.50 },
+      ] as const
+      const clamped = Math.max(ladder[0].r, Math.min(ladder[ladder.length - 1].r, afterRate))
+      const raw: Record<string, number> = { cut50: 0, cut25: 0, hold: 0, hike25: 0, hike50: 0 }
+      for (let i = 0; i < ladder.length - 1; i++) {
+        if (clamped >= ladder[i].r && clamped <= ladder[i + 1].r) {
+          const f = (clamped - ladder[i].r) / (ladder[i + 1].r - ladder[i].r)
+          raw[ladder[i + 1].k] = f; raw[ladder[i].k] = 1 - f
+          break
+        }
+      }
+      const pct = (x: number) => Math.round(x * 1000) / 10
+      const probabilities = { cut50: pct(raw.cut50), cut25: pct(raw.cut25), hold: pct(raw.hold), hike25: pct(raw.hike25 + raw.hike50) }
+      const top = (Object.entries(raw).sort((a, b) => b[1] - a[1])[0] || ['hold'])[0]
+      const expectedDirection: RateExpectation['expectedDirection'] = top === 'hold' ? 'hold' : top.startsWith('cut') ? 'cut' : 'hike'
+      return {
+        method: 'futures', expectedDirection,
+        surprise: fp.lastChangeDirection !== 'none' && fp.lastChangeDirection !== expectedDirection,
+        probabilities, impliedRate: parseFloat(afterRate.toFixed(3)), meetingDate: next.date,
+        basis: `ZQ front-month implies ${afterRate.toFixed(3)}% post-meeting vs ${mid.toFixed(3)}% mid → ${probabilities.hold}% hold`,
+      }
+    }
+  }
+  return expectationFromTreasury(d.twoYObs, fp)
 }
 
 // ── Watch List Activated ──────────────────────────────────────────────
@@ -776,7 +853,7 @@ export async function buildBondModel(): Promise<BondModel> {
       subtitle: SUBTITLES['Data Unavailable'],
       risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
       categories: [], alerts: [], lastAlert: null, watching: [], fedPolicy: fp, fedWatch: INACTIVE_WATCH,
-      rateExpectation: marketExpectation(data.twoYObs, fp), data,
+      rateExpectation: await buildRateExpectation(data, fp), data,
     }
   }
 
@@ -807,7 +884,7 @@ export async function buildBondModel(): Promise<BondModel> {
     categories, alerts,
     lastAlert: buildLastAlert(data),
     watching, fedPolicy, fedWatch,
-    rateExpectation: marketExpectation(data.twoYObs, fedPolicy),
+    rateExpectation: await buildRateExpectation(data, fedPolicy),
     data,
   }
 }

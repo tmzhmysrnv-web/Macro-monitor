@@ -84,22 +84,23 @@ const fSigned = (v: number | null, suffix = '%') => v == null ? '—' : `${v >= 
 export type GlobalData = {
   dxy: Obs[]
   wti: Obs[]; brent: Obs[]; commodity: Obs[]
-  copper: Obs[]; gold: Obs[]; acwx: Obs[]
+  copper: Obs[]; gold: Obs[]; silver: Obs[]; acwx: Obs[]
   eem: Obs[]
 }
 
 export async function fetchGlobalData(): Promise<GlobalData> {
-  const [dxy, wti, brent, commodity, copper, gold, acwx, eem] = await Promise.all([
+  const [dxy, wti, brent, commodity, copper, gold, silver, acwx, eem] = await Promise.all([
     yahooHistory('DX-Y.NYB'), // US dollar index
     yahooHistory('CL=F'),     // WTI crude
     yahooHistory('BZ=F'),     // Brent crude
     yahooHistory('DBC'),      // broad commodity index
     yahooHistory('HG=F'),     // copper
     yahooHistory('GC=F'),     // gold (safe-haven demand + copper/gold growth-vs-fear ratio)
+    yahooHistory('SI=F'),     // silver (industrial + precious; gold/silver ratio = growth vs fear)
     yahooHistory('ACWX'),     // global equities ex-US
     yahooHistory('EEM'),      // emerging-market equities
   ])
-  return { dxy, wti, brent, commodity, copper, gold, acwx, eem }
+  return { dxy, wti, brent, commodity, copper, gold, silver, acwx, eem }
 }
 
 // ── Category scoring ──────────────────────────────────────────────────
@@ -170,9 +171,14 @@ function scoreGrowth(d: GlobalData): Omit<Category, 'fill'> {
   const copper3m = ret(d.copper, 63)
   const copperGold = relPerf(d.copper, d.gold, 63) // growth vs fear
   const acwxDD = drawdown(d.acwx)
+  const silver = d.silver[0]?.value ?? null
+  const silver3m = ret(d.silver, 63)
+  const goldVal = d.gold[0]?.value ?? null
+  const goldSilver = goldVal != null && silver != null && silver !== 0 ? Math.round(goldVal / silver) : null
   const signals: string[] = []
   if (copper3m != null) signals.push(`Copper — the classic global-growth barometer — is ${copper3m >= 0 ? `up ${copper3m}%` : `down ${Math.abs(copper3m)}%`} over 3 months`)
   if (copperGold != null) signals.push(`Copper is ${copperGold >= 0 ? 'outpacing' : 'lagging'} gold by ${Math.abs(copperGold)}pp — ${copperGold >= 0 ? 'growth optimism over safe-haven demand' : 'investors favoring safety over growth'}`)
+  if (goldSilver != null) signals.push(`Gold/silver ratio at ${goldSilver} — ${goldSilver >= 85 ? 'elevated, a risk-off / deflation signal' : goldSilver <= 70 ? 'low, consistent with growth and reflation' : 'in its mid-range'}`)
   if (acwxDD != null) signals.push(`Global ex-US equities ${acwxDD <= -3 ? `${Math.abs(acwxDD)}% off their high` : 'near their highs'}`)
 
   let status: string, tone: Tone
@@ -186,6 +192,8 @@ function scoreGrowth(d: GlobalData): Omit<Category, 'fill'> {
   const metrics: MetricCard[] = [
     { label: 'Copper', value: copper != null ? `$${copper.toFixed(2)}` : '—', sub: copper3m != null ? `${copper3m >= 0 ? '+' : ''}${copper3m}% 3mo` : undefined, tone: toneLow(copper3m, 0, -8), points: spark(d.copper), ...hist(d.copper) },
     { label: 'Copper / Gold', value: fRel(copperGold), sub: '3mo, growth vs fear', tone: toneLow(copperGold, 0, -8) },
+    { label: 'Silver', value: silver != null ? `$${silver.toFixed(2)}` : '—', sub: silver3m != null ? `${silver3m >= 0 ? '+' : ''}${silver3m}% 3mo` : undefined, tone: toneLow(silver3m, 0, -8), points: spark(d.silver), ...hist(d.silver) },
+    { label: 'Gold / Silver', value: goldSilver != null ? `${goldSilver}` : '—', sub: 'ratio · growth vs fear', tone: toneHigh(goldSilver, 85, 95) },
     { label: 'Global Equities', value: acwxDD != null ? `${acwxDD}%` : '—', sub: 'ex-US, from 1y high', tone: toneLow(acwxDD, -3, -10), points: spark(d.acwx), ...hist(d.acwx) },
   ]
   return { key: 'growth', label: 'Global Growth Conditions', status, tone, signals, metrics }

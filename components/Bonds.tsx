@@ -183,10 +183,21 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
         const sparkTone = state === 'hike' ? 'var(--crisis)' : state === 'cut' ? 'var(--good)' : 'var(--text-secondary)'
         const spark = hist ? (() => {
           const v = hist.map(p => p.value)
+          const lo = Math.min(...v), hi = Math.max(...v)
+          const cur = fp.currentRate ?? v[v.length - 1]
+          const pctl = hi > lo ? Math.round((cur - lo) / (hi - lo) * 100) : 50
+          const histLabel = pctl <= 20 ? 'historically low' : pctl < 40 ? 'below normal' : pctl <= 60 ? 'mid-range' : pctl < 80 ? 'above normal' : 'historically high'
           return (
             <div className="fp-spark">
               <RateSpark points={hist} tone={sparkTone} />
-              <div className="fp-spark-cap">{Math.min(...v).toFixed(2)}–{Math.max(...v).toFixed(2)}% range · ~5y</div>
+              <div className="fp-pctl">
+                <div className="fp-pctl-top"><span>{histLabel}</span><span>{lo.toFixed(2)}–{hi.toFixed(2)}%</span></div>
+                <div className="fp-pctl-track">
+                  <div className="fp-pctl-fill" style={{ width: `${pctl}%` }} />
+                  <div className="fp-pctl-dot" style={{ left: `${pctl}%` }} />
+                </div>
+              </div>
+              <div className="fp-spark-cap">10-year path</div>
             </div>
           )
         })() : null
@@ -385,8 +396,12 @@ function Styles() {
       .fp-hike .fp-dot { background: var(--crisis); }
       .fp-cut .fp-dot { background: var(--good); }
       @keyframes fppulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
-      .fp-spark { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 1 auto; }
-      .fp-spark-cap { font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
+      .fp-spark { display: flex; flex-direction: column; align-items: stretch; gap: 5px; flex: 0 1 auto; min-width: 200px; }
+      .fp-spark-cap { font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); text-align: center; }
+      .fp-pctl-top { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-family: var(--mono); margin-bottom: 3px; }
+      .fp-pctl-track { position: relative; height: 3px; background: var(--border-med); border-radius: 2px; }
+      .fp-pctl-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--text-secondary); opacity: 0.45; border-radius: 2px; }
+      .fp-pctl-dot { position: absolute; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary); border: 1.5px solid var(--card-bg); transform: translateX(-50%); }
       @media (max-width: 520px) { .fp-banner { flex-direction: column; align-items: flex-start; gap: 12px; } .fp-right, .fp-meta { text-align: left; } .fp-spark { align-items: flex-start; } }
 
       /* Watch List Activated — temporary consequence tracker after a Fed move */

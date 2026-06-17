@@ -29,7 +29,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     vix: data.vix, treasury10y: data.treasury10y, fedfunds: data.fedfunds,
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
-    dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper,
+    dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper, silver: data.silver,
     mortgage30: data.mortgage30,
   }
   return map[key] ?? null
@@ -38,7 +38,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
 function getChangeForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
     sp500: data.sp500Change, dxy: data.dxyChange, gold: data.goldChange,
-    oil: data.oilChange, copper: data.copperChange, vix: null,
+    oil: data.oilChange, copper: data.copperChange, silver: data.silverChange, vix: null,
   }
   return map[key] ?? null
 }
@@ -49,6 +49,7 @@ function formatValue(key: string, value: number | null): string {
   if (key === 'gold') return `$${value.toLocaleString('en-US')}`
   if (key === 'oil') return `$${value.toFixed(2)}`
   if (key === 'copper') return `$${value.toFixed(3)}`
+  if (key === 'silver') return `$${value.toFixed(2)}`
   if (key === 'dxy') return value.toFixed(2)
   if (key === 'joblessClaims') return `${value.toFixed(0)}k`
   if (key === 'yieldCurve') return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
@@ -85,7 +86,7 @@ const SECTIONS = [
   { label: 'Volatility & Risk',    keys: ['vix', 'hySpread', 'igSpread'] },
   { label: 'Rates & Housing',      keys: ['treasury10y', 'fedfunds', 'yieldCurve', 'mortgage30'] },
   { label: 'Inflation & Labor',    keys: ['cpi', 'joblessClaims'] },
-  { label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'oil', 'copper'] },
+  { label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'silver', 'oil', 'copper'] },
   { label: 'Markets',              keys: ['sp500'] },
 ]
 
