@@ -313,15 +313,22 @@ async function buildRateExpectation(d: BondData, fp: FedPolicyData): Promise<Rat
   })()
 
   if (next && sameMonth && d.targetUpper != null && d.targetLower != null && d.effr != null) {
-    const price = await yahooPrice('ZQ=F')
-    if (price != null) {
+    // Dated meeting-month contract — the continuous ZQ=F rolls and isn't reliably
+    // the meeting month (it priced 3.72% when the June contract was 3.62%).
+    // Symbol: ZQ + futures month-code + 2-digit year.
+    const codes = ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z']
+    const md = new Date(next.date + 'T12:00:00Z')
+    const contract = `ZQ${codes[md.getUTCMonth()]}${String(md.getUTCFullYear()).slice(2)}.CBT`
+    const meetingDay = parseInt(next.date.slice(8, 10), 10)
+    const daysTotal = new Date(md.getUTCFullYear(), md.getUTCMonth() + 1, 0).getDate()
+    const daysBefore = meetingDay - 1
+    const daysAfter = daysTotal - daysBefore
+    const price = await yahooPrice(contract)
+    // Need enough post-meeting days for a stable back-out — the /daysAfter term
+    // amplifies error, so skip meetings in the last few days of their month.
+    if (price != null && daysAfter >= 5) {
       const monthlyRate = 100 - price
       const mid = (d.targetUpper + d.targetLower) / 2
-      const meetingDay = parseInt(next.date.slice(8, 10), 10)
-      const y = now.getUTCFullYear(), mo = now.getUTCMonth()
-      const daysTotal = new Date(y, mo + 1, 0).getDate()
-      const daysBefore = meetingDay - 1
-      const daysAfter = daysTotal - daysBefore
       const afterRate = (monthlyRate * daysTotal - d.effr * daysBefore) / daysAfter
 
       const ladder = [
@@ -345,7 +352,7 @@ async function buildRateExpectation(d: BondData, fp: FedPolicyData): Promise<Rat
         method: 'futures', expectedDirection,
         surprise: fp.lastChangeDirection !== 'none' && fp.lastChangeDirection !== expectedDirection,
         probabilities, impliedRate: parseFloat(afterRate.toFixed(3)), meetingDate: next.date,
-        basis: `ZQ front-month implies ${afterRate.toFixed(3)}% post-meeting vs ${mid.toFixed(3)}% mid → ${probabilities.hold}% hold`,
+        basis: `${contract} implies ${afterRate.toFixed(3)}% post-meeting vs ${mid.toFixed(3)}% mid → ${probabilities.hold}% hold`,
       }
     }
   }
