@@ -31,6 +31,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       lastAlert: model.lastAlert,
       watching: model.watching,
       fedPolicy: model.fedPolicy,
+      fedWatch: model.fedWatch,
+      rateExpectation: model.rateExpectation,   // internal proxy — present in payload, not rendered
       fetchedAt: new Date().toISOString(),
     })
   } catch (err) {

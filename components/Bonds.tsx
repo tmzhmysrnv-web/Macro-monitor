@@ -19,7 +19,10 @@ type FedPolicy = {
   daysSinceChange: number | null
   latestMeetingResult: string
   fresh: boolean
+  history?: { date: string; value: number }[]
 }
+type FedWatchItem = { key: string; label: string; icon: string; status: 'monitoring' | 'impact' | 'stabilized'; severity: 'none' | 'amber' | 'red'; detail: string }
+type FedWatch = { active: boolean; eventType: 'hike' | 'cut' | null; items: FedWatchItem[]; impactCount: number; total: number }
 type BondResponse = {
   available: boolean
   status: { emoji: string; label: string; tone: Tone }
@@ -32,6 +35,7 @@ type BondResponse = {
   lastAlert: string | null
   watching: WatchItem[]
   fedPolicy?: FedPolicy
+  fedWatch?: FedWatch
   fetchedAt: string
 }
 
@@ -41,6 +45,53 @@ const TONE_COLORS: Record<Tone, string> = {
 const TONE_BG: Record<Tone, string> = {
   good: 'rgba(99,153,34,0.14)', neutral: 'rgba(158,158,46,0.16)', warn: 'rgba(186,117,23,0.16)',
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
+}
+
+// Step-line of the policy-rate path — context for the banner ("what it means").
+function RateSpark({ points }: { points: { date: string; value: number }[] }) {
+  if (!points || points.length < 2) return null
+  const W = 188, H = 40
+  const vals = points.map(p => p.value)
+  const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1
+  const xs = points.map((_, i) => (i / (points.length - 1)) * W)
+  const ys = points.map(p => H - 4 - (p.value - min) / range * (H - 8))
+  let d = `M ${xs[0].toFixed(1)} ${ys[0].toFixed(1)}`
+  for (let i = 1; i < points.length; i++) d += ` L ${xs[i].toFixed(1)} ${ys[i - 1].toFixed(1)} L ${xs[i].toFixed(1)} ${ys[i].toFixed(1)}`
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }} aria-hidden="true">
+      <path d={d} fill="none" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.6" fill="var(--text-primary)" />
+    </svg>
+  )
+}
+
+// When the Fed moves, surface the areas most likely to feel it (temporary).
+function WatchListActivated({ fw }: { fw?: FedWatch }) {
+  if (!fw || !fw.active || fw.items.length === 0) return null
+  const sIcon = (it: FedWatchItem) => it.status === 'impact' ? (it.severity === 'red' ? 'alert-circle' : 'alert-triangle') : it.status === 'stabilized' ? 'circle-check' : 'circle'
+  const sColor = (it: FedWatchItem) => it.status === 'impact' ? (it.severity === 'red' ? 'var(--crisis)' : 'var(--warn)') : it.status === 'stabilized' ? 'var(--good)' : 'var(--text-muted)'
+  const sWord = (it: FedWatchItem) => it.status === 'impact' ? (it.severity === 'red' ? 'Impact' : 'Watch') : it.status === 'stabilized' ? 'Stable' : 'Monitoring'
+  return (
+    <div className="wl">
+      <div className="wl-head"><Icon name="activity" size={15} style={{ verticalAlign: -2.5, marginRight: 7 }} />Watch list activated</div>
+      <div className="wl-sub">Tracking the areas most likely to be affected by the rate {fw.eventType}.</div>
+      <div className="wl-items">
+        {fw.items.map(it => (
+          <div className={`wl-item wl-${it.status} wl-sev-${it.severity}`} key={it.key}>
+            <span className="wl-ic" style={{ color: sColor(it) }}><Icon name={it.icon as never} size={15} /></span>
+            <div className="wl-main">
+              <div className="wl-label">{it.label}</div>
+              <div className="wl-detail">{it.detail}</div>
+            </div>
+            <span className="wl-status" style={{ color: sColor(it) }}>
+              <Icon name={sIcon(it) as never} size={13} style={{ verticalAlign: -2, marginRight: 4 }} />{sWord(it)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="wl-foot">{fw.impactCount} of {fw.total} indicators showing impact</div>
+    </div>
+  )
 }
 
 export default function Bonds({ initialData = null }: { initialData?: BondResponse | null }) {
@@ -130,6 +181,9 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                   </span>
                   <span className="fp-big">{signed(fp.lastChangeAmount)}</span>
                 </div>
+                {fp.history && fp.history.length > 1 && (
+                  <div className="fp-spark"><RateSpark points={fp.history} /><div className="fp-spark-cap">rate path · ~5y</div></div>
+                )}
                 <div className="fp-right">
                   <div className="fp-now">Federal funds rate now <strong>{fp.currentRate!.toFixed(2)}%</strong></div>
                   <div className="fp-when">{agoText}</div>
@@ -144,6 +198,9 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                   </span>
                   <span className="fp-rate">Current rate <strong>{fp.currentRate!.toFixed(2)}%</strong></span>
                 </div>
+                {fp.history && fp.history.length > 1 && (
+                  <div className="fp-spark"><RateSpark points={fp.history} /><div className="fp-spark-cap">rate path · ~5y</div></div>
+                )}
                 <div className="fp-meta">
                   <div className="fp-meta-item">
                     <span className="fp-k">Last change</span>
@@ -159,6 +216,9 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
           </div>
         )
       })()}
+
+      {/* ── 2c. Watch List Activated — consequences of the Fed move ── */}
+      {b && <WatchListActivated fw={b.fedWatch} />}
 
       {/* ── 3. Biggest risk / biggest stabilizer (click → its driver) ── */}
       {b && (
@@ -308,7 +368,25 @@ function Styles() {
       .fp-hike .fp-dot { background: var(--crisis); }
       .fp-cut .fp-dot { background: var(--good); }
       @keyframes fppulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
-      @media (max-width: 520px) { .fp-banner { flex-direction: column; align-items: flex-start; gap: 12px; } .fp-right, .fp-meta { text-align: left; } }
+      .fp-spark { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 0 1 auto; }
+      .fp-spark-cap { font-size: 8.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); }
+      @media (max-width: 520px) { .fp-banner { flex-direction: column; align-items: flex-start; gap: 12px; } .fp-right, .fp-meta { text-align: left; } .fp-spark { align-items: flex-start; } }
+
+      /* Watch List Activated — temporary consequence tracker after a Fed move */
+      .wl { border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; background: var(--card-bg); }
+      .wl-head { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-family: var(--mono); color: var(--text-primary); display: inline-flex; align-items: center; }
+      .wl-sub { font-size: 12px; color: var(--text-muted); margin: 4px 0 12px; }
+      .wl-items { display: flex; flex-direction: column; gap: 6px; }
+      .wl-item { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 8px; border: 0.5px solid var(--border); border-left: 3px solid var(--border-med); background: var(--bg); }
+      .wl-sev-amber { border-left-color: var(--warn); background: var(--warn-bg); }
+      .wl-sev-red { border-left-color: var(--crisis); background: var(--alert-bg); }
+      .wl-stabilized { opacity: 0.7; }
+      .wl-ic { flex-shrink: 0; display: flex; }
+      .wl-main { flex: 1; min-width: 0; }
+      .wl-label { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+      .wl-detail { font-size: 11.5px; color: var(--text-secondary); margin-top: 1px; }
+      .wl-status { font-size: 11px; font-weight: 600; font-family: var(--mono); white-space: nowrap; display: inline-flex; align-items: center; }
+      .wl-foot { font-size: 11px; font-family: var(--mono); color: var(--text-muted); margin-top: 11px; padding-top: 9px; border-top: 0.5px solid var(--border); }
 
       .bn-callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
       .bn-callout { border: 0.5px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }

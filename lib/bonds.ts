@@ -209,13 +209,15 @@ export type FedPolicyData = {
   daysSinceChange: number | null
   latestMeetingResult: string           // "No Change" | "+0.25%" | "−0.25%"
   fresh: boolean                        // moved within the last few days → breaking-news state
+  history: { date: string; value: number }[]  // rate path, for the banner context line
 }
 
 function buildFedPolicy(obs: Obs[]): FedPolicyData {
   const lastFomc = getLastFomc()
+  const history = spark(obs, 64) ?? []   // oldest→newest target-rate path
   const none: FedPolicyData = {
     currentRate: obs[0]?.value ?? null, lastChangeAmount: 0, lastChangeDirection: 'none',
-    lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change', fresh: false,
+    lastChangeDate: null, daysSinceChange: null, latestMeetingResult: 'No Change', fresh: false, history,
   }
   if (obs.length < 2) return none
 
@@ -242,6 +244,107 @@ function buildFedPolicy(obs: Obs[]): FedPolicyData {
     daysSinceChange,
     latestMeetingResult: movedAtLastMeeting ? signed : 'No Change',
     fresh: daysSinceChange <= 5,
+    history,
+  }
+}
+
+// ── Market rate expectation (internal proxy for CME FedWatch) ─────────
+// NOT rendered on the site. CME blocks scraping and prohibits it in their ToS,
+// and there's no free probabilities API — so this is a free, ToS-clean stand-in:
+// the 2-year Treasury embeds the market's expected average path of the policy
+// rate, so 2Y vs the policy rate just before a decision reveals what the market
+// was pricing, letting us flag when an actual move SURPRISED the market. Carried
+// in the API payload for later use; no UI swap needed if a licensed feed arrives.
+export type RateExpectation = {
+  expectedDirection: 'cut' | 'hike' | 'hold'
+  surprise: boolean
+  basis: string
+}
+
+function marketExpectation(twoYObs: Obs[], fp: FedPolicyData): RateExpectation {
+  const dir = fp.lastChangeDirection
+  const preRate = fp.currentRate != null ? fp.currentRate - fp.lastChangeAmount : null  // policy rate before the move
+  const preTwoY = valueDaysBack(twoYObs, (fp.daysSinceChange ?? 0) + 5) ?? twoYObs[0]?.value ?? null
+  if (preTwoY == null || preRate == null) return { expectedDirection: 'hold', surprise: false, basis: 'insufficient data' }
+  const gap = parseFloat((preTwoY - preRate).toFixed(2))   // < 0 → market priced cuts
+  const expectedDirection: RateExpectation['expectedDirection'] = gap <= -0.25 ? 'cut' : gap >= 0.25 ? 'hike' : 'hold'
+  return {
+    expectedDirection,
+    surprise: dir !== 'none' && dir !== expectedDirection,
+    basis: `2Y ${gap >= 0 ? '+' : ''}${gap}pp vs policy rate pre-decision → market implied ${expectedDirection}`,
+  }
+}
+
+// ── Watch List Activated ──────────────────────────────────────────────
+// When the Fed moves, temporarily track the areas most likely to feel it —
+// answering "what should I be watching now?" rather than stopping at the event.
+// Each item measures its indicator's move SINCE the decision date.
+export type WatchStatus = 'monitoring' | 'impact' | 'stabilized'
+export type FedWatchItem = {
+  key: string; label: string; icon: string
+  status: WatchStatus
+  severity: 'none' | 'amber' | 'red'
+  detail: string
+}
+export type FedWatch = {
+  active: boolean
+  eventType: 'hike' | 'cut' | null
+  items: FedWatchItem[]
+  impactCount: number
+  total: number
+}
+
+type WatchCfg = { key: string; label: string; icon: string; series: string; dir: 'up' | 'down'; amber: number; red: number; kind: 'pp' | 'claims' | 'pct'; noun: string }
+
+// What a hike vs a cut tends to hit first. Thresholds are moves SINCE the
+// decision, in each metric's own units (pp, thousands of claims, or %).
+const HIKE_WATCH: WatchCfg[] = [
+  { key: 'mortgage',   label: 'Mortgage Rates',  icon: 'home',       series: 'MORTGAGE30US',  dir: 'up', amber: 0.20, red: 0.50, kind: 'pp',     noun: '30-year mortgage average' },
+  { key: 'treasury',   label: 'Treasury Yields', icon: 'chart-line', series: 'DGS10',         dir: 'up', amber: 0.20, red: 0.50, kind: 'pp',     noun: '10-year yield' },
+  { key: 'employment', label: 'Employment',      icon: 'briefcase',  series: 'ICSA',          dir: 'up', amber: 25,   red: 60,   kind: 'claims', noun: 'jobless claims' },
+  { key: 'inflation',  label: 'Inflation',       icon: 'flame',      series: 'CPIAUCSL',      dir: 'up', amber: 0.3,  red: 0.7,  kind: 'pp',     noun: 'inflation (CPI YoY)' },
+  { key: 'credit',     label: 'Bank Lending',    icon: 'bank',       series: 'BAMLH0A0HYM2',  dir: 'up', amber: 0.5,  red: 1.5,  kind: 'pp',     noun: 'high-yield spreads' },
+]
+const CUT_WATCH: WatchCfg[] = [
+  { key: 'treasury',   label: 'Treasury Yields', icon: 'chart-line', series: 'DGS10',         dir: 'down', amber: 0.20, red: 0.50, kind: 'pp',  noun: '10-year yield' },
+  { key: 'bankstress', label: 'Bank Stress',     icon: 'bank',       series: 'BAMLH0A0HYM2',  dir: 'up',   amber: 0.5,  red: 1.5,  kind: 'pp',  noun: 'high-yield spreads' },
+  { key: 'equity',     label: 'Equity Markets',  icon: 'activity',   series: 'SP500',         dir: 'up',   amber: 3,    red: 7,    kind: 'pct', noun: 'S&P 500' },
+  { key: 'dollar',     label: 'Dollar Strength', icon: 'globe',      series: 'DTWEXBGS',      dir: 'down', amber: 1,    red: 3,    kind: 'pct', noun: 'broad dollar index' },
+]
+
+function buildWatchItem(c: WatchCfg, obs: Obs[], daysSince: number): FedWatchItem {
+  const mon: FedWatchItem = { key: c.key, label: c.label, icon: c.icon, status: 'monitoring', severity: 'none', detail: 'monitoring for movement' }
+  if (!obs || obs.length < 2) return mon
+  const cur = obs[0].value
+  const base = valueDaysBack(obs, Math.max(1, daysSince)) ?? obs[obs.length - 1].value
+  if (base === 0 && c.kind === 'pct') return mon
+  const raw = c.kind === 'claims' ? (cur - base) / 1000
+    : c.kind === 'pct' ? (cur - base) / Math.abs(base) * 100
+    : cur - base
+  const dirMag = c.dir === 'up' ? raw : -raw          // movement in the "impact" direction
+  const dp = c.kind === 'claims' ? 0 : 2
+  const unit = c.kind === 'pct' ? '%' : c.kind === 'claims' ? 'k' : '%'
+  const word = raw >= 0 ? 'rose' : 'fell'
+  const detail = `${c.noun} ${word} ${Math.abs(raw).toFixed(dp)}${unit}`
+  if (dirMag >= c.red)   return { ...mon, status: 'impact', severity: 'red',   detail }
+  if (dirMag >= c.amber) return { ...mon, status: 'impact', severity: 'amber', detail }
+  if (daysSince >= 30)   return { ...mon, status: 'stabilized', severity: 'none', detail: 'stable — no meaningful move since the decision' }
+  return mon
+}
+
+async function buildFedWatch(fp: FedPolicyData, tenYHistory: Obs[]): Promise<FedWatch> {
+  const cfgs = fp.lastChangeDirection === 'hike' ? HIKE_WATCH : CUT_WATCH
+  const days = fp.daysSinceChange ?? 0
+  const seriesData = await Promise.all(cfgs.map(c =>
+    c.series === 'DGS10' ? Promise.resolve(tenYHistory)
+      : fredSeries(c.series, 400, c.series === 'CPIAUCSL' ? 'pc1' : 'lin')))
+  const items = cfgs.map((c, i) => buildWatchItem(c, seriesData[i], days))
+  return {
+    active: true,
+    eventType: fp.lastChangeDirection as 'hike' | 'cut',
+    items,
+    impactCount: items.filter(it => it.status === 'impact').length,
+    total: items.length,
   }
 }
 
@@ -632,8 +735,13 @@ export type BondModel = {
   lastAlert: string | null
   watching: WatchItem[]
   fedPolicy: FedPolicyData
+  fedWatch: FedWatch
+  rateExpectation: RateExpectation   // internal proxy — not rendered
   data: BondData
 }
+
+const INACTIVE_WATCH: FedWatch = { active: false, eventType: null, items: [], impactCount: 0, total: 0 }
+const WATCH_WINDOW_DAYS = 60   // how long a Fed move keeps its watch list active
 
 const SUBTITLES: Record<string, string> = {
   'Normal Expansion': 'The curve and yields point to steady economic growth.',
@@ -661,12 +769,14 @@ export async function buildBondModel(): Promise<BondModel> {
 
   // Data-unavailable guard — the 10Y is the keystone series.
   if (data.tenY == null) {
+    const fp = buildFedPolicy(data.targetObs)
     return {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
       risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
-      categories: [], alerts: [], lastAlert: null, watching: [], fedPolicy: buildFedPolicy(data.targetObs), data,
+      categories: [], alerts: [], lastAlert: null, watching: [], fedPolicy: fp, fedWatch: INACTIVE_WATCH,
+      rateExpectation: marketExpectation(data.twoYObs, fp), data,
     }
   }
 
@@ -680,6 +790,14 @@ export async function buildBondModel(): Promise<BondModel> {
   const alerts = buildAlerts(data)
   const watching = buildWatching(data, alerts)
   const { risk, stabilizer } = riskAndStabilizer(categories, watching)
+  const fedPolicy = buildFedPolicy(data.targetObs)
+
+  // Activate the watch list only inside the post-decision window — so the extra
+  // impact-series fetches happen for ~60 days after a move, not on every load.
+  const fedWatch = fedPolicy.lastChangeDirection !== 'none'
+    && fedPolicy.daysSinceChange != null && fedPolicy.daysSinceChange <= WATCH_WINDOW_DAYS
+    ? await buildFedWatch(fedPolicy, data.tenYHistory)
+    : INACTIVE_WATCH
 
   return {
     available: true,
@@ -688,6 +806,8 @@ export async function buildBondModel(): Promise<BondModel> {
     risk, stabilizer,
     categories, alerts,
     lastAlert: buildLastAlert(data),
-    watching, fedPolicy: buildFedPolicy(data.targetObs), data,
+    watching, fedPolicy, fedWatch,
+    rateExpectation: marketExpectation(data.twoYObs, fedPolicy),
+    data,
   }
 }

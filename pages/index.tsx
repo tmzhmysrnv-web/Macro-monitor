@@ -389,7 +389,7 @@ export default function Dashboard() {
     const SEL = '.card,.panel,.ts-card,.bm-hero,.cal-col,.dc,.np-card,'
       + '.inf-hero,.inf-driver,.bn-hero,.bn-driver,.cr-hero,.cr-driver,'
       + '.hs-hero,.hs-driver,.gl-hero,.gl-driver,.lb-hero,.lb-driver,'
-      + '.mk-hero,.mk-driver'
+      + '.mk-hero,.mk-driver,.fp-banner,.wl'
     let lastCard: HTMLElement | null = null
     const flash = (el: HTMLElement, e: PointerEvent) => {
       el.classList.add('lantern')
