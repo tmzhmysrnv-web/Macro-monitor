@@ -169,7 +169,7 @@ function BreakMeterTrend({ history, color, concernLabel }: { history: { date: st
   )
 }
 
-export default function Overview({ data = null, events = [], onViewCard, onNavigate, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onOpenAlerts?: () => void; activeCount?: number }) {
+export default function Overview({ data = null, events = [], onViewCard, onNavigate, onViewFedPolicy, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onViewFedPolicy?: () => void; onOpenAlerts?: () => void; activeCount?: number }) {
   const [bm, setBm] = useState<BreakMeter | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -340,7 +340,7 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
                 if (lastRelease.metricKey === 'fedfunds') {
                   const u = data?.fedTargetUpper ?? null
                   const when = u != null ? `${(u - 0.25).toFixed(2)}–${u.toFixed(2)}%` : ago <= 1 ? 'yesterday' : `${ago}d ago`
-                  const nav = onNavigate ? () => onNavigate('bonds') : undefined
+                  const nav = onViewFedPolicy ?? (onNavigate ? () => onNavigate('bonds') : undefined)
                   return (
                     <div className={`ts-cell ${nav ? 'is-click' : ''}`} onClick={nav} role={nav ? 'button' : undefined} tabIndex={nav ? 0 : undefined} onKeyDown={nav ? (e) => { if (e.key === 'Enter') nav() } : undefined}>
                       <div className="ts-k">Latest release</div>

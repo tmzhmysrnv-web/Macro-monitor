@@ -246,7 +246,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
           )
         })() : null
         return (
-          <div className={`fp-banner fp-${state}`}>
+          <div className={`fp-banner fp-${state}`} data-hlkey="fed-policy">
             {alert ? (
               <>
                 <div className="fp-left">

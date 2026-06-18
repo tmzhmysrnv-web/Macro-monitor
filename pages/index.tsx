@@ -445,15 +445,30 @@ export default function Dashboard() {
     return () => clearTimeout(t)
   }, [])
 
-  // After a "go to card" link, scroll the highlighted card into view on All Data,
-  // then clear the flash so it's a one-shot.
+  // After a "go to card" link, scroll the target ([data-hlkey]) into view and
+  // flash it — works across tabs (e.g. the Bonds Fed Policy banner), retrying
+  // briefly while the destination tab mounts/loads its data.
   useEffect(() => {
-    if (!highlightKey || activeTab !== 'all') return
-    const el = document.querySelector(`[data-hlkey="${highlightKey}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    const t = setTimeout(() => setHighlightKey(null), 2200)
-    return () => clearTimeout(t)
-  }, [highlightKey, activeTab])
+    if (!highlightKey) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout>
+    let attempts = 0
+    const run = () => {
+      if (cancelled) return
+      const el = document.querySelector<HTMLElement>(`[data-hlkey="${highlightKey}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('is-hl')
+        timer = setTimeout(() => { el.classList.remove('is-hl'); setHighlightKey(null) }, 2200)
+      } else if (attempts++ < 25) {
+        timer = setTimeout(run, 100)
+      } else {
+        setHighlightKey(null)
+      }
+    }
+    timer = setTimeout(run, 50)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [highlightKey])
 
   // Load sparklines for all indicators after data loads
   useEffect(() => {
@@ -484,6 +499,13 @@ export default function Dashboard() {
   const handleViewCard = useCallback((key: string) => {
     setActiveTab('all')
     setHighlightKey(key)
+  }, [])
+
+  // FOMC links route to the Bonds Fed Policy banner (the "recent release") and
+  // flash it, rather than a metric chart.
+  const goToFedPolicy = useCallback(() => {
+    setActiveTab('bonds')
+    setHighlightKey('fed-policy')
   }, [])
 
   // Live alerts = what's firing across the prefetched intelligence-tab models.
@@ -677,10 +699,12 @@ export default function Dashboard() {
         }
         .card:hover { border-color: var(--border-med); transform: translateY(-1px); }
         .card:active { transform: translateY(0); }
-        .card.is-hl { animation: cardflash 2.2s ease-out; }
-        @keyframes cardflash {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(111,174,125,0); border-color: var(--border); }
-          15%, 55% { box-shadow: 0 0 0 2px var(--term); border-color: var(--term); }
+        /* Generic "you were sent here" flash — a ring that follows the element's
+           own radius, so it works on All Data cards and the Bonds Fed Policy banner. */
+        .is-hl { animation: hlflash 2.2s ease-out; }
+        @keyframes hlflash {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(111,174,125,0); }
+          15%, 55% { box-shadow: 0 0 0 2px var(--term); }
         }
         .card-label { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
         .card-label-left { display: flex; align-items: center; gap: 5px; }
@@ -790,7 +814,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
-            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
+            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {
@@ -811,7 +835,7 @@ export default function Dashboard() {
                         // FOMC: show the target range and route to the Bonds Fed Policy banner.
                         const u = data?.fedTargetUpper ?? null
                         outcome = u != null ? `Target range ${(u - 0.25).toFixed(2)}–${u.toFixed(2)}%` : 'Rate decision'
-                        onClick = () => setActiveTab('bonds')
+                        onClick = goToFedPolicy
                       }
                       else if (ind && val != null) { outcome = outcomeLine(ind, val); onClick = () => handleViewCard(ind.key) }
                       else if (e.name === 'Jobs Report' && data?.payrolls != null) { outcome = jobsOutcome(data.payrolls, data.payrollsAvg) }
@@ -897,7 +921,7 @@ export default function Dashboard() {
                 const sparkSeries = sparklines[key]
 
                 return (
-                  <div className={`card ${highlightKey === key ? 'is-hl' : ''}`} key={key} data-hlkey={key} style={cardStyle} onClick={() => handleCardClick(key, indicator.label)}>
+                  <div className="card" key={key} data-hlkey={key} style={cardStyle} onClick={() => handleCardClick(key, indicator.label)}>
                     <div className="card-label">
                       <span className="card-label-left">
                         <span className={`dot ${status !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: styles.dot }} />
