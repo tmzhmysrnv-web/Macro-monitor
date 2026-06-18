@@ -71,6 +71,7 @@ export type MacroData = {
   treasury10y:   number | null
   treasury2y:    number | null
   fedfunds:      number | null
+  fedTargetUpper: number | null  // DFEDTARU — upper bound of the target range (range = upper−0.25 to upper)
   cpi:           number | null
   joblessClaims: number | null
   yieldCurve:    number | null
@@ -111,7 +112,7 @@ export function fetchAllData(): Promise<MacroData> {
 }
 
 async function _fetchAllData(): Promise<MacroData> {
-  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR, silverR] = await Promise.all([
+  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR, silverR, fedTargetU] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
@@ -129,6 +130,7 @@ async function _fetchAllData(): Promise<MacroData> {
     fetchYahoo('CL=F'),
     fetchYahoo('HG=F'),
     fetchYahoo('SI=F'),       // silver — industrial + precious, a strong growth/inflation signal
+    fetchFredSeries('DFEDTARU'), // fed-funds target upper (range = upper−0.25 to upper)
   ])
 
   return {
@@ -136,6 +138,7 @@ async function _fetchAllData(): Promise<MacroData> {
     treasury10y:   t10y,
     treasury2y:    t2y,
     fedfunds:      ff,
+    fedTargetUpper: fedTargetU,
     cpi:           cpi != null ? parseFloat(cpi.toFixed(2)) : null,
     joblessClaims: claims != null ? parseFloat((claims / 1000).toFixed(1)) : null,
     yieldCurve:    t10y != null && t2y != null ? parseFloat((t10y - t2y).toFixed(2)) : null,

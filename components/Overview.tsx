@@ -333,11 +333,25 @@ export default function Overview({ data = null, events = [], onViewCard, onNavig
                 <div className="ts-v">{nextEvent ? <>{nextEvent.name}<span className="ts-detail"> — {nextEvent.daysUntil === 0 ? 'today' : nextEvent.daysUntil === 1 ? 'tomorrow' : `in ${nextEvent.daysUntil}d`}</span></> : 'No major releases scheduled'}</div>
               </div>
               {lastRelease && (() => {
-                const key = lastRelease.metricKey
-                const val = key && data ? (data as unknown as Record<string, number | null>)[key] ?? null : null
-                const rNav = onViewCard && key && val != null ? () => onViewCard(key, lastRelease.name) : undefined
                 const isNew = lastRelease.daysUntil >= -1          // "new" for the first day after release
                 const ago = -lastRelease.daysUntil
+                // FOMC: show the target range (matches the Bonds banner) and route
+                // to the Bonds Fed Policy banner — the "recent release" — not a chart.
+                if (lastRelease.metricKey === 'fedfunds') {
+                  const u = data?.fedTargetUpper ?? null
+                  const when = u != null ? `${(u - 0.25).toFixed(2)}–${u.toFixed(2)}%` : ago <= 1 ? 'yesterday' : `${ago}d ago`
+                  const nav = onNavigate ? () => onNavigate('bonds') : undefined
+                  return (
+                    <div className={`ts-cell ${nav ? 'is-click' : ''}`} onClick={nav} role={nav ? 'button' : undefined} tabIndex={nav ? 0 : undefined} onKeyDown={nav ? (e) => { if (e.key === 'Enter') nav() } : undefined}>
+                      <div className="ts-k">Latest release</div>
+                      <div className="ts-v">{lastRelease.name}<span className="ts-detail"> — {when}</span>{isNew && <span className="ts-new">new</span>}{nav && <span className="ts-go"> →</span>}</div>
+                    </div>
+                  )
+                }
+                const key = lastRelease.metricKey
+                const val = key && data ? (data as unknown as Record<string, number | null>)[key] ?? null : null
+                // Clickable only when there's a card to land on (a tracked metric).
+                const rNav = onViewCard && key && val != null ? () => onViewCard(key, lastRelease.name) : undefined
                 const when = val != null ? fmt(key!, val) : ago <= 1 ? 'yesterday' : `${ago}d ago`
                 return (
                   <div className={`ts-cell ${rNav ? 'is-click' : ''}`} onClick={rNav} role={rNav ? 'button' : undefined} tabIndex={rNav ? 0 : undefined} onKeyDown={rNav ? (e) => { if (e.key === 'Enter') rNav() } : undefined}>

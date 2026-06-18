@@ -50,6 +50,9 @@ const TONE_BG: Record<Tone, string> = {
   bad: 'rgba(226,75,74,0.15)', crisis: 'rgba(163,45,45,0.18)',
 }
 
+// The Fed's target range from its upper bound (the range is always 25bp wide).
+const rateRange = (u: number) => `${(u - 0.25).toFixed(2)}–${u.toFixed(2)}%`
+
 // Step-line of the policy-rate path — context for the banner ("what it means").
 // Filled like the site's other charts (area gradient + current-point dot) so it
 // doesn't read as a flat, contextless line.
@@ -262,7 +265,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                 </div>
                 {spark}
                 <div className="fp-right">
-                  <div className="fp-now">Federal funds rate now <strong>{fp.currentRate!.toFixed(2)}%</strong></div>
+                  <div className="fp-now">Federal funds rate now <strong>{rateRange(fp.currentRate!)}</strong></div>
                   <div className="fp-when">{agoText}</div>
                 </div>
               </>
@@ -273,7 +276,7 @@ export default function Bonds({ initialData = null }: { initialData?: BondRespon
                     <Icon name="bank" size={15} style={{ verticalAlign: -2.5, marginRight: 6 }} />
                     Fed policy
                   </span>
-                  <span className="fp-rate">Current rate <strong>{fp.currentRate!.toFixed(2)}%</strong></span>
+                  <span className="fp-rate">Current rate <strong>{rateRange(fp.currentRate!)}</strong></span>
                 </div>
                 {spark}
                 <div className="fp-meta">

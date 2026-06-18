@@ -358,6 +358,7 @@ export default function Dashboard() {
   const [marketsData, setMarketsData] = useState<any>(null)
   const [globalData, setGlobalData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
+  const [highlightKey, setHighlightKey] = useState<string | null>(null)
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [notifOpen, setNotifOpen] = useState(false)
@@ -444,6 +445,16 @@ export default function Dashboard() {
     return () => clearTimeout(t)
   }, [])
 
+  // After a "go to card" link, scroll the highlighted card into view on All Data,
+  // then clear the flash so it's a one-shot.
+  useEffect(() => {
+    if (!highlightKey || activeTab !== 'all') return
+    const el = document.querySelector(`[data-hlkey="${highlightKey}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setHighlightKey(null), 2200)
+    return () => clearTimeout(t)
+  }, [highlightKey, activeTab])
+
   // Load sparklines for all indicators after data loads
   useEffect(() => {
     if (!data) return
@@ -467,12 +478,12 @@ export default function Dashboard() {
     setActiveChart({ key, label })
   }, [])
 
-  // Jump from an Overview alert to the indicator's metric card: switch to the
-  // most specific tab that holds it, then open its chart.
-  const handleViewCard = useCallback((key: string, label: string) => {
-    const specific = TABS.find(t => t.id !== 'all' && t.sections?.some(s => s.keys.includes(key)))
-    setActiveTab(specific?.id ?? 'all')
-    setActiveChart({ key, label })
+  // Jump from an Overview link to the indicator's card: go to All Data (where the
+  // cards live) and highlight it — don't auto-open the historical chart. The user
+  // can open the chart from the card itself.
+  const handleViewCard = useCallback((key: string) => {
+    setActiveTab('all')
+    setHighlightKey(key)
   }, [])
 
   // Live alerts = what's firing across the prefetched intelligence-tab models.
@@ -666,6 +677,11 @@ export default function Dashboard() {
         }
         .card:hover { border-color: var(--border-med); transform: translateY(-1px); }
         .card:active { transform: translateY(0); }
+        .card.is-hl { animation: cardflash 2.2s ease-out; }
+        @keyframes cardflash {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(111,174,125,0); border-color: var(--border); }
+          15%, 55% { box-shadow: 0 0 0 2px var(--term); border-color: var(--term); }
+        }
         .card-label { font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
         .card-label-left { display: flex; align-items: center; gap: 5px; }
         .card-expand { font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.15s; }
@@ -875,7 +891,7 @@ export default function Dashboard() {
                 const sparkSeries = sparklines[key]
 
                 return (
-                  <div className="card" key={key} style={cardStyle} onClick={() => handleCardClick(key, indicator.label)}>
+                  <div className={`card ${highlightKey === key ? 'is-hl' : ''}`} key={key} data-hlkey={key} style={cardStyle} onClick={() => handleCardClick(key, indicator.label)}>
                     <div className="card-label">
                       <span className="card-label-left">
                         <span className={`dot ${status !== 'ok' ? 'dot-pulse' : ''}`} style={{ background: styles.dot }} />
