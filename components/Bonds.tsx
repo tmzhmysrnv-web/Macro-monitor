@@ -68,15 +68,9 @@ function RateSpark({ points, tone }: { points: { date: string; value: number }[]
   const area = `${line} L ${xs[xs.length - 1].toFixed(1)} ${bot} L ${xs[0].toFixed(1)} ${bot} Z`
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }} aria-hidden="true">
-      <defs>
-        <linearGradient id="fpgrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={tone} stopOpacity="0.2" />
-          <stop offset="100%" stopColor={tone} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#fpgrad)" stroke="none" />
-      <path d={line} fill="none" stroke={tone} strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.8" fill="var(--text-primary)" stroke="var(--card-bg)" strokeWidth="1.5" />
+      <path d={area} stroke="none" style={{ fill: tone, fillOpacity: 0.14 }} />
+      <path d={line} fill="none" strokeLinejoin="round" style={{ stroke: tone, strokeWidth: 1.5 }} />
+      <circle cx={xs[xs.length - 1].toFixed(1)} cy={ys[ys.length - 1].toFixed(1)} r="2.8" style={{ fill: 'var(--text-primary)', stroke: 'var(--card-bg)', strokeWidth: 1.5 }} />
     </svg>
   )
 }

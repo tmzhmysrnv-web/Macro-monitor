@@ -807,7 +807,13 @@ export default function Dashboard() {
                       const val = ind && data ? getValueForKey(data, ind.key) : null
                       let outcome: string | null = null
                       let onClick: (() => void) | undefined
-                      if (ind && val != null) { outcome = outcomeLine(ind, val); onClick = () => setActiveChart({ key: ind.key, label: ind.label }) }
+                      if (e.metricKey === 'fedfunds') {
+                        // FOMC: show the target range and route to the Bonds Fed Policy banner.
+                        const u = data?.fedTargetUpper ?? null
+                        outcome = u != null ? `Target range ${(u - 0.25).toFixed(2)}–${u.toFixed(2)}%` : 'Rate decision'
+                        onClick = () => setActiveTab('bonds')
+                      }
+                      else if (ind && val != null) { outcome = outcomeLine(ind, val); onClick = () => handleViewCard(ind.key) }
                       else if (e.name === 'Jobs Report' && data?.payrolls != null) { outcome = jobsOutcome(data.payrolls, data.payrollsAvg) }
                       const ago = e.daysUntil === 0 ? 'today' : e.daysUntil === -1 ? 'yesterday' : `${-e.daysUntil}d ago`
                       return (
