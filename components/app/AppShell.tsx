@@ -50,9 +50,11 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
       <div className="app shell">
         <aside className="sb">
           <div className="sb-brand">
-            <span className="brand">is the world breaking?...<span className="brand-cursor" aria-hidden="true" /></span>
+            <Link href="/" className="sb-brand-link" title="Back to overview">
+              <span className="brand">is the world breaking?...<span className="brand-cursor" aria-hidden="true" /></span>
+            </Link>
           </div>
-          <div className="sb-tag">We monitor the world so you don't have to.</div>
+          <div className="sb-tag">We monitor the economy so you don't have to.</div>
 
           <nav className="sb-nav">
             {NAV.map(n => (
@@ -95,6 +97,7 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
           background: var(--c-surface); border-right: 1px solid var(--c-border); padding: 22px 16px; }
         .sb-brand { display: flex; align-items: center; gap: 10px; color: var(--c-green-deep); }
         .sb-brand-name { font-size: 15px; font-weight: 600; line-height: 1.2; color: var(--c-text); }
+        .sb-brand-link, .sb-brand-link:hover { text-decoration: none; }
         .sb-tag { font-size: 12px; color: var(--c-muted); line-height: 1.4; margin: 10px 2px 20px; }
         .sb-nav { display: flex; flex-direction: column; gap: 2px; }
         .sb-link { display: flex; align-items: center; gap: 11px; font-size: 14px; color: var(--c-text-soft);

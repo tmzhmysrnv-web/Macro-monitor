@@ -24,11 +24,14 @@ type Payload = {
   whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
 }
 
-function bottomLine(total: number): { h: string; m: string } {
-  if (total < 45) return { h: 'You can breathe easy.', m: 'The economy remains in a stable regime. Enjoy your week. We\'ll keep watching.' }
-  if (total < 65) return { h: 'Mostly calm out there.', m: 'A few areas are worth watching, but nothing is breaking. Go enjoy your week — we\'re on it.' }
-  if (total < 85) return { h: 'Worth your attention.', m: 'Stress is building in part of the system. We\'ll alert you if it crosses a line.' }
-  return { h: 'We\'re watching this closely.', m: 'Systemic stress is elevated. You\'ll hear from us the moment your topics are affected.' }
+// The message is split around the one word that flips the sentence's meaning
+// ("stable" → "shaky" …) — rendered with a dotted underline so it reads like a
+// fill-in-the-blank that today's data filled in.
+function bottomLine(total: number): { h: string; lead: string; swap: string; tail: string } {
+  if (total < 45) return { h: 'You can breathe easy.', lead: 'The economy remains in ', swap: 'stable', tail: ' territory. Enjoy your week. We\'ll keep watching.' }
+  if (total < 65) return { h: 'Mostly calm out there.', lead: 'The economy is in ', swap: 'steady', tail: ' territory — a few areas worth watching, but nothing is breaking.' }
+  if (total < 85) return { h: 'Worth your attention.', lead: 'The economy is drifting into ', swap: 'shaky', tail: ' territory. We\'ll alert you if it crosses a line.' }
+  return { h: 'We\'re watching this closely.', lead: 'The economy is in ', swap: 'fragile', tail: ' territory. You\'ll hear from us the moment your topics are affected.' }
 }
 function deltaLabel(d: number): string {
   const a = Math.abs(d)
@@ -203,7 +206,7 @@ export default function DashboardPage(props: GatedProps) {
           <div>
             <div className="cs-kicker">Bottom Line</div>
             <div className="bl-h">{bl.h}</div>
-            <div className="bl-m">{bl.m}</div>
+            <div className="bl-m">{bl.lead}<span className="swap">{bl.swap}</span>{bl.tail}</div>
           </div>
         </div>
       )}
@@ -254,6 +257,7 @@ export default function DashboardPage(props: GatedProps) {
         .bl-icon { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-green); color: #fff; }
         .bl-h { font-size: 22px; font-weight: 600; color: var(--c-green-deep); margin: 5px 0 6px; }
         .bl-m { font-size: 14px; color: var(--c-text-soft); line-height: 1.55; max-width: 60ch; }
+        .bl-m .swap { border-bottom: 2px dotted var(--c-warn); text-decoration: none; padding-bottom: 1px; }
         .dfoot { text-align: center; font-size: 12.5px; color: var(--c-muted); margin-top: 36px; }
         @media (max-width: 720px) {
           .cs { grid-template-columns: 1fr; }

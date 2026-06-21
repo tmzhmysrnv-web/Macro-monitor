@@ -823,7 +823,10 @@ export default function Dashboard() {
         {tuner && <GlowTuner />}
         <div className="topbar">
           <div className="topbar-left">
-            <div className="site-name">is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
+            <div className="site-name" role="button" tabIndex={0} title="Back to overview"
+              onClick={() => setActiveTab('overview')}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setActiveTab('overview') }}
+              style={{ cursor: 'pointer' }}>is the world breaking?...<span className="term-cursor" aria-hidden="true" /></div>
             <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
           </div>
           <div className="topbar-actions">
