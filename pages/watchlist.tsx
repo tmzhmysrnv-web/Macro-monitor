@@ -7,7 +7,7 @@ import AppShell from '../components/app/AppShell'
 import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { INTEREST_CATALOG, type InterestCategory } from '../lib/interests'
-import { getSupabaseBrowser } from '../lib/supabase/client'
+import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 
 export default function Watchlist(props: GatedProps) {
   const supabase = getSupabaseBrowser()
@@ -32,7 +32,7 @@ export default function Watchlist(props: GatedProps) {
     } catch (e) {
       // revert on failure
       setSel(prev => { const n = new Set(prev); adding ? n.delete(c) : n.add(c); return n })
-      setErr(e instanceof Error ? e.message : 'Could not save.')
+      setErr(supaErr(e))
     }
   }
 

@@ -9,14 +9,13 @@ import type { GetServerSidePropsContext } from 'next'
 import AppTheme from '../components/app/AppTheme'
 import Icon from '../components/Icon'
 import { INTEREST_CATALOG, type InterestCategory } from '../lib/interests'
-import { getSupabaseBrowser } from '../lib/supabase/client'
+import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 import { getSupabaseServer } from '../lib/supabase/server'
 
 type Freq = 'breaking' | 'daily' | 'weekly'
 const FREQ: { id: Freq; label: string; sub: string }[] = [
   { id: 'breaking', label: 'Only when the world is breaking', sub: 'We stay silent until something truly changes.' },
-  { id: 'daily', label: 'Daily digest', sub: 'A short morning summary, every day.' },
-  { id: 'weekly', label: 'Weekly digest', sub: 'One calm recap, every Sunday.' },
+  { id: 'weekly', label: 'Weekly digest', sub: 'Breaking alerts, plus one calm recap every Sunday.' },
 ]
 
 export default function Onboarding() {
@@ -53,7 +52,7 @@ export default function Onboarding() {
       if (pErr) throw pErr
       setStep('done')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not save. Try again.')
+      setErr(supaErr(e))
     } finally {
       setBusy(false)
     }

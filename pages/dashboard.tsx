@@ -15,18 +15,15 @@ import { INTEREST_CATALOG, readInterest } from '../lib/interests'
 type Vals = Record<string, number | null>
 type StressPt = { date: string; total: number }
 type Mover = { key: string; label: string; current: number; weekAgo: number; unit: string; direction: string }
+type Concern = { label: string; detail: string; tab: string } | null
+type Briefing = { headline: string; concern: Concern; stabilizer: Concern } | null
 
 type Payload = {
   total: number; level: string; verdict: string; weekChange: number | null
+  briefing: Briefing
   whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
 }
 
-function headline(total: number): string {
-  if (total < 45) return 'The World Is Not Breaking'
-  if (total < 65) return 'Worth Keeping an Eye On'
-  if (total < 85) return 'Stress Is Building'
-  return 'The World Is Under Strain'
-}
 function bottomLine(total: number): { h: string; m: string } {
   if (total < 45) return { h: 'You can breathe easy.', m: 'The economy remains in a stable regime. Enjoy your week. We\'ll keep watching.' }
   if (total < 65) return { h: 'Mostly calm out there.', m: 'A few areas are worth watching, but nothing is breaking. Go enjoy your week — we\'re on it.' }
@@ -86,6 +83,7 @@ export default function DashboardPage(props: GatedProps) {
         }
         setD({
           total: Math.round(bm.total ?? 0), level: bm.level ?? 'calm', verdict: bm.verdict ?? '',
+          briefing: bm.briefing ?? null,
           weekChange: stress.weekChange ?? bm.weekChange ?? null,
           whatChanged: bm.whatChanged ?? [], history: stress.history ?? [], values: data, series,
         })
@@ -116,8 +114,12 @@ export default function DashboardPage(props: GatedProps) {
           <div className={`cs-shield l-${d ? d.level : 'calm'}`}><Icon name="shield-check" size={30} /></div>
           <div>
             <div className="cs-kicker">Current Status</div>
-            <div className="cs-headline">{d ? headline(d.total) : 'Checking…'}</div>
-            <div className="cs-statussub">{d?.verdict || 'Reading the latest data.'}</div>
+            <div className="cs-headline">{d ? (d.briefing?.headline ?? d.verdict) : 'Checking…'}</div>
+            <div className="cs-statussub">
+              {d?.briefing?.concern
+                ? <>Biggest concern: <b>{d.briefing.concern.label}</b>{d.briefing.concern.detail ? ` — ${d.briefing.concern.detail}` : ''}</>
+                : (d ? 'Nothing pressing right now.' : 'Reading the latest data.')}
+            </div>
             <button className="btn btn-ghost" style={{ marginTop: 14 }} onClick={() => router.push('/?tab=overview')}>
               View Details <Icon name="arrow-right" size={15} />
             </button>

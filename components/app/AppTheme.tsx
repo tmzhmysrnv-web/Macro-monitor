@@ -11,7 +11,7 @@ export default function AppTheme() {
       <Head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
       </Head>
       <style>{`
         .app {
@@ -28,6 +28,14 @@ export default function AppTheme() {
         .app * { box-sizing: border-box; }
         .app a { color: var(--c-green-deep); text-decoration: none; }
         .app a:hover { text-decoration: underline; }
+
+        /* Site identity — mirrors the public site's .site-name (Space Mono, lowercase,
+           blinking terminal cursor), tinted for the light theme. No logo glyph. */
+        .app .brand { font-family: 'Space Mono', var(--c-mono); font-size: 14px; font-weight: 400;
+          letter-spacing: 0.04em; color: var(--c-green-deep); line-height: 1.3; }
+        .app .brand-cursor { display: inline-block; width: 0.5em; height: 0.95em; margin-left: 3px;
+          vertical-align: -0.1em; background: var(--c-green-deep); animation: brandblink 1.2s steps(1, end) infinite; }
+        @keyframes brandblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 
         /* ── buttons ── */
         .app .btn { font-family: var(--c-sans); font-size: 14px; font-weight: 500; cursor: pointer;
@@ -89,6 +97,8 @@ export default function AppTheme() {
         .app .auth-brand { display: flex; align-items: center; gap: 9px; justify-content: center; color: var(--c-green-deep); margin-bottom: 26px; }
         .app .auth-brand span { font-size: 15px; font-weight: 600; }
         .app .auth-h1 { font-size: 28px; font-weight: 600; text-align: center; letter-spacing: -0.01em; }
+        .app .auth-title { font-family: 'Space Mono', var(--c-mono); font-size: 22px; font-weight: 400;
+          letter-spacing: 0.03em; color: var(--c-green-deep); text-align: center; }
         .app .auth-sub { font-size: 14px; color: var(--c-text-soft); text-align: center; line-height: 1.55; margin: 10px 0 26px; }
         .app .divider { display: flex; align-items: center; gap: 12px; color: var(--c-muted); font-size: 12px; margin: 18px 0; }
         .app .divider::before, .app .divider::after { content: ''; flex: 1; height: 1px; background: var(--c-border); }

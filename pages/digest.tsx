@@ -11,7 +11,7 @@ import { getSupabaseBrowser } from '../lib/supabase/client'
 
 type Freq = 'breaking' | 'daily' | 'weekly'
 const FREQ: { id: Freq; label: string }[] = [
-  { id: 'breaking', label: 'Only when breaking' }, { id: 'daily', label: 'Daily' }, { id: 'weekly', label: 'Weekly' },
+  { id: 'breaking', label: 'Only when breaking' }, { id: 'weekly', label: 'Weekly' },
 ]
 const BADGE: Record<string, string> = { ok: 'badge-ok', warn: 'badge-warn', alert: 'badge-alert' }
 
@@ -37,7 +37,7 @@ export default function Digest(props: GatedProps) {
   }
 
   const cadence = freq === 'weekly' ? `every Sunday — next on ${nextSunday()}`
-    : freq === 'daily' ? 'every morning' : 'only when something truly breaks'
+    : 'only when something truly breaks'
 
   return (
     <AppShell user={props.user} active="/digest">

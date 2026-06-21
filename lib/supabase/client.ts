@@ -24,3 +24,16 @@ export function getSupabaseBrowser(): SupabaseClient | null {
   _client = createBrowserClient(url()!, anon()!)
   return _client
 }
+
+// Turn any thrown value (Supabase PostgrestError — a plain object, NOT an Error —
+// or a real Error) into a readable message, and log the full thing for diagnosis.
+// PostgrestError carries { message, code, details, hint }.
+export function supaErr(e: unknown, fallback = 'Could not save. Try again.'): string {
+  console.error('[supabase]', e)
+  if (e && typeof e === 'object') {
+    const o = e as { message?: string; code?: string; details?: string; hint?: string }
+    if (o.message) return o.code ? `${o.message} (${o.code})` : o.message
+  }
+  if (e instanceof Error) return e.message
+  return fallback
+}

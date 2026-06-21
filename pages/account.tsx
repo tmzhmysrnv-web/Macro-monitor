@@ -6,7 +6,7 @@ import type { GetServerSidePropsContext } from 'next'
 import AppShell from '../components/app/AppShell'
 import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
-import { getSupabaseBrowser } from '../lib/supabase/client'
+import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 
 export default function Account(props: GatedProps) {
   const router = useRouter()
@@ -21,7 +21,7 @@ export default function Account(props: GatedProps) {
     setBusy(true); setErr('')
     const { error } = await supabase.from('profiles').update({ full_name: name || null }).eq('id', props.user.id)
     setBusy(false)
-    if (error) { setErr(error.message); return }
+    if (error) { setErr(supaErr(error)); return }
     setSaved(true); setTimeout(() => setSaved(false), 1500)
   }
 

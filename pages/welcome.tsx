@@ -6,7 +6,6 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import type { GetServerSidePropsContext } from 'next'
 import AppTheme from '../components/app/AppTheme'
-import Icon from '../components/Icon'
 import { getSupabaseBrowser, supabaseReady } from '../lib/supabase/client'
 import { getSupabaseServer } from '../lib/supabase/server'
 
@@ -74,9 +73,8 @@ export default function Welcome() {
       <AppTheme />
       <div className="app auth-screen">
         <div className="auth-box">
-          <div className="auth-brand"><Icon name="globe" size={22} /><span>Is the World Breaking?</span></div>
-          <h1 className="auth-h1">Create your calm</h1>
-          <p className="auth-sub">Choose what you care about. We'll monitor the world and alert you only when something truly changes.</p>
+          <div className="auth-title">is the world breaking?...<span className="brand-cursor" aria-hidden="true" /></div>
+          <p className="auth-sub">Quiet the noise · We'll monitor things and alert you only when it matters</p>
 
           {!supabaseReady() ? (
             <div className="calm-card" style={{ textAlign: 'center', color: 'var(--c-text-soft)', fontSize: 14 }}>
@@ -112,7 +110,7 @@ export default function Welcome() {
               <div className="auth-note">
                 {mode === 'signup' ? 'Already have an account? ' : 'New here? '}
                 <button className="auth-switch" onClick={() => { setMode(mode === 'signup' ? 'signin' : 'signup'); setErr(''); setNote('') }}>
-                  {mode === 'signup' ? 'Sign in' : 'Create your calm'}
+                  {mode === 'signup' ? 'Sign in' : 'Create an account'}
                 </button>
               </div>
             </>

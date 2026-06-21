@@ -3,6 +3,10 @@
 -- Creates the user profile / preferences / interests tables, row-level security
 -- so each user can only touch their own rows, and a trigger that seeds a profile
 -- (+ default preferences) the moment an auth user is created.
+-- Safe to re-run: every statement is idempotent.
+
+-- gen_random_uuid() lives in pgcrypto (present on Supabase, but be explicit).
+create extension if not exists pgcrypto;
 
 -- ── profiles ──────────────────────────────────────────────────────────
 -- Mirrors the bits of auth.users the app needs (email, Google name/avatar).
@@ -56,6 +60,14 @@ create policy "preferences self" on public.user_preferences
 drop policy if exists "interests self" on public.user_interests;
 create policy "interests self" on public.user_interests
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── Grants ────────────────────────────────────────────────────────────
+-- Supabase normally grants these via default privileges, but be explicit so a
+-- signed-in (authenticated) user can read/write their own rows under RLS.
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on
+  public.profiles, public.user_preferences, public.user_interests
+  to authenticated;
 
 -- ── New-user trigger ──────────────────────────────────────────────────
 -- On auth.users insert, seed a profile (email + Google name/avatar from the

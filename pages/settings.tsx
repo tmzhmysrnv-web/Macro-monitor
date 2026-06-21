@@ -6,11 +6,11 @@ import Head from 'next/head'
 import type { GetServerSidePropsContext } from 'next'
 import AppShell from '../components/app/AppShell'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
-import { getSupabaseBrowser } from '../lib/supabase/client'
+import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 
 type Freq = 'breaking' | 'daily' | 'weekly'
 const FREQ: { id: Freq; label: string }[] = [
-  { id: 'breaking', label: 'Only when breaking' }, { id: 'daily', label: 'Daily' }, { id: 'weekly', label: 'Weekly' },
+  { id: 'breaking', label: 'Only when breaking' }, { id: 'weekly', label: 'Weekly' },
 ]
 
 export default function Settings(props: GatedProps) {
@@ -29,7 +29,7 @@ export default function Settings(props: GatedProps) {
     setErr('')
     const { error } = await supabase.from('user_preferences')
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('user_id', props.user.id)
-    if (error) { setErr(error.message); return }
+    if (error) { setErr(supaErr(error)); return }
     setSaved(true); setTimeout(() => setSaved(false), 1500)
   }
 
@@ -41,7 +41,7 @@ export default function Settings(props: GatedProps) {
       if (supabase) await supabase.auth.signOut()
       router.push('/')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not delete account.')
+      setErr(supaErr(e, 'Could not delete account.'))
       setDeleting(false)
     }
   }
@@ -64,7 +64,7 @@ export default function Settings(props: GatedProps) {
         </div>
         <div className="set-div" />
         <div className="set-row">
-          <div><div className="set-label">Notification frequency</div><div className="set-hint">How often we interrupt you.</div></div>
+          <div><div className="set-label">Notification frequency</div><div className="set-hint">Breaking = alerts only when something breaks. Weekly adds a calm Sunday recap.</div></div>
           <div className="seg">
             {FREQ.map(f => <button key={f.id} className={freq === f.id ? 'on' : ''} onClick={() => { setFreq(f.id); save({ digest_frequency: f.id }) }}>{f.label}</button>)}
           </div>

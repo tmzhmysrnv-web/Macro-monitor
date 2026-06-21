@@ -50,8 +50,7 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
       <div className="app shell">
         <aside className="sb">
           <div className="sb-brand">
-            <Icon name="globe" size={26} />
-            <div><div className="sb-brand-name">Is The World Breaking?</div></div>
+            <span className="brand">is the world breaking?...<span className="brand-cursor" aria-hidden="true" /></span>
           </div>
           <div className="sb-tag">We monitor the world so you don't have to.</div>
 

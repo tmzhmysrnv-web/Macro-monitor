@@ -345,6 +345,32 @@ function GlowTuner() {
   )
 }
 
+// Retro pixel-art user/account silhouette (head + shoulders) on an 11×11 grid,
+// 2px cells → 22×22. Filled via CSS (var(--warn)); the stepped edges read pixel.
+const PIXEL_USER = [
+  '00001110000',
+  '00011111000',
+  '00011111000',
+  '00011111000',
+  '00001110000',
+  '00000000000',
+  '00001110000',
+  '00111111100',
+  '01111111110',
+  '11111111111',
+  '11111111111',
+]
+function PixelUser() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" shapeRendering="crispEdges">
+      {PIXEL_USER.flatMap((row, r) =>
+        row.split('').map((c, x) => (c === '1'
+          ? <rect key={`${r}-${x}`} x={x * 2} y={r * 2} width="2" height="2" />
+          : null)))}
+    </svg>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -663,10 +689,12 @@ export default function Dashboard() {
         .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
         .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-        .signin-btn { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--term);
-          border: 0.5px solid var(--term); border-radius: 20px; padding: 5px 13px; text-decoration: none;
-          opacity: 0.85; transition: opacity 0.15s, background 0.15s; white-space: nowrap; }
-        .signin-btn:hover { opacity: 1; background: rgba(111,174,125,0.12); }
+        /* Pixel-user logo — same amber as Bonds "Rates Higher For Longer" (var(--warn)),
+           muted to match the bell (opacity + soft glow). */
+        .logo-btn { display: inline-flex; align-items: center; padding: 4px; line-height: 0; cursor: pointer;
+          opacity: 0.85; transition: opacity 0.15s; }
+        .logo-btn:hover { opacity: 1; }
+        .logo-btn svg { fill: var(--warn); filter: drop-shadow(0 0 3px rgba(216,139,47,0.45)); }
         .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.85; line-height: 0; transition: opacity 0.15s; }
         .alert-bell:hover { opacity: 1; }
         /* soft green glow — helps the crack read against the stroke */
@@ -800,8 +828,9 @@ export default function Dashboard() {
           </div>
           <div className="topbar-actions">
             {supabaseReady() && (
-              <a className="signin-btn" href={authed ? '/dashboard' : '/welcome'}>
-                {authed ? 'Dashboard' : 'Create your calm'}
+              <a className="logo-btn" href={authed ? '/dashboard' : '/welcome'}
+                 aria-label={authed ? 'Your dashboard' : 'Sign in'} title={authed ? 'Dashboard' : 'Sign in'}>
+                <PixelUser />
               </a>
             )}
             <AlertBell count={unreadCount} onClick={toggleNotifications} />
