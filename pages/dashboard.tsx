@@ -1,0 +1,267 @@
+// pages/dashboard.tsx — the personalized, login-only dashboard.
+// A calm "current status" header, the user's watchlist of interest cards, the
+// week's biggest movers, and a reassuring bottom line. All numbers come from the
+// existing public macro APIs; the page just filters to the user's interests.
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import type { GetServerSidePropsContext } from 'next'
+import AppShell from '../components/app/AppShell'
+import InterestCard from '../components/app/InterestCard'
+import Icon from '../components/Icon'
+import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
+import { INTEREST_CATALOG, readInterest } from '../lib/interests'
+
+type Vals = Record<string, number | null>
+type StressPt = { date: string; total: number }
+type Mover = { key: string; label: string; current: number; weekAgo: number; unit: string; direction: string }
+
+type Payload = {
+  total: number; level: string; verdict: string; weekChange: number | null
+  whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
+}
+
+function headline(total: number): string {
+  if (total < 45) return 'The World Is Not Breaking'
+  if (total < 65) return 'Worth Keeping an Eye On'
+  if (total < 85) return 'Stress Is Building'
+  return 'The World Is Under Strain'
+}
+function bottomLine(total: number): { h: string; m: string } {
+  if (total < 45) return { h: 'You can breathe easy.', m: 'The economy remains in a stable regime. Enjoy your week. We\'ll keep watching.' }
+  if (total < 65) return { h: 'Mostly calm out there.', m: 'A few areas are worth watching, but nothing is breaking. Go enjoy your week — we\'re on it.' }
+  if (total < 85) return { h: 'Worth your attention.', m: 'Stress is building in part of the system. We\'ll alert you if it crosses a line.' }
+  return { h: 'We\'re watching this closely.', m: 'Systemic stress is elevated. You\'ll hear from us the moment your topics are affected.' }
+}
+function deltaLabel(d: number): string {
+  const a = Math.abs(d)
+  return a < 3 ? 'insignificant' : a < 8 ? 'minor' : 'notable'
+}
+function moveText(m: Mover): { word: string; pct: string } {
+  const pct = m.weekAgo ? ((m.current - m.weekAgo) / Math.abs(m.weekAgo)) * 100 : 0
+  return { word: m.current >= m.weekAgo ? 'Increased' : 'Declined', pct: `${Math.abs(pct).toFixed(1)}%` }
+}
+
+function StressTrend({ pts }: { pts: StressPt[] }) {
+  if (!pts || pts.length < 2) return null
+  const data = pts.slice(-40)
+  const W = 320, H = 88, P = 6
+  const vals = data.map(p => p.total)
+  const min = Math.min(...vals, 0), max = Math.max(...vals, 100), range = max - min || 1
+  const x = (i: number) => P + (i / (data.length - 1)) * (W - 2 * P)
+  const y = (v: number) => P + (H - 2 * P) - ((v - min) / range) * (H - 2 * P)
+  const line = data.map((p, i) => `${x(i).toFixed(1)},${y(p.total).toFixed(1)}`)
+  const area = `${line.join(' ')} ${x(data.length - 1).toFixed(1)},${(H - P).toFixed(1)} ${x(0).toFixed(1)},${(H - P).toFixed(1)}`
+  const last = data[data.length - 1]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden="true">
+      <polygon points={area} fill="var(--c-green)" opacity="0.08" />
+      <polyline points={line.join(' ')} fill="none" stroke="var(--c-green)" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx={x(data.length - 1)} cy={y(last.total)} r="3.5" fill="var(--c-green)" />
+    </svg>
+  )
+}
+
+export default function DashboardPage(props: GatedProps) {
+  const router = useRouter()
+  const [d, setD] = useState<Payload | null>(null)
+  const [err, setErr] = useState(false)
+  const myInterests = INTEREST_CATALOG.filter(i => props.interests.includes(i.category))
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const leads = Array.from(new Set(myInterests.map(i => i.metrics[0])))
+        const [bm, stress, data, ...hist] = await Promise.all([
+          fetch('/api/breakmeter').then(r => r.json()),
+          fetch('/api/stress').then(r => r.json()),
+          fetch('/api/data').then(r => r.json()),
+          ...leads.map(k => fetch(`/api/history?key=${k}`).then(r => r.json()).then(j => ({ k, s: j.series })).catch(() => ({ k, s: null }))),
+        ])
+        if (cancelled) return
+        const series: Record<string, number[]> = {}
+        for (const h of hist as { k: string; s: { value: number }[] | null }[]) {
+          if (h.s?.length) series[h.k] = h.s.slice(-40).map(p => p.value)
+        }
+        setD({
+          total: Math.round(bm.total ?? 0), level: bm.level ?? 'calm', verdict: bm.verdict ?? '',
+          weekChange: stress.weekChange ?? bm.weekChange ?? null,
+          whatChanged: bm.whatChanged ?? [], history: stress.history ?? [], values: data, series,
+        })
+      } catch { if (!cancelled) setErr(true) }
+    }
+    load()
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const bl = d ? bottomLine(d.total) : null
+  const movers = (d?.whatChanged ?? []).slice(0, 3)
+
+  return (
+    <AppShell user={props.user} active="/dashboard">
+      <Head><title>Dashboard · Is the World Breaking?</title></Head>
+
+      <div className="dh">
+        <div>
+          <h1 className="dh-title">Dashboard</h1>
+          <p className="dh-sub">Your personalized view of what matters most.</p>
+        </div>
+        <button className="dh-refresh" onClick={() => router.reload()} title="Refresh"><Icon name="refresh" size={16} /></button>
+      </div>
+
+      {/* Current status */}
+      <div className="calm-card soft cs">
+        <div className="cs-left">
+          <div className={`cs-shield l-${d ? d.level : 'calm'}`}><Icon name="shield-check" size={30} /></div>
+          <div>
+            <div className="cs-kicker">Current Status</div>
+            <div className="cs-headline">{d ? headline(d.total) : 'Checking…'}</div>
+            <div className="cs-statussub">{d?.verdict || 'Reading the latest data.'}</div>
+            <button className="btn btn-ghost" style={{ marginTop: 14 }} onClick={() => router.push('/?tab=overview')}>
+              View Details <Icon name="arrow-right" size={15} />
+            </button>
+          </div>
+        </div>
+        <div className="cs-right">
+          <div className="cs-kicker">World Stress Score</div>
+          <div className="cs-score"><b>{d ? d.total : '—'}</b> / 100</div>
+          {d && d.weekChange != null && (
+            <div className="cs-week">
+              Last week: {d.total - Math.round(d.weekChange)}
+              <span className={`cs-delta ${d.weekChange > 0 ? 'up' : d.weekChange < 0 ? 'down' : ''}`}>
+                <Icon name={d.weekChange >= 0 ? 'arrow-up' : 'arrow-down'} size={12} />
+                {d.weekChange > 0 ? '+' : ''}{Math.round(d.weekChange)} ({deltaLabel(d.weekChange)})
+              </span>
+            </div>
+          )}
+          <div className="cs-trend">{d && <StressTrend pts={d.history} />}</div>
+        </div>
+      </div>
+
+      {/* Watchlist */}
+      <div className="sec-head">
+        <div>
+          <h2 className="sec-title">Your Watchlist</h2>
+          <p className="sec-sub">Based on the topics you care about.</p>
+        </div>
+        <button className="btn btn-ghost" onClick={() => router.push('/watchlist')}><Icon name="edit" size={15} /> Edit Watchlist</button>
+      </div>
+
+      {myInterests.length === 0 ? (
+        <div className="calm-card" style={{ textAlign: 'center', color: 'var(--c-text-soft)' }}>
+          You haven't picked any topics yet. <button className="auth-switch" onClick={() => router.push('/watchlist')}>Choose your interests →</button>
+        </div>
+      ) : (
+        <div className="wl-grid">
+          {myInterests.map(def => {
+            const reading = d ? readInterest(def, d.values) : { status: 'ok' as const, badge: '…', insight: 'Loading the latest readings…' }
+            return (
+              <InterestCard key={def.category} def={def} reading={reading}
+                values={d?.values ?? {}} series={d?.series[def.metrics[0]]}
+                onOpen={() => router.push(`/?tab=${def.tab}`)} />
+            )
+          })}
+        </div>
+      )}
+
+      {/* What moved */}
+      {movers.length > 0 && (
+        <div className="calm-card moved">
+          <h2 className="sec-title" style={{ marginBottom: 2 }}>What Actually Moved This Week</h2>
+          <p className="sec-sub" style={{ marginBottom: 16 }}>The biggest changes we detected.</p>
+          <div className="moved-grid">
+            {movers.map(m => {
+              const t = moveText(m)
+              const danger = m.direction === 'toward-danger'
+              const safe = m.direction === 'toward-safety'
+              const up = m.current >= m.weekAgo
+              return (
+                <div key={m.key} className="moved-item">
+                  <span className={`moved-arrow ${danger ? 'bad' : safe ? 'ok' : ''}`}>
+                    <Icon name={up ? 'arrow-up' : 'arrow-down'} size={18} />
+                  </span>
+                  <div>
+                    <div className="moved-label">{m.label}</div>
+                    <div className={`moved-change ${danger ? 'bad' : safe ? 'ok' : ''}`}>{t.word} {t.pct}</div>
+                    <div className="moved-tag">{danger ? 'Negative' : safe ? 'Positive' : 'Neutral'}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="moved-note"><Icon name="info-circle" size={15} /> None of these changes are large enough to alter the overall outlook.</div>
+        </div>
+      )}
+
+      {/* Bottom line */}
+      {bl && (
+        <div className="calm-card soft bottomline">
+          <div className="bl-icon"><Icon name="sunrise" size={30} /></div>
+          <div>
+            <div className="cs-kicker">Bottom Line</div>
+            <div className="bl-h">{bl.h}</div>
+            <div className="bl-m">{bl.m}</div>
+          </div>
+        </div>
+      )}
+
+      {err && <div className="calm-card" style={{ color: 'var(--c-bad)' }}>Couldn't load the latest data. Try refreshing.</div>}
+
+      <div className="dfoot">Questions or feedback? We're always here. <a href="mailto:hello@istheworldbreaking.com">Contact us</a></div>
+
+      <style>{`
+        .dh { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+        .dh-title { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+        .dh-sub { font-size: 14px; color: var(--c-text-soft); margin-top: 3px; }
+        .dh-refresh { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; padding: 9px; cursor: pointer; color: var(--c-text-soft); }
+        .dh-refresh:hover { color: var(--c-text); }
+        .cs { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; margin-bottom: 30px; }
+        .cs-left { display: flex; gap: 16px; }
+        .cs-shield { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-green); color: #fff; }
+        .cs-shield.l-elevated, .cs-shield.l-guarded { background: var(--c-warn); }
+        .cs-shield.l-high, .cs-shield.l-severe { background: var(--c-bad); }
+        .cs-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-muted); }
+        .cs-headline { font-size: 22px; font-weight: 600; color: var(--c-green-deep); margin: 5px 0 6px; letter-spacing: -0.01em; }
+        .cs-shield.l-elevated ~ div .cs-headline { color: var(--c-warn); }
+        .cs-statussub { font-size: 13.5px; color: var(--c-text-soft); line-height: 1.5; }
+        .cs-right { border-left: 1px solid var(--c-soft-line); padding-left: 24px; }
+        .cs-score { margin-top: 5px; font-size: 16px; color: var(--c-muted); }
+        .cs-score b { font-size: 40px; font-weight: 600; color: var(--c-text); font-family: var(--c-mono); }
+        .cs-week { font-size: 13px; color: var(--c-text-soft); margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .cs-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--c-green-bg); color: var(--c-green-deep); }
+        .cs-delta.up { background: var(--c-warn-bg); color: var(--c-warn); }
+        .cs-delta.down { background: var(--c-green-bg); color: var(--c-green-deep); }
+        .cs-trend { margin-top: 12px; }
+        .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+        .sec-title { font-size: 19px; font-weight: 600; }
+        .sec-sub { font-size: 13px; color: var(--c-text-soft); margin-top: 2px; }
+        .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px; }
+        .moved { margin-bottom: 30px; }
+        .moved-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+        .moved-item { display: flex; gap: 12px; align-items: flex-start; }
+        .moved-arrow { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-soft); color: var(--c-muted); }
+        .moved-arrow.bad { background: var(--c-bad-bg); color: var(--c-bad); }
+        .moved-arrow.ok { background: var(--c-green-bg); color: var(--c-green-deep); }
+        .moved-label { font-size: 14px; font-weight: 600; }
+        .moved-change { font-size: 13px; color: var(--c-text-soft); margin-top: 2px; }
+        .moved-change.bad { color: var(--c-bad); } .moved-change.ok { color: var(--c-green-deep); }
+        .moved-tag { font-size: 11.5px; color: var(--c-muted); margin-top: 1px; }
+        .moved-note { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--c-muted); margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--c-border); }
+        .bottomline { display: flex; gap: 16px; align-items: flex-start; }
+        .bl-icon { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-green); color: #fff; }
+        .bl-h { font-size: 22px; font-weight: 600; color: var(--c-green-deep); margin: 5px 0 6px; }
+        .bl-m { font-size: 14px; color: var(--c-text-soft); line-height: 1.55; max-width: 60ch; }
+        .dfoot { text-align: center; font-size: 12.5px; color: var(--c-muted); margin-top: 36px; }
+        @media (max-width: 720px) {
+          .cs { grid-template-columns: 1fr; }
+          .cs-right { border-left: none; border-top: 1px solid var(--c-soft-line); padding-left: 0; padding-top: 18px; }
+        }
+      `}</style>
+    </AppShell>
+  )
+}
+
+export async function getServerSideProps(ctx: GetServerSidePropsContext) {
+  return loadGatedProps(ctx)
+}

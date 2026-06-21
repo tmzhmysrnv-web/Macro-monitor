@@ -29,8 +29,9 @@ import { buildAlertReport, type FiredAlert } from '../../lib/alertEngine'
 import { alertFamily, alertRank } from '../../lib/alertSeverity'
 import {
   getAlertStates, setAlertStates, clearAlertStates, pushFeed,
-  listActiveSubscribers, type AlertState, type FeedItem,
+  type AlertState, type FeedItem,
 } from '../../lib/redis'
+import { listAlertRecipients, alertsForRecipient } from '../../lib/recipients'
 import { sendDigest } from '../../lib/sendAlert'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -112,9 +113,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await pushFeed(feedItems)
 
       const digestCtx = { breakLevel: report.breakLevel, sections: report.sections }
-      const subscribers = await listActiveSubscribers()
+      // Each recipient gets a digest filtered to the topics they follow (accounts);
+      // legacy email subscribers follow everything. Skip anyone with no matching alert.
+      const recipients = await listAlertRecipients()
       const sends = await Promise.allSettled(
-        subscribers.map(s => sendDigest(toNotify, { email: s.email, token: s.token }, digestCtx))
+        recipients.map(r => {
+          const personalized = alertsForRecipient(toNotify, r)
+          if (!r.emailEnabled || personalized.length === 0) return Promise.resolve(false)
+          return sendDigest(personalized, { email: r.email, token: r.token }, digestCtx)
+        })
       )
       emailed = sends.filter(r => r.status === 'fulfilled' && r.value).length
     }

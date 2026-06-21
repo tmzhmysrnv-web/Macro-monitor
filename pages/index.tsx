@@ -15,6 +15,7 @@ import Global from '../components/Global'
 import NotificationPanel, { type PanelAlert } from '../components/NotificationPanel'
 import { severityOf } from '../lib/alertSeverity'
 import { barFor } from '../lib/alertMeta'
+import { getSupabaseBrowser, supabaseReady } from '../lib/supabase/client'
 
 // Client-side notification history (localStorage). Lets the bell show active
 // alerts instantly on reload and keep cleared ones as "Earlier", independent of
@@ -365,6 +366,15 @@ export default function Dashboard() {
   const [tuner, setTuner] = useState(false)
   const [alertHistory, setAlertHistory] = useState<AlertHistoryItem[]>([])
   const [alertsSeenAt, setAlertsSeenAt] = useState(0)
+  const [authed, setAuthed] = useState<boolean | null>(null)
+
+  // Is anyone signed in? Toggles the topbar entry between "Create your calm" and
+  // "Dashboard". No-ops (stays logged-out) when Supabase isn't configured.
+  useEffect(() => {
+    const sb = getSupabaseBrowser()
+    if (!sb) { setAuthed(false); return }
+    sb.auth.getUser().then(({ data }) => setAuthed(!!data?.user)).catch(() => setAuthed(false))
+  }, [])
 
   // Deep-link: open the tab named in ?tab= (used by the alert email's links).
   useEffect(() => {
@@ -652,7 +662,11 @@ export default function Dashboard() {
 
         .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
-        .topbar-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .signin-btn { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--term);
+          border: 0.5px solid var(--term); border-radius: 20px; padding: 5px 13px; text-decoration: none;
+          opacity: 0.85; transition: opacity 0.15s, background 0.15s; white-space: nowrap; }
+        .signin-btn:hover { opacity: 1; background: rgba(111,174,125,0.12); }
         .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.85; line-height: 0; transition: opacity 0.15s; }
         .alert-bell:hover { opacity: 1; }
         /* soft green glow — helps the crack read against the stroke */
@@ -785,6 +799,11 @@ export default function Dashboard() {
             <div className="site-tagline">quiet the noise · get alerts only when it matters</div>
           </div>
           <div className="topbar-actions">
+            {supabaseReady() && (
+              <a className="signin-btn" href={authed ? '/dashboard' : '/welcome'}>
+                {authed ? 'Dashboard' : 'Create your calm'}
+              </a>
+            )}
             <AlertBell count={unreadCount} onClick={toggleNotifications} />
           </div>
         </div>
