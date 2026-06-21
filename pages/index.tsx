@@ -351,18 +351,18 @@ const PIXEL_USER = [
   '00001110000',
   '00011111000',
   '00011111000',
-  '00011111000',
   '00001110000',
   '00000000000',
   '00001110000',
+  '00011111000',
   '00111111100',
   '01111111110',
-  '11111111111',
-  '11111111111',
+  '01111111110',
+  '00000000000',
 ]
 function PixelUser() {
   return (
-    <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true" shapeRendering="crispEdges">
+    <svg width="17" height="17" viewBox="0 0 22 22" aria-hidden="true" shapeRendering="crispEdges">
       {PIXEL_USER.flatMap((row, r) =>
         row.split('').map((c, x) => (c === '1'
           ? <rect key={`${r}-${x}`} x={x * 2} y={r * 2} width="2" height="2" />
@@ -688,13 +688,13 @@ export default function Dashboard() {
 
         .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
-        .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .topbar-actions { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
         /* Pixel-user logo — same amber as Bonds "Rates Higher For Longer" (var(--warn)),
            muted to match the bell (opacity + soft glow). */
         .logo-btn { display: inline-flex; align-items: center; padding: 4px; line-height: 0; cursor: pointer;
           opacity: 0.85; transition: opacity 0.15s; }
         .logo-btn:hover { opacity: 1; }
-        .logo-btn svg { fill: var(--warn); filter: drop-shadow(0 0 3px rgba(216,139,47,0.45)); }
+        .logo-btn svg { fill: var(--warn); filter: drop-shadow(0 0 3px rgba(216,139,47,0.55)); }
         .alert-bell { position: relative; flex-shrink: 0; background: none; border: none; padding: 4px; cursor: pointer; color: var(--term); opacity: 0.85; line-height: 0; transition: opacity 0.15s; }
         .alert-bell:hover { opacity: 1; }
         /* soft green glow — helps the crack read against the stroke */
