@@ -15,7 +15,8 @@ export function toneFor(total: number): Tone {
 }
 
 export function headlineFor(total: number): string {
-  if (total < 40) return 'Calm and steady'
+  if (total < 25) return 'Calm and steady'
+  if (total < 40) return 'Stable but worth watching'   // matches the gauge's "worth watching" band
   if (total < 65) return 'Elevated — worth watching'
   if (total < 85) return 'High — stress is building'
   return 'Breaking — systemic stress'

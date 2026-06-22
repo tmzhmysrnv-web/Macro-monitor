@@ -43,7 +43,7 @@ export default function Digest(props: GatedProps) {
     <AppShell user={props.user} active="/digest">
       <Head><title>Weekly Digest · Is the World Breaking?</title></Head>
       <h1 className="p-title">Weekly Digest</h1>
-      <p className="p-sub">A calm recap of your topics.{saved && <span className="p-saved"> · Saved</span>}</p>
+      <p className="p-sub">A recap of your topics.{saved && <span className="p-saved"> · Saved</span>}</p>
 
       <div className="calm-card soft" style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 14 }}>
         <span className="dg-cal"><Icon name="calendar" size={22} /></span>

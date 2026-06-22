@@ -64,7 +64,7 @@ export default function Settings(props: GatedProps) {
         </div>
         <div className="set-div" />
         <div className="set-row">
-          <div><div className="set-label">Notification frequency</div><div className="set-hint">Breaking = alerts only when something breaks. Weekly adds a calm Sunday recap.</div></div>
+          <div><div className="set-label">Notification frequency</div><div className="set-hint">Breaking = alerts only when something breaks. Weekly adds a Sunday recap.</div></div>
           <div className="seg">
             {FREQ.map(f => <button key={f.id} className={freq === f.id ? 'on' : ''} onClick={() => { setFreq(f.id); save({ digest_frequency: f.id }) }}>{f.label}</button>)}
           </div>

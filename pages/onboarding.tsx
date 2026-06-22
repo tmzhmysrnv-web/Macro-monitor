@@ -15,7 +15,7 @@ import { getSupabaseServer } from '../lib/supabase/server'
 type Freq = 'breaking' | 'daily' | 'weekly'
 const FREQ: { id: Freq; label: string; sub: string }[] = [
   { id: 'breaking', label: 'Only when the world is breaking', sub: 'We stay silent until something truly changes.' },
-  { id: 'weekly', label: 'Weekly digest', sub: 'Breaking alerts, plus one calm recap every Sunday.' },
+  { id: 'weekly', label: 'Weekly digest', sub: 'Breaking alerts, plus a recap every Sunday.' },
 ]
 
 export default function Onboarding() {
