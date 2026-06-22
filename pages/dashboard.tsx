@@ -130,17 +130,21 @@ export default function DashboardPage(props: GatedProps) {
           </div>
         </div>
         <div className="cs-right">
-          <div className="cs-kicker">World Stress Score</div>
+          <div className="cs-kicker">Break Meter</div>
           <div className="cs-score"><b>{d ? d.total : '—'}</b> / 100</div>
-          {d && d.weekChange != null && (
-            <div className="cs-week">
-              Last week: {d.total - Math.round(d.weekChange)}
-              <span className={`cs-delta ${d.weekChange > 0 ? 'up' : d.weekChange < 0 ? 'down' : ''}`}>
-                <Icon name={d.weekChange >= 0 ? 'arrow-up' : 'arrow-down'} size={12} />
-                {d.weekChange > 0 ? '+' : ''}{Math.round(d.weekChange)} ({deltaLabel(d.weekChange)})
-              </span>
-            </div>
-          )}
+          {d && d.weekChange != null && (() => {
+            const wc = Math.round(d.weekChange)
+            const dir = wc > 0 ? 'up' : wc < 0 ? 'down' : 'flat'
+            return (
+              <div className="cs-week">
+                Last week: {d.total - wc}
+                <span className={`cs-delta ${dir}`}>
+                  <Icon name={wc > 0 ? 'arrow-up' : wc < 0 ? 'arrow-down' : 'arrow-right'} size={12} />
+                  {wc === 0 ? 'Unchanged' : `${wc > 0 ? '+' : ''}${wc} (${deltaLabel(d.weekChange)})`}
+                </span>
+              </div>
+            )
+          })()}
           <div className="cs-trend">{d && <StressTrend pts={d.history} />}</div>
         </div>
       </div>
@@ -241,6 +245,7 @@ export default function DashboardPage(props: GatedProps) {
         .cs-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--c-green-bg); color: var(--c-green-deep); }
         .cs-delta.up { background: var(--c-warn-bg); color: var(--c-warn); }
         .cs-delta.down { background: var(--c-green-bg); color: var(--c-green-deep); }
+        .cs-delta.flat { background: var(--c-soft); color: var(--c-muted); }
         .cs-trend { margin-top: 12px; }
         .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
         .sec-title { font-size: 19px; font-weight: 600; }
