@@ -22,12 +22,21 @@ async function fetchFredHistory(seriesId: string, years = 10, freq: Freq = 'd'):
     // for the long-range Break Meter trend, which only needs monthly points.
     const monthly = freq === 'm' ? '&frequency=m&aggregation_method=eop' : ''
     const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_KEY}&file_type=json&sort_order=asc&observation_start=${startStr}&limit=100000${monthly}`
+    const parse = (data: { observations?: { value: string; date: string }[] }): DataPoint[] =>
+      (data.observations || [])
+        .filter(o => o.value !== '.' && o.value !== '')
+        .map(o => ({ date: o.date, value: parseFloat(o.value) }))
     const res = await fredFetch(url, { next: { revalidate: 86400 } }) // cache 24h
     if (!res || !res.ok) return []
-    const data = await res.json()
-    return (data.observations || [])
-      .filter((o: { value: string; date: string }) => o.value !== '.' && o.value !== '')
-      .map((o: { value: string; date: string }) => ({ date: o.date, value: parseFloat(o.value) }))
+    const out = parse(await res.json())
+    if (out.length) return out
+    // Cached read succeeded but came back empty. A transient empty response from
+    // FRED would otherwise be served from the 24h cache for a full day (this is
+    // what blanked out MORTGAGE30US history). Bypass the cache once so an empty
+    // never sticks; if it's still empty, FRED genuinely has nothing right now.
+    const fresh = await fredFetch(url, { cache: 'no-store' })
+    if (fresh && fresh.ok) return parse(await fresh.json())
+    return []
   } catch { return [] }
 }
 
