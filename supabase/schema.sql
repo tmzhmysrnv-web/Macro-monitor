@@ -101,3 +101,26 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ── economic_events ───────────────────────────────────────────────────
+-- Automated economic calendar: a daily cron (service role) upserts upcoming
+-- US releases scraped from BLS / BEA / the Fed. Public, read-only to everyone.
+create table if not exists public.economic_events (
+  id           uuid primary key default gen_random_uuid(),
+  event_type   text not null,            -- CPI | JOBS | GDP | FOMC | PPI | RETAIL | CLAIMS | CONFIDENCE | ISM
+  event_name   text not null,
+  release_date timestamptz not null,     -- actual release instant (08:30 ET; FOMC 14:00 ET)
+  impact_level text not null default 'high' check (impact_level in ('high', 'medium', 'low')),
+  source_url   text,
+  impact_description text,
+  updated_at   timestamptz not null default now(),
+  unique (event_type, release_date)
+);
+create index if not exists economic_events_date_idx on public.economic_events (release_date);
+
+alter table public.economic_events enable row level security;
+-- Public, read-only. Writes happen only via the service-role client (bypasses RLS);
+-- there is intentionally no insert/update/delete policy for anon/authenticated.
+drop policy if exists "events public read" on public.economic_events;
+create policy "events public read" on public.economic_events for select using (true);
+grant select on public.economic_events to anon, authenticated;

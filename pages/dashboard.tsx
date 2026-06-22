@@ -13,6 +13,9 @@ import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { INTEREST_CATALOG, readInterest } from '../lib/interests'
 import { toneFor, bottomLine, TONE_TEXT, TONE_BADGE } from '../lib/statusLadder'
+import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
+import { getSupabaseBrowser } from '../lib/supabase/client'
+import ComingUp from '../components/ComingUp'
 
 type Vals = Record<string, number | null>
 type StressPt = { date: string; total: number }
@@ -60,6 +63,7 @@ function StressTrend({ pts }: { pts: StressPt[] }) {
 export default function DashboardPage(props: GatedProps) {
   const router = useRouter()
   const [d, setD] = useState<Payload | null>(null)
+  const [events, setEvents] = useState<EconomicEvent[]>([])
   const [err, setErr] = useState(false)
   const myInterests = INTEREST_CATALOG.filter(i => props.interests.includes(i.category))
 
@@ -88,6 +92,7 @@ export default function DashboardPage(props: GatedProps) {
       } catch { if (!cancelled) setErr(true) }
     }
     load()
+    fetchEvents(getSupabaseBrowser()).then(e => { if (!cancelled) setEvents(recentAndUpcoming(e)) }).catch(() => {})
     return () => { cancelled = true }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -194,6 +199,9 @@ export default function DashboardPage(props: GatedProps) {
           <div className="moved-note"><Icon name="info-circle" size={15} /> None of these changes are large enough to alter the overall outlook.</div>
         </div>
       )}
+
+      {/* Coming up — imminent economic releases (within 72h) */}
+      <ComingUp events={events} theme="app" />
 
       {/* Bottom line */}
       {bl && (

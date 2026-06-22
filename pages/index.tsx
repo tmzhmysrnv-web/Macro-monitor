@@ -16,6 +16,8 @@ import NotificationPanel, { type PanelAlert } from '../components/NotificationPa
 import { severityOf } from '../lib/alertSeverity'
 import { barFor } from '../lib/alertMeta'
 import { getSupabaseBrowser, supabaseReady } from '../lib/supabase/client'
+import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
+import ComingUp from '../components/ComingUp'
 
 // Client-side notification history (localStorage). Lets the bell show active
 // alerts instantly on reload and keep cleared ones as "Earlier", independent of
@@ -377,7 +379,7 @@ export default function Dashboard() {
   const [data, setData] = useState<MacroData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [events, setEvents] = useState<Array<{ name: string; date: string; daysUntil: number; released?: boolean; description: string; metricKey?: string }>>([])
+  const [events, setEvents] = useState<EconomicEvent[]>([])
   // Prefetched Bonds/Housing/Credit payloads so switching to those tabs is instant.
   const [bondsData, setBondsData] = useState<any>(null)
   const [housingData, setHousingData] = useState<any>(null)
@@ -462,9 +464,10 @@ export default function Dashboard() {
       .then(d => { setData(d); setLoading(false) })
       .catch(() => { setError(true); setLoading(false) })
 
-    fetch('/api/calendar')
-      .then(r => r.json())
-      .then(d => setEvents(d.events || []))
+    // Calendar reads Supabase directly (daily cron is the writer); falls back to
+    // the built-in schedule when Supabase is unconfigured or empty.
+    fetchEvents(getSupabaseBrowser())
+      .then(evts => setEvents(recentAndUpcoming(evts)))
       .catch(() => {})
   }, [])
 
@@ -868,6 +871,7 @@ export default function Dashboard() {
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (
           <>
+            <ComingUp events={events} theme="graphite" />
             <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
 
             {/* Economic calendar — recent releases & upcoming */}

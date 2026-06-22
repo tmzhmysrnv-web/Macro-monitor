@@ -16,7 +16,11 @@
 
 import { fredFetch } from './fred'
 import { toneHigh, toneLow } from './metricTone'
-import { getLastFomc, getNextFomc } from './fetchCalendar'
+import { fetchEvents, lastFomc as lastFomcOf, nextFomc as nextFomcOf } from './economicCalendar'
+import { getSupabaseAdmin } from './supabase/server'
+
+type FomcRef = { date: string; daysAgo: number }
+type FomcNextRef = { date: string; daysUntil: number }
 import { getFedDecision, setFedDecision, type FedDecisionStore } from './redis'
 import { fetchFedAnnouncement } from './fedAnnouncement'
 
@@ -221,8 +225,8 @@ export type FedPolicyData = {
   history: { date: string; value: number }[]  // rate path, for the banner context line
 }
 
-function buildFedPolicy(obs: Obs[], announcement?: FedDecisionStore | null): FedPolicyData {
-  return applyAnnouncement(computeFedPolicyFromObs(obs), announcement, obs)
+function buildFedPolicy(obs: Obs[], lastFomc: FomcRef | null, announcement?: FedDecisionStore | null): FedPolicyData {
+  return applyAnnouncement(computeFedPolicyFromObs(obs, lastFomc), announcement, obs)
 }
 
 // Override the FRED-derived reading with a freshly announced decision the data
@@ -247,9 +251,8 @@ function applyAnnouncement(base: FedPolicyData, a: FedDecisionStore | null | und
 // Latest decision for the override: the Redis store, refreshed live as a
 // backstop right after a meeting if the store hasn't caught up (so the first
 // visitor after 2pm triggers the parse even without a cron).
-async function resolveFedDecision(): Promise<FedDecisionStore | null> {
+async function resolveFedDecision(last: FomcRef | null): Promise<FedDecisionStore | null> {
   let a = await getFedDecision()
-  const last = getLastFomc()
   if (last && last.daysAgo <= 1 && (!a || a.date < last.date)) {
     const fresh = await fetchFedAnnouncement()
     if (fresh) { a = fresh; await setFedDecision(fresh) }
@@ -257,8 +260,7 @@ async function resolveFedDecision(): Promise<FedDecisionStore | null> {
   return a
 }
 
-function computeFedPolicyFromObs(obs: Obs[]): FedPolicyData {
-  const lastFomc = getLastFomc()
+function computeFedPolicyFromObs(obs: Obs[], lastFomc: FomcRef | null): FedPolicyData {
   const history = spark(obs, 80) ?? []   // oldest→newest target-rate path (~10y)
   const none: FedPolicyData = {
     currentRate: obs[0]?.value ?? null, lastChangeAmount: 0, lastChangeDirection: 'none',
@@ -345,8 +347,7 @@ function expectationFromTreasury(twoYObs: Obs[], fp: FedPolicyData): RateExpecta
 // the implied post-meeting rate, then map it onto the 25bp outcome ladder for
 // hold/cut/hike probabilities. Works when the next meeting is in the current
 // month (front-month ZQ isolates it); otherwise falls back to the 2Y proxy.
-async function buildRateExpectation(d: BondData, fp: FedPolicyData): Promise<RateExpectation> {
-  const next = getNextFomc()
+async function buildRateExpectation(d: BondData, fp: FedPolicyData, next: FomcNextRef | null): Promise<RateExpectation> {
   const now = new Date()
   const sameMonth = next != null && (() => {
     const m = new Date(next.date + 'T12:00:00Z')
@@ -893,18 +894,22 @@ const SUBTITLES: Record<string, string> = {
 
 export async function buildBondModel(): Promise<BondModel> {
   const data = await fetchBondData()
-  const fedDecision = await resolveFedDecision()
+  // FOMC dates from the economic calendar (Supabase, with built-in fallback).
+  const fomcEvents = await fetchEvents(getSupabaseAdmin())
+  const lastFomc = lastFomcOf(fomcEvents)
+  const nextFomc = nextFomcOf(fomcEvents)
+  const fedDecision = await resolveFedDecision(lastFomc)
 
   // Data-unavailable guard — the 10Y is the keystone series.
   if (data.tenY == null) {
-    const fp = buildFedPolicy(data.targetObs, fedDecision)
+    const fp = buildFedPolicy(data.targetObs, lastFomc, fedDecision)
     return {
       available: false,
       status: { emoji: '⚪', label: 'Data Unavailable', tone: 'neutral' },
       subtitle: SUBTITLES['Data Unavailable'],
       risk: { text: '', why: '', key: '' }, stabilizer: { text: '', why: '', key: '' },
       categories: [], alerts: [], lastAlert: null, watching: [], fedPolicy: fp, fedWatch: INACTIVE_WATCH,
-      rateExpectation: await buildRateExpectation(data, fp), data,
+      rateExpectation: await buildRateExpectation(data, fp, nextFomc), data,
     }
   }
 
@@ -918,7 +923,7 @@ export async function buildBondModel(): Promise<BondModel> {
   const alerts = buildAlerts(data)
   const watching = buildWatching(data, alerts)
   const { risk, stabilizer } = riskAndStabilizer(categories, watching)
-  const fedPolicy = buildFedPolicy(data.targetObs, fedDecision)
+  const fedPolicy = buildFedPolicy(data.targetObs, lastFomc, fedDecision)
 
   // Activate the watch list only inside the post-decision window — so the extra
   // impact-series fetches happen for ~60 days after a move, not on every load.
@@ -935,7 +940,7 @@ export async function buildBondModel(): Promise<BondModel> {
     categories, alerts,
     lastAlert: buildLastAlert(data),
     watching, fedPolicy, fedWatch,
-    rateExpectation: await buildRateExpectation(data, fedPolicy),
+    rateExpectation: await buildRateExpectation(data, fedPolicy, nextFomc),
     data,
   }
 }

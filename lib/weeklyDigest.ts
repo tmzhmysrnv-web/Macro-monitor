@@ -8,7 +8,8 @@ import { fetchAllHistory } from './fetchHistory'
 import { computeStressIndex } from './stressIndex'
 import { buildWhatChanged } from './whatChanged'
 import { buildMeterChange } from './overview'
-import { getUpcomingEvents } from './fetchCalendar'
+import { fetchEvents, upcoming } from './economicCalendar'
+import { getSupabaseAdmin } from './supabase/server'
 import { toneFor, headlineFor, bottomLine, changeLine, type Tone, type ChangeLine } from './statusLadder'
 import { INTEREST_CATALOG, readInterest, type InterestCategory } from './interests'
 
@@ -49,9 +50,9 @@ export async function buildWeeklyDigestBase(): Promise<DigestBase | null> {
     dir: r.direction === 'toward-danger' ? 'worse' : r.direction === 'toward-safety' ? 'better' : 'neutral',
   }))
 
-  const events: DigestEvent[] = getUpcomingEvents()
-    .filter(e => !e.released && e.daysUntil >= 0 && e.daysUntil <= 7)
-    .sort((a, b) => a.daysUntil - b.daysUntil)
+  const calEvents = await fetchEvents(getSupabaseAdmin())
+  const events: DigestEvent[] = upcoming(calEvents, 7)
+    .filter(e => !e.released)
     .slice(0, 3)
     .map(e => ({ name: e.name, weekday: weekdayOf(e.date) }))
 

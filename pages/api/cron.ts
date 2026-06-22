@@ -33,6 +33,7 @@ import {
 } from '../../lib/redis'
 import { listAlertRecipients, alertsForRecipient } from '../../lib/recipients'
 import { sendDigest } from '../../lib/sendAlert'
+import { syncEconomicCalendar } from '../../lib/calendarSync'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
@@ -126,12 +127,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       emailed = sends.filter(r => r.status === 'fulfilled' && r.value).length
     }
 
+    // Refresh the economic calendar (folded in here — Hobby allows only 2 crons).
+    // Never let a calendar failure break the alert run.
+    let calendar: Awaited<ReturnType<typeof syncEconomicCalendar>> | { errors: string[] } = { errors: [] }
+    try {
+      calendar = await syncEconomicCalendar()
+    } catch (e) {
+      console.error('Calendar sync failed:', e)
+      calendar = { errors: [e instanceof Error ? e.message : String(e)] }
+    }
+
     res.status(200).json({
       firing: alerts.length,
       notified: toNotify.length,
       cleared: clearedKeys.length,
       emailed,
       errors,
+      calendar,
       at: new Date().toISOString(),
     })
   } catch (err) {
