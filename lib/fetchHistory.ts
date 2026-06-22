@@ -46,18 +46,25 @@ async function fetchYahooHistory(symbol: string, years = 10, freq: Freq = 'd'): 
     const interval = freq === 'm' ? '1mo' : '1wk'
     const encoded = encodeURIComponent(symbol)
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=${interval}&range=${range}`
+    type YahooChart = { chart?: { result?: { timestamp?: number[]; indicators?: { quote?: { close?: (number | null)[] }[] } }[] } }
+    const parse = (data: YahooChart): DataPoint[] => {
+      const result = data?.chart?.result?.[0]
+      const timestamps = result?.timestamp || []
+      const closes = result?.indicators?.quote?.[0]?.close || []
+      return timestamps
+        .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], value: closes[i] }))
+        .filter((d): d is DataPoint => d.value != null && !isNaN(d.value))
+    }
     const res = await fetch(url, { next: { revalidate: 86400 } })
     if (!res.ok) return []
-    const data = await res.json()
-    const result = data?.chart?.result?.[0]
-    const timestamps: number[] = result?.timestamp || []
-    const closes: number[] = result?.indicators?.quote?.[0]?.close || []
-    return timestamps
-      .map((ts: number, i: number) => ({
-        date: new Date(ts * 1000).toISOString().split('T')[0],
-        value: closes[i],
-      }))
-      .filter(d => d.value != null && !isNaN(d.value))
+    const out = parse(await res.json())
+    if (out.length) return out
+    // Same self-heal as fetchFredHistory: a transient empty response would
+    // otherwise be served from the 24h cache for a full day. Bypass the cache
+    // once so an empty never sticks (covers VIX, equities, commodities, dollar).
+    const fresh = await fetch(url, { cache: 'no-store' })
+    if (fresh.ok) return parse(await fresh.json())
+    return []
   } catch { return [] }
 }
 
