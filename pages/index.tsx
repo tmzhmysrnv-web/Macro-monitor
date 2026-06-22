@@ -654,6 +654,31 @@ export default function Dashboard() {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+        <link rel="canonical" href="https://istheworldbreaking.com/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Is the World Breaking?" />
+        <meta property="og:title" content="Is the World Breaking?" />
+        <meta property="og:description" content="A quiet macro dashboard. Alerts only when it matters." />
+        <meta property="og:url" content="https://istheworldbreaking.com/" />
+        <meta property="og:image" content="https://istheworldbreaking.com/api/og" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Is the World Breaking?" />
+        <meta name="twitter:description" content="A quiet macro dashboard. Alerts only when it matters." />
+        <meta name="twitter:image" content="https://istheworldbreaking.com/api/og" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              name: 'Is the World Breaking?',
+              url: 'https://istheworldbreaking.com/',
+              description: 'A quiet macro dashboard. Alerts only when it matters.',
+            }),
+          }}
+        />
       </Head>
 
       <style>{`

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /settings
+Disallow: /account
+Disallow: /watchlist
+Disallow: /alerts
+Disallow: /digest
+Disallow: /auth/
+
+Sitemap: https://istheworldbreaking.com/sitemap.xml
