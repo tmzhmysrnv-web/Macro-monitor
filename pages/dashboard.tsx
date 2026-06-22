@@ -245,7 +245,7 @@ export default function DashboardPage(props: GatedProps) {
         .cs-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--c-green-bg); color: var(--c-green-deep); }
         .cs-delta.up { background: var(--c-warn-bg); color: var(--c-warn); }
         .cs-delta.down { background: var(--c-green-bg); color: var(--c-green-deep); }
-        .cs-delta.flat { background: var(--c-soft); color: var(--c-muted); }
+        .cs-delta.flat { background: var(--c-soft); color: var(--c-text-soft); }
         .cs-trend { margin-top: 12px; }
         .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
         .sec-title { font-size: 19px; font-weight: 600; }

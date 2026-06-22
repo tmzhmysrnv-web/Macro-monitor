@@ -1021,7 +1021,6 @@ export default function Dashboard() {
         <div className="footer">
           <div className="footer-row">
             <span className="footer-note">Economic data from the Federal Reserve · stock prices refresh every 15 min</span>
-            <span className="footer-note">Alerts: email · in-app</span>
           </div>
           <p className="disclaimer">
             For informational purposes only. Not financial advice. Historical context is descriptive, not predictive.
