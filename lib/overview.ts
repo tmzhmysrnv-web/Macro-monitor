@@ -10,6 +10,7 @@ import type { MacroData } from './fetchData'
 import { INDICATORS, getStatus, getContextText, type Indicator } from './thresholds'
 import { computeStressFromValues, computeSubsystemsFromValues, BREAK_KEYS, type StressResult } from './stressIndex'
 import type { HistoryMap } from './fetchHistory'
+import { headlineFor } from './statusLadder'
 
 // ── shared helpers ────────────────────────────────────────────────────
 function valueForKey(data: MacroData, key: string): number | null {
@@ -257,15 +258,8 @@ export type Briefing = {
   stabilizer: { label: string; detail: string; tab: string } | null
 }
 
-// One ladder, shared with the dashboard's shield tone + bottom line
-// (pages/dashboard.tsx toneFor / bottomLine use the SAME 40/65/85 boundaries).
-// Below 40 reads as stable; 40+ is elevated (the break meter is amber there).
-function headlineFor(total: number): string {
-  if (total < 40) return 'Calm and steady'
-  if (total < 65) return 'Elevated — worth watching'
-  if (total < 85) return 'High — stress is building'
-  return 'Breaking — systemic stress'
-}
+// headlineFor now lives in lib/statusLadder.ts (shared with the dashboard +
+// /digest + the weekly digest email).
 
 // Direction of each indicator over the last ~`days`, with a deadband so small
 // wiggles read as "flat" rather than flipping Rising/Cooling. A single noisy

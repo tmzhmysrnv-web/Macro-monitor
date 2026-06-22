@@ -56,7 +56,7 @@ export default function Digest(props: GatedProps) {
         <div className="seg">{FREQ.map(f => <button key={f.id} className={freq === f.id ? 'on' : ''} onClick={() => setFrequency(f.id)}>{f.label}</button>)}</div>
       </div>
 
-      <div className="sec-title" style={{ fontSize: 16, margin: '24px 0 10px' }}>What your next digest will say</div>
+      <div className="sec-title" style={{ fontSize: 16, margin: '24px 0 10px' }}>What your next digest will cover</div>
       {mine.length === 0 ? (
         <div className="calm-card" style={{ color: 'var(--c-text-soft)' }}>Add topics in your Watchlist to fill your digest.</div>
       ) : (

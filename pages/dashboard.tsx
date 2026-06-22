@@ -12,6 +12,7 @@ import SupportCard from '../components/app/SupportCard'
 import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { INTEREST_CATALOG, readInterest } from '../lib/interests'
+import { toneFor, bottomLine, TONE_TEXT, TONE_BADGE } from '../lib/statusLadder'
 
 type Vals = Record<string, number | null>
 type StressPt = { date: string; total: number }
@@ -25,30 +26,8 @@ type Payload = {
   whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
 }
 
-// One status ladder for the whole Current Status / Bottom Line block — the shield
-// tone, the headline color, and the bottom-line copy all read from it on the SAME
-// boundaries (40/65/85), so the signals never disagree. Below 40 = stable; 40+ is
-// elevated (where the break meter is already amber). Matches headlineFor() in
-// lib/overview.ts. Tone colors stay calm (amber caution, not red) until 65+.
-type Tone = 'calm' | 'elevated' | 'high' | 'severe'
-function toneFor(total: number): Tone {
-  if (total < 40) return 'calm'
-  if (total < 65) return 'elevated'
-  if (total < 85) return 'high'
-  return 'severe'
-}
-const TONE_TEXT: Record<Tone, string> = { calm: 'var(--c-green-deep)', elevated: 'var(--c-warn)', high: 'var(--c-bad)', severe: 'var(--c-bad)' }
-const TONE_BADGE: Record<Tone, string> = { calm: 'var(--c-green)', elevated: 'var(--c-warn)', high: 'var(--c-bad)', severe: 'var(--c-bad)' }
-
-// The message is split around the one word that flips the sentence's meaning
-// ("stable" → "shaky" …) — rendered with a dotted underline so it reads like a
-// fill-in-the-blank that today's data filled in.
-function bottomLine(total: number): { h: string; lead: string; swap: string; tail: string } {
-  if (total < 40) return { h: 'You can breathe easy.', lead: 'The economy remains in ', swap: 'stable', tail: ' territory. Enjoy your week. We\'ll keep watching.' }
-  if (total < 65) return { h: 'Worth keeping an eye on.', lead: 'The economy is in ', swap: 'elevated', tail: ' territory — a few areas are building, but nothing is breaking.' }
-  if (total < 85) return { h: 'Worth your attention.', lead: 'The economy is drifting into ', swap: 'shaky', tail: ' territory. We\'ll alert you if it crosses a line.' }
-  return { h: 'We\'re watching this closely.', lead: 'The economy is in ', swap: 'fragile', tail: ' territory. You\'ll hear from us the moment your topics are affected.' }
-}
+// Status ladder (tone, headline, bottom-line copy, colors) lives in
+// lib/statusLadder.ts — shared with /digest and the weekly digest email.
 function deltaLabel(d: number): string {
   const a = Math.abs(d)
   return a < 3 ? 'insignificant' : a < 8 ? 'minor' : 'notable'

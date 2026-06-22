@@ -6,6 +6,8 @@
 
 import type { FiredAlert, SectionTone } from './alertEngine'
 import { barFor, nextFor, type AlertBar } from './alertMeta'
+import { TONE_EMAIL } from './statusLadder'
+import type { DigestBase, DigestInterestRow } from './weeklyDigest'
 
 // Customer-facing emails must always use the branded domain — never a
 // *.vercel.app deployment URL, even if SITE_URL is misconfigured to one.
@@ -60,6 +62,119 @@ export async function sendWelcomeEmail(email: string, token: string): Promise<bo
     return true
   } catch (e) {
     console.error('Resend welcome send threw:', e)
+    return false
+  }
+}
+
+// ── Weekly digest (calm Sunday recap) ─────────────────────────────────
+const PILL: Record<'ok' | 'warn' | 'alert', { bg: string; fg: string }> = {
+  ok:    { bg: '#E7F2EB', fg: '#235E40' },
+  warn:  { bg: '#FBF3E6', fg: '#854F0B' },
+  alert: { bg: '#FBECEA', fg: '#A3332E' },
+}
+
+export async function sendWeeklyDigest(
+  recipient: { email: string; token: string },
+  base: DigestBase,
+  rows: DigestInterestRow[],
+): Promise<boolean> {
+  const r = await client()
+  if (!r) { console.warn('sendWeeklyDigest: RESEND_API_KEY not set — skipping send'); return false }
+
+  const dateLabel = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'short', day: 'numeric' })
+  const unsub = `${site()}/api/unsubscribe?token=${recipient.token}`
+  const dash = `${site()}/dashboard`
+  const settings = `${site()}/settings`
+  const tone = TONE_EMAIL[base.tone]
+  const kicker = 'font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8B928C'
+
+  const changeColor = base.change.dir === 'better' ? '#235E40' : base.change.dir === 'worse' ? tone.text : '#8B928C'
+
+  const watchlist = rows.length === 0
+    ? `<div style="border:1px solid #EEF0EC;border-radius:11px;padding:12px 14px;font-size:13px;color:#59615B;line-height:1.5">
+         You haven't picked any topics yet. <a href="${site()}/watchlist" style="color:#235E40">Choose your interests</a> to fill your digest.
+       </div>`
+    : rows.map(row => {
+        const p = PILL[row.status]
+        return `<div style="border:1px solid #EEF0EC;border-radius:11px;padding:11px 13px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:14px;font-weight:500;color:#1E2622">${row.label}</span>
+            <span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:999px;background:${p.bg};color:${p.fg}">${row.badge}</span>
+          </div>
+          <div style="font-size:12.5px;color:#59615B;margin-top:6px;line-height:1.5">${row.insight}</div>
+        </div>`
+      }).join('')
+
+  const movers = base.movers.length === 0
+    ? `<div style="font-size:13px;color:#59615B">All quiet — nothing moved meaningfully this week.</div>`
+    : base.movers.map(m => {
+        const c = m.dir === 'better' ? '#235E40' : m.dir === 'worse' ? tone.text : '#8B928C'
+        const arrow = m.pct >= 0 ? '&#8593;' : '&#8595;'
+        return `<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="color:#1E2622">${m.label}</span>
+          <span style="color:${c}">${arrow} ${m.pct >= 0 ? '+' : ''}${m.pct}%</span>
+        </div>`
+      }).join('')
+
+  const moversNote = base.movers.length > 0 && base.tone === 'calm'
+    ? `<div style="font-size:12px;color:#8B928C;margin-top:10px;border-top:1px solid #EEF0EC;padding-top:9px">None of these are large enough to change the overall outlook.</div>`
+    : ''
+
+  const nextWeek = base.events.length === 0 ? '' : `
+    <div style="padding:12px 0">
+      <div style="${kicker};margin-bottom:4px">Next week to watch</div>
+      <div style="font-size:12px;color:#8B928C;margin-bottom:10px">Upcoming events that could influence next week's outlook.</div>
+      ${base.events.map(e => `<div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:9px">
+        <span style="color:#1E2622">${e.name}</span><span style="color:#59615B">${e.weekday}</span></div>`).join('')}
+    </div>`
+
+  const html = `
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:540px;margin:0 auto;background:#FFFFFF;border:1px solid #E8E9E4;border-radius:14px;overflow:hidden;color:#1E2622">
+    <div style="padding:18px 22px;border-bottom:1px solid #EEF0EC">
+      <div style="font-family:'Space Mono',monospace;font-size:13px;color:#25734C;letter-spacing:.04em">is the world breaking?...</div>
+      <div style="font-size:12px;color:#8B928C;margin-top:3px">Your week in review · ${dateLabel}</div>
+    </div>
+
+    <div style="padding:18px 22px">
+      <div style="${kicker}">Current status</div>
+      <div style="font-size:18px;font-weight:500;color:${tone.text};margin:2px 0">${base.headline}</div>
+      <div style="font-size:14px;color:#1E2622">World stress: <strong>${base.total}</strong>/100</div>
+      <div style="font-size:13px;color:${changeColor};margin-top:3px">${base.change.arrow} ${base.change.text}</div>
+    </div>
+
+    <div style="padding:0 22px 8px">
+      <div style="${kicker};margin-bottom:10px">Your watchlist</div>
+      ${watchlist}
+    </div>
+
+    <div style="padding:12px 22px">
+      <div style="${kicker};margin-bottom:10px">What actually moved this week</div>
+      ${movers}
+      ${moversNote}
+    </div>
+
+    <div style="padding:0 22px">${nextWeek}</div>
+
+    <div style="margin:6px 22px 18px;background:#EEF5EF;border:1px solid #DCEAE0;border-radius:12px;padding:14px">
+      <div style="${kicker}">Bottom line</div>
+      <div style="font-size:16px;font-weight:500;color:${tone.text};margin:2px 0">${base.bottom.h}</div>
+      <div style="font-size:13px;color:#59615B;line-height:1.5">${base.bottom.text}</div>
+    </div>
+
+    <div style="padding:14px 22px;border-top:1px solid #EEF0EC;text-align:center">
+      <a href="${dash}" style="display:inline-block;font-size:13px;font-weight:500;color:#fff;background:#2F9160;border-radius:9px;padding:9px 18px;text-decoration:none">View Full Dashboard</a>
+      <div style="font-size:11px;color:#A0A6A1;margin-top:12px">
+        <a href="${settings}" style="color:#A0A6A1">Manage preferences</a> · <a href="${unsub}" style="color:#A0A6A1">Unsubscribe from the weekly digest</a>
+      </div>
+    </div>
+  </div>`
+
+  try {
+    const { error } = await r.emails.send({ from: FROM(), to: recipient.email, subject: `Your week in review · ${dateLabel}`, html })
+    if (error) { console.error('Resend rejected weekly digest:', error); return false }
+    return true
+  } catch (e) {
+    console.error('Resend weekly digest threw:', e)
     return false
   }
 }

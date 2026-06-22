@@ -140,6 +140,22 @@ export async function setFedDecision(d: FedDecisionStore): Promise<void> {
   await r.set(FED_DECISION, d)
 }
 
+// ── Weekly digest dedup ───────────────────────────────────────────────
+// A daily cron fires the Sunday digest; this prevents a double-send if the cron
+// runs twice. Keyed by ISO week; members are recipient ids (email or user id).
+const weeklyKey = (week: string) => `wd:${week}`
+
+export async function weeklyDigestSent(week: string, id: string): Promise<boolean> {
+  const r = getRedis(); if (!r) return false
+  return (await r.sismember(weeklyKey(week), id)) === 1
+}
+
+export async function markWeeklyDigestSent(week: string, id: string): Promise<void> {
+  const r = getRedis(); if (!r) return
+  await r.sadd(weeklyKey(week), id)
+  await r.expire(weeklyKey(week), 60 * 60 * 24 * 14) // keep ~2 weeks, then forget
+}
+
 // ── Admin / testing maintenance ───────────────────────────────────────
 // Removes every subscriber (sub:*, tok:*, and the index set). Returns the count.
 export async function resetSubscribers(): Promise<number> {
