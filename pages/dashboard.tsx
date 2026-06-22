@@ -25,12 +25,27 @@ type Payload = {
   whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
 }
 
+// One status ladder for the whole Current Status / Bottom Line block — the shield
+// tone, the headline color, and the bottom-line copy all read from it on the SAME
+// boundaries (40/65/85), so the signals never disagree. Below 40 = stable; 40+ is
+// elevated (where the break meter is already amber). Matches headlineFor() in
+// lib/overview.ts. Tone colors stay calm (amber caution, not red) until 65+.
+type Tone = 'calm' | 'elevated' | 'high' | 'severe'
+function toneFor(total: number): Tone {
+  if (total < 40) return 'calm'
+  if (total < 65) return 'elevated'
+  if (total < 85) return 'high'
+  return 'severe'
+}
+const TONE_TEXT: Record<Tone, string> = { calm: 'var(--c-green-deep)', elevated: 'var(--c-warn)', high: 'var(--c-bad)', severe: 'var(--c-bad)' }
+const TONE_BADGE: Record<Tone, string> = { calm: 'var(--c-green)', elevated: 'var(--c-warn)', high: 'var(--c-bad)', severe: 'var(--c-bad)' }
+
 // The message is split around the one word that flips the sentence's meaning
 // ("stable" → "shaky" …) — rendered with a dotted underline so it reads like a
 // fill-in-the-blank that today's data filled in.
 function bottomLine(total: number): { h: string; lead: string; swap: string; tail: string } {
-  if (total < 45) return { h: 'You can breathe easy.', lead: 'The economy remains in ', swap: 'stable', tail: ' territory. Enjoy your week. We\'ll keep watching.' }
-  if (total < 65) return { h: 'Mostly calm out there.', lead: 'The economy is in ', swap: 'steady', tail: ' territory — a few areas worth watching, but nothing is breaking.' }
+  if (total < 40) return { h: 'You can breathe easy.', lead: 'The economy remains in ', swap: 'stable', tail: ' territory. Enjoy your week. We\'ll keep watching.' }
+  if (total < 65) return { h: 'Worth keeping an eye on.', lead: 'The economy is in ', swap: 'elevated', tail: ' territory — a few areas are building, but nothing is breaking.' }
   if (total < 85) return { h: 'Worth your attention.', lead: 'The economy is drifting into ', swap: 'shaky', tail: ' territory. We\'ll alert you if it crosses a line.' }
   return { h: 'We\'re watching this closely.', lead: 'The economy is in ', swap: 'fragile', tail: ' territory. You\'ll hear from us the moment your topics are affected.' }
 }
@@ -98,6 +113,7 @@ export default function DashboardPage(props: GatedProps) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const bl = d ? bottomLine(d.total) : null
+  const tone = d ? toneFor(d.total) : 'calm'
   const movers = (d?.whatChanged ?? []).slice(0, 3)
 
   return (
@@ -115,10 +131,10 @@ export default function DashboardPage(props: GatedProps) {
       {/* Current status */}
       <div className="calm-card soft cs">
         <div className="cs-left">
-          <div className={`cs-shield l-${d ? d.level : 'calm'}`}><Icon name="shield-check" size={30} /></div>
+          <div className="cs-shield" style={{ background: TONE_BADGE[tone] }}><Icon name="shield-check" size={30} /></div>
           <div>
             <div className="cs-kicker">Current Status</div>
-            <div className="cs-headline">{d ? (d.briefing?.headline ?? d.verdict) : 'Checking…'}</div>
+            <div className="cs-headline" style={d ? { color: TONE_TEXT[tone] } : undefined}>{d ? (d.briefing?.headline ?? d.verdict) : 'Checking…'}</div>
             <div className="cs-statussub">
               {d?.briefing?.concern
                 ? <>Biggest concern: <b>{d.briefing.concern.label}</b>{d.briefing.concern.detail ? ` — ${d.briefing.concern.detail}` : ''}</>
@@ -203,10 +219,10 @@ export default function DashboardPage(props: GatedProps) {
       {/* Bottom line */}
       {bl && (
         <div className="calm-card soft bottomline">
-          <div className="bl-icon"><Icon name="sunrise" size={30} /></div>
+          <div className="bl-icon" style={{ background: TONE_BADGE[tone] }}><Icon name="sunrise" size={30} /></div>
           <div>
             <div className="cs-kicker">Bottom Line</div>
-            <div className="bl-h">{bl.h}</div>
+            <div className="bl-h" style={{ color: TONE_TEXT[tone] }}>{bl.h}</div>
             <div className="bl-m">{bl.lead}<span className="swap">{bl.swap}</span>{bl.tail}</div>
           </div>
         </div>
@@ -228,11 +244,8 @@ export default function DashboardPage(props: GatedProps) {
         .cs { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; margin-bottom: 30px; }
         .cs-left { display: flex; gap: 16px; }
         .cs-shield { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-green); color: #fff; }
-        .cs-shield.l-elevated, .cs-shield.l-guarded { background: var(--c-warn); }
-        .cs-shield.l-high, .cs-shield.l-severe { background: var(--c-bad); }
         .cs-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-muted); }
         .cs-headline { font-size: 22px; font-weight: 600; color: var(--c-green-deep); margin: 5px 0 6px; letter-spacing: -0.01em; }
-        .cs-shield.l-elevated ~ div .cs-headline { color: var(--c-warn); }
         .cs-statussub { font-size: 13.5px; color: var(--c-text-soft); line-height: 1.5; }
         .cs-right { border-left: 1px solid var(--c-soft-line); padding-left: 24px; }
         .cs-score { margin-top: 5px; font-size: 16px; color: var(--c-muted); }

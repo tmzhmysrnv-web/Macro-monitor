@@ -257,11 +257,13 @@ export type Briefing = {
   stabilizer: { label: string; detail: string; tab: string } | null
 }
 
+// One ladder, shared with the dashboard's shield tone + bottom line
+// (pages/dashboard.tsx toneFor / bottomLine use the SAME 40/65/85 boundaries).
+// Below 40 reads as stable; 40+ is elevated (the break meter is amber there).
 function headlineFor(total: number): string {
-  if (total <= 20) return 'Calm and steady'
-  if (total <= 40) return 'Stable but worth watching'
-  if (total <= 60) return 'Elevated — stress is building'
-  if (total <= 80) return 'High risk — a subsystem is close to breaking'
+  if (total < 40) return 'Calm and steady'
+  if (total < 65) return 'Elevated — worth watching'
+  if (total < 85) return 'High — stress is building'
   return 'Breaking — systemic stress'
 }
 
