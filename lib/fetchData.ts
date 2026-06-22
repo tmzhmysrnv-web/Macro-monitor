@@ -79,6 +79,10 @@ export type MacroData = {
   igSpread:      number | null
   sp500:         number | null
   sp500Change:   number | null
+  nasdaq:        number | null
+  nasdaqChange:  number | null
+  russell2000:   number | null
+  russell2000Change: number | null
   // Commodities & Dollar
   dxy:           number | null
   dxyChange:     number | null
@@ -112,7 +116,7 @@ export function fetchAllData(): Promise<MacroData> {
 }
 
 async function _fetchAllData(): Promise<MacroData> {
-  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR, silverR, fedTargetU] = await Promise.all([
+  const [t10y, t2y, ff, cpi, claims, hy, ig, mort, hpi, payroll, vixR, spxR, dxyR, goldR, oilR, copperR, silverR, fedTargetU, nasdaqR, russellR] = await Promise.all([
     fetchFredSeries(FRED_SERIES.treasury10y),
     fetchFredSeries(FRED_SERIES.treasury2y),
     fetchFredSeries(FRED_SERIES.fedfunds),
@@ -131,6 +135,8 @@ async function _fetchAllData(): Promise<MacroData> {
     fetchYahoo('HG=F'),
     fetchYahoo('SI=F'),       // silver — industrial + precious, a strong growth/inflation signal
     fetchFredSeries('DFEDTARU'), // fed-funds target upper (range = upper−0.25 to upper)
+    fetchYahoo('^IXIC'),      // Nasdaq Composite
+    fetchYahoo('^RUT'),       // Russell 2000 (small caps)
   ])
 
   return {
@@ -146,6 +152,10 @@ async function _fetchAllData(): Promise<MacroData> {
     igSpread:      ig,
     sp500:         spxR != null ? Math.round(spxR.value) : null,
     sp500Change:   spxR?.change ?? null,
+    nasdaq:        nasdaqR != null ? Math.round(nasdaqR.value) : null,
+    nasdaqChange:  nasdaqR?.change ?? null,
+    russell2000:   russellR != null ? Math.round(russellR.value) : null,
+    russell2000Change: russellR?.change ?? null,
     dxy:           dxyR != null ? parseFloat(dxyR.value.toFixed(2)) : null,
     dxyChange:     dxyR?.change ?? null,
     gold:          goldR != null ? Math.round(goldR.value) : null,

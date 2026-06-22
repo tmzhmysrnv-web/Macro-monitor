@@ -114,6 +114,22 @@ export const INDICATORS: Indicator[] = [
     opportunityDirection: 'high-good',
   },
   {
+    key: 'nasdaq',
+    label: 'Nasdaq',
+    unit: '',
+    unitPosition: 'prefix',
+    description: 'Nasdaq Composite index — tech-heavy growth gauge',
+    opportunityDirection: 'high-good',
+  },
+  {
+    key: 'russell2000',
+    label: 'Russell 2000',
+    unit: '',
+    unitPosition: 'prefix',
+    description: 'Russell 2000 small-cap index — domestic, rate-sensitive read',
+    opportunityDirection: 'high-good',
+  },
+  {
     key: 'dxy',
     label: 'DXY',
     unit: '',

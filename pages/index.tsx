@@ -30,6 +30,7 @@ function getValueForKey(data: MacroData, key: string): number | null {
     vix: data.vix, treasury10y: data.treasury10y, fedfunds: data.fedfunds,
     cpi: data.cpi, joblessClaims: data.joblessClaims, yieldCurve: data.yieldCurve,
     hySpread: data.hySpread, igSpread: data.igSpread, sp500: data.sp500,
+    nasdaq: data.nasdaq, russell2000: data.russell2000,
     dxy: data.dxy, gold: data.gold, oil: data.oil, copper: data.copper, silver: data.silver,
     mortgage30: data.mortgage30, treasury2y: data.treasury2y, payrolls: data.payrolls, homePriceYoY: data.homePriceYoY,
   }
@@ -38,7 +39,8 @@ function getValueForKey(data: MacroData, key: string): number | null {
 
 function getChangeForKey(data: MacroData, key: string): number | null {
   const map: Record<string, number | null> = {
-    sp500: data.sp500Change, dxy: data.dxyChange, gold: data.goldChange,
+    sp500: data.sp500Change, nasdaq: data.nasdaqChange, russell2000: data.russell2000Change,
+    dxy: data.dxyChange, gold: data.goldChange,
     oil: data.oilChange, copper: data.copperChange, silver: data.silverChange, vix: null,
   }
   return map[key] ?? null
@@ -46,7 +48,7 @@ function getChangeForKey(data: MacroData, key: string): number | null {
 
 function formatValue(key: string, value: number | null): string {
   if (value == null) return '—'
-  if (key === 'sp500') return value.toLocaleString('en-US')
+  if (key === 'sp500' || key === 'nasdaq' || key === 'russell2000') return value.toLocaleString('en-US')
   if (key === 'gold') return `$${value.toLocaleString('en-US')}`
   if (key === 'oil') return `$${value.toFixed(2)}`
   if (key === 'copper') return `$${value.toFixed(3)}`
@@ -90,7 +92,7 @@ const SECTIONS = [
   { label: 'Rates & Housing',      keys: ['treasury10y', 'treasury2y', 'fedfunds', 'yieldCurve', 'mortgage30', 'homePriceYoY'] },
   { label: 'Inflation & Labor',    keys: ['cpi', 'joblessClaims', 'payrolls'] },
   { label: 'Dollar & Commodities', keys: ['dxy', 'gold', 'silver', 'oil', 'copper'] },
-  { label: 'Markets',              keys: ['sp500'] },
+  { label: 'Markets',              keys: ['sp500', 'nasdaq', 'russell2000'] },
 ]
 
 // Tab definitions — Overview is special; the rest filter the card sections
