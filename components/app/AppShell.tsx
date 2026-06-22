@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: '/watchlist', label: 'Watchlist', icon: 'heart' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
   { href: '/account', label: 'Account', icon: 'user' },
+  { href: '/support', label: 'Support', icon: 'heart' },
 ]
 
 // Next Sunday, formatted like "Sunday, May 25".

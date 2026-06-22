@@ -847,6 +847,7 @@ export default function Dashboard() {
           past={pastAlerts}
           sections={sections}
           onNavigate={setActiveTab}
+          authed={!!authed}
         />
 
         {/* Tab navigation */}

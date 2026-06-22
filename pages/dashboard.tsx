@@ -8,6 +8,7 @@ import Head from 'next/head'
 import type { GetServerSidePropsContext } from 'next'
 import AppShell from '../components/app/AppShell'
 import InterestCard from '../components/app/InterestCard'
+import SupportCard from '../components/app/SupportCard'
 import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { INTEREST_CATALOG, readInterest } from '../lib/interests'
@@ -212,6 +213,9 @@ export default function DashboardPage(props: GatedProps) {
       )}
 
       {err && <div className="calm-card" style={{ color: 'var(--c-bad)' }}>Couldn't load the latest data. Try refreshing.</div>}
+
+      {/* Support — calm, optional, after all primary content */}
+      <SupportCard />
 
       <div className="dfoot">Questions or feedback? We're always here. <a href="mailto:hello@istheworldbreaking.com">Contact us</a></div>
 

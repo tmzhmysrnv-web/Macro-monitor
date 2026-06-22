@@ -137,7 +137,7 @@ function MonitorCard({ a, onOpen }: { a: PanelAlert; onOpen: () => void }) {
 }
 
 export default function NotificationPanel({
-  open, onClose, active, past, sections, onNavigate,
+  open, onClose, active, past, sections, onNavigate, authed,
 }: {
   open: boolean
   onClose: () => void
@@ -145,10 +145,8 @@ export default function NotificationPanel({
   past: PanelAlert[]
   sections: SectionDot[]
   onNavigate: (tab: string) => void
+  authed?: boolean
 }) {
-  const [email, setEmail] = useState('')
-  const [subState, setSubState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
-  const [subMsg, setSubMsg] = useState('')
   const [brk, setBrk] = useState<{ total: number; level: string } | null>(null)
 
   useEffect(() => {
@@ -171,17 +169,6 @@ export default function NotificationPanel({
   const rankedSections = [...sections].sort((a, b) => (TONE_RANK[b.tone] ?? 0) - (TONE_RANK[a.tone] ?? 0))
   const gaugePct = brk ? Math.max(3, Math.min(100, Math.round(brk.total))) : 0
   const gaugeColor = !brk ? '#9E9E9A' : brk.total < 25 ? '#639922' : brk.total < 65 ? '#BA7517' : '#E24B4A'
-
-  async function subscribe(e: React.FormEvent) {
-    e.preventDefault()
-    setSubState('loading'); setSubMsg('')
-    try {
-      const r = await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
-      const d = await r.json()
-      if (r.ok) { setSubState('done'); setSubMsg(d.message || 'Check your inbox.') }
-      else { setSubState('error'); setSubMsg(d.error || 'Something went wrong.') }
-    } catch { setSubState('error'); setSubMsg('Network error. Try again.') }
-  }
 
   return (
     <>
@@ -243,20 +230,12 @@ export default function NotificationPanel({
           )}
         </div>
 
-        <form className="np-sub" onSubmit={subscribe}>
-          {subState === 'done' ? (
-            <div className="np-sub-done">{subMsg}</div>
-          ) : (
-            <>
-              <div className="np-sub-label">Get these by email</div>
-              <div className="np-sub-row">
-                <input type="email" required value={email} placeholder="you@example.com" onChange={e => setEmail(e.target.value)} className="np-input" disabled={subState === 'loading'} />
-                <button type="submit" className="np-btn" disabled={subState === 'loading'}>{subState === 'loading' ? '…' : 'Subscribe'}</button>
-              </div>
-              {subState === 'error' && <div className="np-sub-err">{subMsg}</div>}
-            </>
-          )}
-        </form>
+        <div className="np-sub">
+          <div className="np-sub-label">{authed ? 'Email alerts go out to your inbox.' : 'Want these by email?'}</div>
+          <a className="np-cta" href={authed ? '/settings' : '/welcome'}>
+            {authed ? 'Manage your alerts' : 'Sign in to receive alerts'}
+          </a>
+        </div>
       </div>
 
       <style>{`
@@ -300,14 +279,10 @@ export default function NotificationPanel({
         .np-empty { text-align: center; color: var(--text-muted); font-size: 12.5px; line-height: 1.6; padding: 44px 20px; }
         .np-empty-mark { font-size: 24px; color: var(--term); margin-bottom: 8px; }
         .np-sub { border-top: 0.5px solid var(--border); padding: 13px 16px; background: var(--bg); flex-shrink: 0; }
-        .np-sub-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 7px; }
-        .np-sub-row { display: flex; gap: 6px; }
-        .np-input { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: 6px; border: 0.5px solid var(--border-med); background: var(--card-bg); color: var(--text-primary); }
-        .np-input:focus { outline: none; border-color: var(--term); }
-        .np-btn { font-family: var(--sans); font-size: 12px; font-weight: 500; cursor: pointer; padding: 8px 13px; border-radius: 6px; border: none; background: var(--term); color: #fff; white-space: nowrap; }
-        .np-btn:disabled { opacity: 0.6; cursor: default; }
-        .np-sub-done { font-size: 12.5px; color: var(--term); line-height: 1.5; }
-        .np-sub-err { font-size: 11px; color: #E24B4A; margin-top: 6px; }
+        .np-sub-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 9px; }
+        .np-cta { display: block; text-align: center; font-family: var(--sans); font-size: 12.5px; font-weight: 500;
+          text-decoration: none; padding: 9px 13px; border-radius: 6px; background: var(--term); color: #fff; }
+        .np-cta:hover { opacity: 0.92; }
       `}</style>
     </>
   )
