@@ -16,6 +16,7 @@ import { toneFor, bottomLine, TONE_TEXT, TONE_BADGE } from '../lib/statusLadder'
 import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
 import { getSupabaseBrowser } from '../lib/supabase/client'
 import ComingUp from '../components/ComingUp'
+import { buildBundle, type Bundle } from '../lib/bundle'
 
 type Vals = Record<string, number | null>
 type StressPt = { date: string; total: number }
@@ -60,10 +61,25 @@ function StressTrend({ pts }: { pts: StressPt[] }) {
   )
 }
 
-export default function DashboardPage(props: GatedProps) {
+export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
   const router = useRouter()
-  const [d, setD] = useState<Payload | null>(null)
-  const [events, setEvents] = useState<EconomicEvent[]>([])
+  // Seed the Current Status, score, bottom line, and watchlist from data fetched
+  // server-side (getServerSideProps -> buildBundle) so the dashboard paints
+  // complete on arrival; the client effect below refreshes + fills sparklines.
+  const seed = props.initial
+  const bm0 = seed?.breakmeter
+  const [d, setD] = useState<Payload | null>(bm0 ? ({
+    total: Math.round(bm0.total ?? 0),
+    level: bm0.level ?? 'calm',
+    verdict: bm0.verdict ?? '',
+    briefing: bm0.briefing ?? null,
+    weekChange: bm0.weekChange ?? null,
+    whatChanged: bm0.whatChanged ?? [],
+    history: (bm0.recentTrend ?? []).map(p => ({ date: p.date, total: p.value })),
+    values: (seed?.data ?? {}) as Vals,
+    series: {},
+  }) as Payload : null)
+  const [events, setEvents] = useState<EconomicEvent[]>(seed?.events ?? [])
   const [err, setErr] = useState(false)
   const myInterests = INTEREST_CATALOG.filter(i => props.interests.includes(i.category))
 
@@ -278,5 +294,11 @@ export default function DashboardPage(props: GatedProps) {
 }
 
 export async function getServerSideProps(ctx: GetServerSidePropsContext) {
-  return loadGatedProps(ctx)
+  const gated = await loadGatedProps(ctx)
+  if ('redirect' in gated) return gated
+  // Fetch the shared macro bundle server-side too, so the dashboard's Current
+  // Status / score / watchlist render in the initial HTML (same instant paint as
+  // the public landing). Usually served from the warm FRED Data Cache.
+  const initial = JSON.parse(JSON.stringify(await buildBundle())) as Bundle
+  return { props: { ...gated.props, initial } }
 }
