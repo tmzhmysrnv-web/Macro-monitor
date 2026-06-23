@@ -3,8 +3,18 @@
 // limiting) and a same-origin check (CSRF defense-in-depth on cookie-authed
 // mutations). Domain-agnostic — compares the request's Origin/Referer host to
 // its own Host header, so it works on the prod domain and Vercel previews alike.
-import type { NextApiRequest } from 'next'
+import type { NextApiRequest, NextApiResponse } from 'next'
 import { timingSafeEqual } from 'crypto'
+
+// Edge-cache GOOD data responses, but NEVER cache an unavailable/empty one.
+// Otherwise a single FRED rate-limit blip gets cached at Vercel's edge for the
+// full TTL and served to everyone until it expires (the "loaded at first, then
+// stuck on 'temporarily unavailable'" bug). On not-ok, no-store forces the next
+// request to re-fetch — which usually succeeds once FRED's per-minute window clears.
+export function cacheData(res: NextApiResponse, ok: boolean, sMaxAge: number, swr = 3600): void {
+  if (ok) res.setHeader('Cache-Control', `s-maxage=${sMaxAge}, stale-while-revalidate=${swr}`)
+  else res.setHeader('Cache-Control', 'no-store, must-revalidate')
+}
 
 // Constant-time check of the `Authorization: Bearer <CRON_SECRET>` header used by
 // the cron / weekly-digest / admin routes (avoids leaking the secret via timing).

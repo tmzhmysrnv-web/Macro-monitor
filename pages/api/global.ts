@@ -5,12 +5,13 @@
 // No external AI.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildGlobalModel } from '../../lib/global'
+import { cacheData } from '../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildGlobalModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,
       status: model.status,

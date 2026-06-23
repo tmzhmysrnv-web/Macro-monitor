@@ -471,9 +471,12 @@ export default function Dashboard({ initial }: HomeProps) {
       .then(r => r.json())
       .then((b: Bundle) => {
         if (cancelled || !b) return
-        if (b.data) setData(b.data)
+        // Never let a rate-limited refresh overwrite the good ISR seed: only
+        // replace data/breakmeter when the refresh actually came back available.
+        const bmOk = !!b.breakmeter && (b.breakmeter as { available?: boolean }).available !== false
+        if (bmOk) setBreakmeter(b.breakmeter)
+        if (b.data && (bmOk || !initial?.data)) setData(b.data)
         if (b.events) setEvents(b.events)
-        if (b.breakmeter) setBreakmeter(b.breakmeter)
         setLoading(false)
       })
       .catch(() => { if (!cancelled) { if (!initial?.data) setError(true); setLoading(false) } })
@@ -485,16 +488,22 @@ export default function Dashboard({ initial }: HomeProps) {
   // as separate requests on purpose — each FRED-heavy tab needs its own rate
   // budget + CDN cache (bundling them all into one request trips FRED limits).
   useEffect(() => {
-    const t = setTimeout(() => {
-      fetch('/api/bonds').then(r => r.json()).then(d => { if (d && !d.error) setBondsData(d) }).catch(() => {})
-      fetch('/api/housing').then(r => r.json()).then(d => { if (d && !d.error) setHousingData(d) }).catch(() => {})
-      fetch('/api/credit').then(r => r.json()).then(d => { if (d && !d.error) setCreditData(d) }).catch(() => {})
-      fetch('/api/inflation').then(r => r.json()).then(d => { if (d && !d.error) setInflationData(d) }).catch(() => {})
-      fetch('/api/labor').then(r => r.json()).then(d => { if (d && !d.error) setLaborData(d) }).catch(() => {})
-      fetch('/api/markets').then(r => r.json()).then(d => { if (d && !d.error) setMarketsData(d) }).catch(() => {})
-      fetch('/api/global').then(r => r.json()).then(d => { if (d && !d.error) setGlobalData(d) }).catch(() => {})
-    }, 600)
-    return () => clearTimeout(t)
+    const tabs: [string, (d: any) => void][] = [
+      ['/api/bonds', setBondsData],
+      ['/api/housing', setHousingData],
+      ['/api/credit', setCreditData],
+      ['/api/inflation', setInflationData],
+      ['/api/labor', setLaborData],
+      ['/api/markets', setMarketsData],
+      ['/api/global', setGlobalData],
+    ]
+    // Stagger the warm: firing all seven FRED-heavy endpoints at once bursts past
+    // FRED's per-minute limit, so they come back unavailable. Spacing them out
+    // (and edge-caching only the good responses) keeps each request under budget.
+    const timers = tabs.map(([url, set], i) => setTimeout(() => {
+      fetch(url).then(r => r.json()).then(d => { if (d && !d.error) set(d) }).catch(() => {})
+    }, 600 + i * 400))
+    return () => timers.forEach(clearTimeout)
   }, [])
 
   // After a "go to card" link, scroll the target ([data-hlkey]) into view and

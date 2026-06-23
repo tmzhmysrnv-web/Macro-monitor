@@ -4,6 +4,7 @@
 // No external AI — the briefing is assembled from the computed statuses.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildCreditModel, type CreditModel } from '../../lib/credit'
+import { cacheData } from '../../lib/http'
 
 function buildSummary(m: CreditModel): string {
   if (!m.available) return 'Live credit-market data is temporarily unavailable. Check back shortly.'
@@ -16,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildCreditModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,
       status: model.status,

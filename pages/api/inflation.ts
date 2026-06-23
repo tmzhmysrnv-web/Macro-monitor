@@ -4,12 +4,13 @@
 // watching-closely items. No external AI — everything is computed from FRED.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildInflationModel } from '../../lib/inflation'
+import { cacheData } from '../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildInflationModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,
       status: model.status,

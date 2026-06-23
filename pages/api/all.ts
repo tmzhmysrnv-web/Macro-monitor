@@ -5,12 +5,16 @@
 // data after first paint.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildBundle } from '../../lib/bundle'
+import { cacheData } from '../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const bundle = await buildBundle()
-    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=3600')
+    // Only edge-cache when the Break Meter (the above-the-fold payload the landing
+    // page reads) actually came back available; a rate-limited bundle must not be
+    // cached or it pins the Overview to "temporarily unavailable" for the whole TTL.
+    cacheData(res, !!bundle.breakmeter?.available, 900, 3600)
     res.status(200).json(bundle)
   } catch (err) {
     console.error('Bundle error:', err)

@@ -100,14 +100,19 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         for (const h of hist as { k: string; s: { value: number }[] | null }[]) {
           if (h.s?.length) series[h.k] = h.s.slice(-40).map(p => p.value)
         }
-        setD({
-          total: Math.round(bm.total ?? 0), level: bm.level ?? 'calm', verdict: bm.verdict ?? '',
-          briefing: bm.briefing ?? null,
-          weekChange: bm.weekChange ?? null,
-          whatChanged: bm.whatChanged ?? [],
-          history: (bm.recentTrend ?? []).map((p: { date: string; value: number }) => ({ date: p.date, total: p.value })),
-          values: data, series,
-        })
+        // Don't let a rate-limited refresh overwrite the good SSR seed.
+        const bmOk = bm && bm.available !== false
+        setD(prev => ({
+          total: bmOk ? Math.round(bm.total ?? 0) : (prev?.total ?? 0),
+          level: bmOk ? (bm.level ?? 'calm') : (prev?.level ?? 'calm'),
+          verdict: bmOk ? (bm.verdict ?? '') : (prev?.verdict ?? ''),
+          briefing: bmOk ? (bm.briefing ?? null) : (prev?.briefing ?? null),
+          weekChange: bmOk ? (bm.weekChange ?? null) : (prev?.weekChange ?? null),
+          whatChanged: bmOk ? (bm.whatChanged ?? []) : (prev?.whatChanged ?? []),
+          history: bmOk ? (bm.recentTrend ?? []).map((p: { date: string; value: number }) => ({ date: p.date, total: p.value })) : (prev?.history ?? []),
+          values: bmOk ? data : (prev?.values ?? data),
+          series,
+        }))
       } catch { if (!cancelled) setErr(true) }
     }
     load()

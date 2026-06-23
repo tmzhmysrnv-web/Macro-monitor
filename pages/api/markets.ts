@@ -4,12 +4,13 @@
 // alerts, last-alert, and watching-closely items. No external AI.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildMarketsModel } from '../../lib/markets'
+import { cacheData } from '../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildMarketsModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,
       status: model.status,

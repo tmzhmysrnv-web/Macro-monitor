@@ -4,6 +4,7 @@
 // No external AI — the briefing is assembled from the computed statuses.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildHousingModel, type HousingModel } from '../../lib/housing'
+import { cacheData } from '../../lib/http'
 
 // Deterministic briefing composed from the category statuses + risk callout.
 function buildSummary(m: HousingModel): string {
@@ -17,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') return res.status(405).end()
   try {
     const model = await buildHousingModel()
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+    cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,
       status: model.status,
