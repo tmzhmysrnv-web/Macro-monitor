@@ -173,7 +173,7 @@ export default function NotificationPanel({
   return (
     <>
       <div className="np-backdrop" onClick={onClose} />
-      <div className="np-drawer" role="dialog" aria-label="Alerts">
+      <div className="np-drawer" role="dialog" aria-modal="true" aria-label="Alerts">
         <div className="np-head">
           <span className="np-head-title">Alerts</span>
           <button className="np-close" onClick={onClose} aria-label="Close">×</button>

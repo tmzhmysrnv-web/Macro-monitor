@@ -13,6 +13,7 @@ import {
   buildAlerts, buildWatching, buildRecentBreaks, buildBriefing,
   buildTrendDirections, buildMeterChange, buildDriverTrends,
 } from './overview'
+import { recordBreakMeterTotal, weekChangeFromSnapshots } from './redis'
 
 const BREAK_INPUTS = ['vix', 'treasury10y', 'yieldCurve', 'cpi', 'joblessClaims', 'hySpread', 'igSpread', 'mortgage30', 'homePriceYoY'] as const
 
@@ -32,7 +33,11 @@ export async function buildBreakMeterPayload() {
   const recentBreaks = buildRecentBreaks(history)
   const briefing = buildBriefing(current, alertKeys)
   const directions = buildTrendDirections(data, history)
-  const weekChange = buildMeterChange(history, 7) // shared "past 7 days" delta
+  // Prefer the Redis daily-snapshot delta (survives FRED history hiccups); fall
+  // back to the on-the-fly reconstruction when no comparable snapshot exists yet.
+  const histWeekChange = buildMeterChange(history, 7)
+  const snaps = await recordBreakMeterTotal(current.total)
+  const weekChange = weekChangeFromSnapshots(snaps, current.total) ?? histWeekChange
   const recentTrend = await backfillBreakMeter(history)
 
   // Enrich drivers with a weekly trend arrow + rough contribution share.

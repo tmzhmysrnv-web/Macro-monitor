@@ -28,7 +28,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildAlertReport, type FiredAlert } from '../../lib/alertEngine'
 import { alertFamily, alertRank } from '../../lib/alertSeverity'
 import {
-  getAlertStates, setAlertStates, clearAlertStates, pushFeed,
+  getAlertStates, setAlertStates, clearAlertStates, pushFeed, recordBreakMeterTotal,
   type AlertState, type FeedItem,
 } from '../../lib/redis'
 import { listAlertRecipients, alertsForRecipient } from '../../lib/recipients'
@@ -44,6 +44,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const report = await buildAlertReport()
     const { alerts, errors } = report
+    // Daily Break Meter snapshot — guarantees a week-over-week point even on
+    // zero-traffic days (page renders also record one). Never break the run.
+    try { if (report.breakLevel != null) await recordBreakMeterTotal(report.breakLevel) } catch (e) { console.error('BM snapshot failed:', e) }
     const prior = await getAlertStates()
     const now = Date.now()
 

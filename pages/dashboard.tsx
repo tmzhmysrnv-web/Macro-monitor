@@ -125,7 +125,7 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
           <h1 className="dh-title">Dashboard</h1>
           <p className="dh-sub">Your personalized view of what matters most.</p>
         </div>
-        <button className="dh-refresh" onClick={() => router.reload()} title="Refresh"><Icon name="refresh" size={16} /></button>
+        <button className="dh-refresh" onClick={() => router.reload()} title="Refresh" aria-label="Refresh"><Icon name="refresh" size={16} /></button>
       </div>
 
       {/* Current status */}

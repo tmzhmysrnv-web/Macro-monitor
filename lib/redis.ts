@@ -41,6 +41,39 @@ export async function rateLimit(
   return { ok: n <= limit, remaining: Math.max(0, limit - n) }
 }
 
+// ── Break Meter daily snapshots ───────────────────────────────────────
+// One total per day (hash date->total), so week-over-week change survives the
+// FRED-history hiccups that make the on-the-fly reconstruction (buildMeterChange)
+// drop out. The total itself comes from current values, which stay available
+// even when historical series are rate-limited.
+const BM_HISTORY = 'bm:history'
+
+export async function recordBreakMeterTotal(total: number): Promise<Record<string, number>> {
+  const r = getRedis(); if (!r) return {}
+  const today = new Date().toISOString().slice(0, 10)
+  await r.hset(BM_HISTORY, { [today]: Math.round(total) })
+  const all = (await r.hgetall<Record<string, number>>(BM_HISTORY)) ?? {}
+  const cutoff = Date.now() - 31 * 86400000
+  const stale = Object.keys(all).filter(d => new Date(d).getTime() < cutoff)
+  if (stale.length) await r.hdel(BM_HISTORY, ...stale)
+  return all
+}
+
+// Pick the snapshot closest to 7 days ago (within a 6–8 day window) and return
+// currentTotal − that. null when there's no comparable snapshot yet.
+export function weekChangeFromSnapshots(snapshots: Record<string, number>, currentTotal: number): number | null {
+  const now = Date.now()
+  let best: { off: number; total: number } | null = null
+  for (const [date, total] of Object.entries(snapshots)) {
+    const days = (now - new Date(date).getTime()) / 86400000
+    if (days >= 6 && days <= 8) {
+      const off = Math.abs(days - 7)
+      if (!best || off < best.off) best = { off, total: Number(total) }
+    }
+  }
+  return best ? Math.round(currentTotal) - best.total : null
+}
+
 // ── Subscribers ───────────────────────────────────────────────────────
 export type SubStatus = 'pending' | 'active' | 'unsubscribed'
 export type Subscriber = {

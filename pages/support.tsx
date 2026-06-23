@@ -57,7 +57,7 @@ export default function Support() {
         .sp { padding: 0 20px 64px; }
         .sp-bar { max-width: 640px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;
           padding: 22px 0; }
-        .sp-brand { font-family: 'Space Mono', var(--c-mono); font-size: 14px; letter-spacing: 0.04em; color: var(--c-green-deep); text-decoration: none; }
+        .sp-brand { font-family: var(--font-space-mono), 'Space Mono', var(--c-mono); font-size: 14px; letter-spacing: 0.04em; color: var(--c-green-deep); text-decoration: none; }
         .sp-back { font-size: 13px; color: var(--c-text-soft); text-decoration: none; }
         .sp-back:hover { color: var(--c-text); }
         .sp-col { max-width: 640px; margin: 0 auto; }

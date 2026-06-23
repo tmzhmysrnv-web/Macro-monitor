@@ -662,9 +662,6 @@ export default function Dashboard({ initial }: HomeProps) {
         <title>Is the World Breaking?</title>
         <meta name="description" content="A quiet macro dashboard. Alerts only when it matters." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
         <link rel="canonical" href="https://istheworldbreaking.com/" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Is the World Breaking?" />
@@ -699,7 +696,7 @@ export default function Dashboard({ initial }: HomeProps) {
           --text-primary: #ECECEA; --text-secondary: #9A9C9E; --text-muted: #66686C;
           --border: rgba(255,255,255,0.09); --border-med: rgba(255,255,255,0.17);
           --warn-bg: #272013; --alert-bg: #2A1E1D; --good-bg: #1C2616; --term: #6fae7d;
-          --mono: 'DM Mono', monospace; --sans: 'DM Sans', system-ui, sans-serif;
+          --mono: var(--font-dm-mono), 'DM Mono', monospace; --sans: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif;
           /* Single tone scale — one source for every status color on the site. */
           --good: #8AB84A; --neutral: #C7C24E; --warn: #D88B2F; --bad: #EF6B5E; --crisis: #E24B4A;
           --glow-c: 255,193,122; --glow-core: 0.5; --glow-r: 42px;
@@ -742,7 +739,7 @@ export default function Dashboard({ initial }: HomeProps) {
         .alert-bell svg { filter: drop-shadow(0 0 3px rgba(111,174,125,0.55)); }
         .alert-bell .bell-crack { opacity: 0.7; }
         .alert-bell-badge { position: absolute; top: -1px; right: -2px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #E24B4A; color: #fff; font-size: 9px; font-weight: 700; line-height: 15px; text-align: center; font-family: var(--mono); }
-        .site-name { position: relative; display: inline-block; font-family: 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.78; }
+        .site-name { position: relative; display: inline-block; font-family: var(--font-space-mono), 'Space Mono', var(--mono); font-size: 14px; font-weight: 400; letter-spacing: 0.04em; color: var(--term); opacity: 0.78; }
         /* a bit of grain over the title — keeps it textured and in the background */
         .site-name::after { content: ''; position: absolute; inset: -1px -2px; pointer-events: none; mix-blend-mode: soft-light; opacity: 0.16;
           background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
