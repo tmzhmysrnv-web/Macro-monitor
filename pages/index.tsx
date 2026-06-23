@@ -383,15 +383,16 @@ export default function Dashboard({ initial }: HomeProps) {
   const [loading, setLoading] = useState(initial?.data == null)
   const [error, setError] = useState(false)
   const [events, setEvents] = useState<EconomicEvent[]>(initial?.events ?? [])
-  // Seeded from getStaticProps (ISR) and refreshed once via /api/all after paint.
+  // Break Meter is seeded from getStaticProps (ISR) and refreshed via /api/all.
   const [breakmeter, setBreakmeter] = useState<any>(initial?.breakmeter ?? null)
-  const [bondsData, setBondsData] = useState<any>(initial?.bonds ?? null)
-  const [housingData, setHousingData] = useState<any>(initial?.housing ?? null)
-  const [creditData, setCreditData] = useState<any>(initial?.credit ?? null)
-  const [inflationData, setInflationData] = useState<any>(initial?.inflation ?? null)
-  const [laborData, setLaborData] = useState<any>(initial?.labor ?? null)
-  const [marketsData, setMarketsData] = useState<any>(initial?.markets ?? null)
-  const [globalData, setGlobalData] = useState<any>(initial?.global ?? null)
+  // Tab payloads load lazily from their own endpoints (see the warm effect below).
+  const [bondsData, setBondsData] = useState<any>(null)
+  const [housingData, setHousingData] = useState<any>(null)
+  const [creditData, setCreditData] = useState<any>(null)
+  const [inflationData, setInflationData] = useState<any>(null)
+  const [laborData, setLaborData] = useState<any>(null)
+  const [marketsData, setMarketsData] = useState<any>(null)
+  const [globalData, setGlobalData] = useState<any>(null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [highlightKey, setHighlightKey] = useState<string | null>(null)
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
@@ -462,10 +463,8 @@ export default function Dashboard({ initial }: HomeProps) {
     return () => window.removeEventListener('pointermove', onMove)
   }, [])
 
-  // One request fetches the whole landing bundle (raw data + Break Meter + all
-  // seven tabs + calendar). Initial values are already server-rendered via
-  // getStaticProps (ISR); this refresh keeps them current after first paint and
-  // replaces the old ~9-endpoint client fan-out.
+  // Above-the-fold (raw data + Break Meter + calendar) is server-rendered via
+  // getStaticProps (ISR); this one /api/all request refreshes it after paint.
   useEffect(() => {
     let cancelled = false
     fetch('/api/all')
@@ -475,17 +474,27 @@ export default function Dashboard({ initial }: HomeProps) {
         if (b.data) setData(b.data)
         if (b.events) setEvents(b.events)
         if (b.breakmeter) setBreakmeter(b.breakmeter)
-        if (b.bonds) setBondsData(b.bonds)
-        if (b.housing) setHousingData(b.housing)
-        if (b.credit) setCreditData(b.credit)
-        if (b.inflation) setInflationData(b.inflation)
-        if (b.labor) setLaborData(b.labor)
-        if (b.markets) setMarketsData(b.markets)
-        if (b.global) setGlobalData(b.global)
         setLoading(false)
       })
       .catch(() => { if (!cancelled) { if (!initial?.data) setError(true); setLoading(false) } })
     return () => { cancelled = true }
+  }, [])
+
+  // Warm the seven intelligence tabs from their own endpoints after first paint,
+  // so opening a tab is instant and the alert monitor sees every subsystem. Kept
+  // as separate requests on purpose — each FRED-heavy tab needs its own rate
+  // budget + CDN cache (bundling them all into one request trips FRED limits).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch('/api/bonds').then(r => r.json()).then(d => { if (d && !d.error) setBondsData(d) }).catch(() => {})
+      fetch('/api/housing').then(r => r.json()).then(d => { if (d && !d.error) setHousingData(d) }).catch(() => {})
+      fetch('/api/credit').then(r => r.json()).then(d => { if (d && !d.error) setCreditData(d) }).catch(() => {})
+      fetch('/api/inflation').then(r => r.json()).then(d => { if (d && !d.error) setInflationData(d) }).catch(() => {})
+      fetch('/api/labor').then(r => r.json()).then(d => { if (d && !d.error) setLaborData(d) }).catch(() => {})
+      fetch('/api/markets').then(r => r.json()).then(d => { if (d && !d.error) setMarketsData(d) }).catch(() => {})
+      fetch('/api/global').then(r => r.json()).then(d => { if (d && !d.error) setGlobalData(d) }).catch(() => {})
+    }, 600)
+    return () => clearTimeout(t)
   }, [])
 
   // After a "go to card" link, scroll the target ([data-hlkey]) into view and
