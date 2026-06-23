@@ -88,9 +88,10 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
     async function load() {
       try {
         const leads = Array.from(new Set(myInterests.map(i => i.metrics[0])))
-        const [bm, stress, data, ...hist] = await Promise.all([
+        // /api/breakmeter is the single source for score + Redis-backed weekChange
+        // + recentTrend (the old /api/stress endpoint was redundant and could 500).
+        const [bm, data, ...hist] = await Promise.all([
           fetch('/api/breakmeter').then(r => r.json()),
-          fetch('/api/stress').then(r => r.json()),
           fetch('/api/data').then(r => r.json()),
           ...leads.map(k => fetch(`/api/history?key=${k}`).then(r => r.json()).then(j => ({ k, s: j.series })).catch(() => ({ k, s: null }))),
         ])
@@ -102,8 +103,10 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         setD({
           total: Math.round(bm.total ?? 0), level: bm.level ?? 'calm', verdict: bm.verdict ?? '',
           briefing: bm.briefing ?? null,
-          weekChange: stress.weekChange ?? bm.weekChange ?? null,
-          whatChanged: bm.whatChanged ?? [], history: stress.history ?? [], values: data, series,
+          weekChange: bm.weekChange ?? null,
+          whatChanged: bm.whatChanged ?? [],
+          history: (bm.recentTrend ?? []).map((p: { date: string; value: number }) => ({ date: p.date, total: p.value })),
+          values: data, series,
         })
       } catch { if (!cancelled) setErr(true) }
     }
