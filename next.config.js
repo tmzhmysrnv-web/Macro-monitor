@@ -21,19 +21,31 @@ const csp = [
   "object-src 'none'",
 ].join('; ')
 
-const securityHeaders = [
+// Baseline — cheap, connection/MIME-level, fine on every response incl. static.
+const baselineHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
+]
+
+// Document-only — CSP/framing/referrer/permissions only mean anything on the HTML
+// pages that execute scripts; shipping them on every immutable /_next/static JS
+// chunk is wasted bytes (DevTools: "Response should not include unneeded headers").
+const documentHeaders = [
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()' },
-  { key: 'Content-Security-Policy-Report-Only', value: csp },
+  { key: 'Content-Security-Policy', value: csp },
 ]
 
 /** @type {import('next').NextConfig} */
 module.exports = {
   poweredByHeader: false,
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }]
+    return [
+      { source: '/:path*', headers: baselineHeaders },
+      // Everything except the static asset/image pipelines (Next's official
+      // "match all but" pattern). Covers HTML pages, API routes and public files.
+      { source: '/((?!_next/static|_next/image).*)', headers: documentHeaders },
+    ]
   },
 }

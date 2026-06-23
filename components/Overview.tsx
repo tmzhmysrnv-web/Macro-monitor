@@ -273,7 +273,7 @@ export default function Overview({ data = null, events = [], bm = null, onViewCa
             <div className="bm-risks">Primary risks: {primaryRisks.join(', ')}</div>
           )}
           {bm && (
-            <div className="bm-scale" aria-label="Severity scale">
+            <div className="bm-scale" role="group" aria-label="Severity scale">
               {SEVERITY_BANDS.map(b => {
                 const active = bm.total >= b.lo && bm.total <= b.hi
                 return (
