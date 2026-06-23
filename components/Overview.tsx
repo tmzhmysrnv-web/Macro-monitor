@@ -531,7 +531,7 @@ const ovStyles = `
   .panel.edge-warn { border-left: 3px solid var(--warn); border-radius: 0 10px 10px 0; }
   .wc-solo { margin-bottom: 1rem; }
   .alerts-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 500; color: var(--text-primary); }
-  .alerts-head.is-toggle { cursor: pointer; user-select: none; }
+  .alerts-head.is-toggle { cursor: pointer; -webkit-user-select: none; user-select: none; }
   .alerts-head-text { flex: 1; }
   .alerts-chevron { font-size: 11px; font-weight: 500; font-family: var(--mono); color: var(--text-muted); letter-spacing: 0.02em; }
   .alerts-head.is-toggle:hover .alerts-chevron { color: var(--text-secondary); }
