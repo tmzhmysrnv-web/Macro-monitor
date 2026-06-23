@@ -16,8 +16,9 @@ import NotificationPanel, { type PanelAlert } from '../components/NotificationPa
 import { severityOf } from '../lib/alertSeverity'
 import { barFor } from '../lib/alertMeta'
 import { getSupabaseBrowser, supabaseReady } from '../lib/supabase/client'
-import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
+import { type EconomicEvent } from '../lib/economicCalendar'
 import ComingUp from '../components/ComingUp'
+import { buildBundle, type Bundle } from '../lib/bundle'
 
 // Client-side notification history (localStorage). Lets the bell show active
 // alerts instantly on reload and keep cleared ones as "Earlier", independent of
@@ -375,19 +376,22 @@ function PixelUser() {
   )
 }
 
-export default function Dashboard() {
-  const [data, setData] = useState<MacroData | null>(null)
-  const [loading, setLoading] = useState(true)
+type HomeProps = { initial: Bundle }
+
+export default function Dashboard({ initial }: HomeProps) {
+  const [data, setData] = useState<MacroData | null>(initial?.data ?? null)
+  const [loading, setLoading] = useState(initial?.data == null)
   const [error, setError] = useState(false)
-  const [events, setEvents] = useState<EconomicEvent[]>([])
-  // Prefetched Bonds/Housing/Credit payloads so switching to those tabs is instant.
-  const [bondsData, setBondsData] = useState<any>(null)
-  const [housingData, setHousingData] = useState<any>(null)
-  const [creditData, setCreditData] = useState<any>(null)
-  const [inflationData, setInflationData] = useState<any>(null)
-  const [laborData, setLaborData] = useState<any>(null)
-  const [marketsData, setMarketsData] = useState<any>(null)
-  const [globalData, setGlobalData] = useState<any>(null)
+  const [events, setEvents] = useState<EconomicEvent[]>(initial?.events ?? [])
+  // Seeded from getStaticProps (ISR) and refreshed once via /api/all after paint.
+  const [breakmeter, setBreakmeter] = useState<any>(initial?.breakmeter ?? null)
+  const [bondsData, setBondsData] = useState<any>(initial?.bonds ?? null)
+  const [housingData, setHousingData] = useState<any>(initial?.housing ?? null)
+  const [creditData, setCreditData] = useState<any>(initial?.credit ?? null)
+  const [inflationData, setInflationData] = useState<any>(initial?.inflation ?? null)
+  const [laborData, setLaborData] = useState<any>(initial?.labor ?? null)
+  const [marketsData, setMarketsData] = useState<any>(initial?.markets ?? null)
+  const [globalData, setGlobalData] = useState<any>(initial?.global ?? null)
   const [sparklines, setSparklines] = useState<Record<string, DataPoint[]>>({})
   const [highlightKey, setHighlightKey] = useState<string | null>(null)
   const [activeChart, setActiveChart] = useState<{ key: string; label: string } | null>(null)
@@ -458,32 +462,30 @@ export default function Dashboard() {
     return () => window.removeEventListener('pointermove', onMove)
   }, [])
 
+  // One request fetches the whole landing bundle (raw data + Break Meter + all
+  // seven tabs + calendar). Initial values are already server-rendered via
+  // getStaticProps (ISR); this refresh keeps them current after first paint and
+  // replaces the old ~9-endpoint client fan-out.
   useEffect(() => {
-    fetch('/api/data')
+    let cancelled = false
+    fetch('/api/all')
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
-      .catch(() => { setError(true); setLoading(false) })
-
-    // Calendar reads Supabase directly (daily cron is the writer); falls back to
-    // the built-in schedule when Supabase is unconfigured or empty.
-    fetchEvents(getSupabaseBrowser())
-      .then(evts => setEvents(recentAndUpcoming(evts)))
-      .catch(() => {})
-  }, [])
-
-  // Warm the Bonds & Housing sections in the background after first paint, so
-  // opening those tabs is instant instead of triggering a fresh fetch on click.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      fetch('/api/bonds').then(r => r.json()).then(d => { if (d && !d.error) setBondsData(d) }).catch(() => {})
-      fetch('/api/housing').then(r => r.json()).then(d => { if (d && !d.error) setHousingData(d) }).catch(() => {})
-      fetch('/api/credit').then(r => r.json()).then(d => { if (d && !d.error) setCreditData(d) }).catch(() => {})
-      fetch('/api/inflation').then(r => r.json()).then(d => { if (d && !d.error) setInflationData(d) }).catch(() => {})
-      fetch('/api/labor').then(r => r.json()).then(d => { if (d && !d.error) setLaborData(d) }).catch(() => {})
-      fetch('/api/markets').then(r => r.json()).then(d => { if (d && !d.error) setMarketsData(d) }).catch(() => {})
-      fetch('/api/global').then(r => r.json()).then(d => { if (d && !d.error) setGlobalData(d) }).catch(() => {})
-    }, 600)
-    return () => clearTimeout(t)
+      .then((b: Bundle) => {
+        if (cancelled || !b) return
+        if (b.data) setData(b.data)
+        if (b.events) setEvents(b.events)
+        if (b.breakmeter) setBreakmeter(b.breakmeter)
+        if (b.bonds) setBondsData(b.bonds)
+        if (b.housing) setHousingData(b.housing)
+        if (b.credit) setCreditData(b.credit)
+        if (b.inflation) setInflationData(b.inflation)
+        if (b.labor) setLaborData(b.labor)
+        if (b.markets) setMarketsData(b.markets)
+        if (b.global) setGlobalData(b.global)
+        setLoading(false)
+      })
+      .catch(() => { if (!cancelled) { if (!initial?.data) setError(true); setLoading(false) } })
+    return () => { cancelled = true }
   }, [])
 
   // After a "go to card" link, scroll the target ([data-hlkey]) into view and
@@ -897,7 +899,7 @@ export default function Dashboard() {
         {activeTab === 'overview' && (
           <>
             <ComingUp events={events} theme="graphite" />
-            <Overview data={data} events={events} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
+            <Overview data={data} events={events} bm={breakmeter} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {
@@ -1055,4 +1057,12 @@ export default function Dashboard() {
       </div>
     </>
   )
+}
+
+export async function getStaticProps() {
+  // Build the entire landing bundle once per ISR window, server-side, so the
+  // above-the-fold Break Meter + tabs render in the initial HTML (SEO + LCP)
+  // and visitors don't trigger the old per-section client fan-out.
+  const initial = JSON.parse(JSON.stringify(await buildBundle())) as Bundle
+  return { props: { initial }, revalidate: 300 }
 }

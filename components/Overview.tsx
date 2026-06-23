@@ -2,7 +2,7 @@
 // The Overview tab — an economic early-warning control room.
 // Order answers the page's question fastest: Alerts → Break Meter → Recent
 // Breaks → Watching → Drivers → What Changed → Today's Situation.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Icon, { TAB_ICON, KEY_ICON } from './Icon'
 import type { MacroData } from '../lib/fetchData'
 import trendSnapshot from '../data/trendSnapshot.json'
@@ -169,17 +169,11 @@ function BreakMeterTrend({ history, color, concernLabel }: { history: { date: st
   )
 }
 
-export default function Overview({ data = null, events = [], onViewCard, onNavigate, onViewFedPolicy, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onViewFedPolicy?: () => void; onOpenAlerts?: () => void; activeCount?: number }) {
-  const [bm, setBm] = useState<BreakMeter | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    // Fast: score + alerts + drivers + the fresh trailing-year trend.
-    fetch('/api/breakmeter')
-      .then(r => r.json())
-      .then(d => { setBm(d); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [])
+export default function Overview({ data = null, events = [], bm = null, onViewCard, onNavigate, onViewFedPolicy, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; bm?: BreakMeter | null; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onViewFedPolicy?: () => void; onOpenAlerts?: () => void; activeCount?: number }) {
+  // The Break Meter is now supplied by the parent (server-rendered via getStaticProps
+  // / refreshed via /api/all) instead of fetched here — so the above-the-fold content
+  // is in the initial HTML (SEO + instant paint) rather than a client round-trip.
+  const loading = bm == null
 
   // Shared "past 7 days" delta, reconstructed server-side — same for everyone.
   const delta = bm?.weekChange ?? null
