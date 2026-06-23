@@ -4,9 +4,11 @@
 // digest so they see the current state of the world.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { randomUUID } from 'crypto'
-import { getSubscriber, upsertSubscriber, redisReady } from '../../lib/redis'
+import { getSubscriber, upsertSubscriber, redisReady, rateLimit } from '../../lib/redis'
 import { sendWelcomeEmail, sendDigest } from '../../lib/sendAlert'
 import { buildAlertReport } from '../../lib/alertEngine'
+import { clientIp } from '../../lib/http'
+import { verifyTurnstile } from '../../lib/turnstile'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -16,6 +18,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const email = String(req.body?.email || '').trim().toLowerCase()
   if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Please enter a valid email address.' })
+
+  // Abuse guards: per-IP + per-email rate limits, then CAPTCHA (Cloudflare
+  // Turnstile — enforced once TURNSTILE_SECRET_KEY is set, skipped otherwise).
+  const ip = clientIp(req)
+  if (!(await rateLimit(`subscribe:ip:${ip}`, 5, 3600)).ok)
+    return res.status(429).json({ error: 'Too many attempts. Please try again later.' })
+  if (!(await rateLimit(`subscribe:email:${email}`, 3, 86400)).ok)
+    return res.status(429).json({ error: 'Too many attempts for this address. Please try again later.' })
+  if (!(await verifyTurnstile(req.body?.turnstileToken, ip)).ok)
+    return res.status(400).json({ error: 'Captcha verification failed. Please try again.' })
 
   try {
     const existing = await getSubscriber(email)

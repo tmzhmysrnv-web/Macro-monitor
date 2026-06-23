@@ -25,6 +25,22 @@ function getRedis(): Redis | null {
   return _redis
 }
 
+// ── Rate limiting ─────────────────────────────────────────────────────
+// Fixed-window counter: INCR a key, set its TTL on first hit. Degrades to
+// "allow" when Redis is absent so the app still runs locally without Upstash.
+export async function rateLimit(
+  key: string,
+  limit: number,
+  windowSec: number,
+): Promise<{ ok: boolean; remaining: number }> {
+  const r = getRedis()
+  if (!r) return { ok: true, remaining: limit }
+  const k = `rl:${key}`
+  const n = await r.incr(k)
+  if (n === 1) await r.expire(k, windowSec)
+  return { ok: n <= limit, remaining: Math.max(0, limit - n) }
+}
+
 // ── Subscribers ───────────────────────────────────────────────────────
 export type SubStatus = 'pending' | 'active' | 'unsubscribed'
 export type Subscriber = {

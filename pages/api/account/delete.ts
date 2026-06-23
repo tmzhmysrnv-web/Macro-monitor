@@ -4,9 +4,11 @@
 // the service-role client; the caller is identified from their own session.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getSupabaseServer, getSupabaseAdmin } from '../../../lib/supabase/server'
+import { sameOrigin } from '../../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!sameOrigin(req)) return res.status(403).json({ error: 'Request must come from the app.' })
 
   const supabase = getSupabaseServer(req, res)
   const admin = getSupabaseAdmin()

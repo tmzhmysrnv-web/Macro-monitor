@@ -18,6 +18,13 @@ const site = () => {
 }
 const FROM = () => process.env.ALERT_EMAIL_FROM || 'alerts@istheworldbreaking.com'
 
+// RFC 8058 one-click unsubscribe headers — lets Gmail/Apple show a native
+// "Unsubscribe" button that POSTs to our endpoint (handled in /api/unsubscribe).
+const unsubHeaders = (url: string) => ({
+  'List-Unsubscribe': `<${url}>`,
+  'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+})
+
 async function client() {
   if (!process.env.RESEND_API_KEY) return null
   const { Resend } = await import('resend')
@@ -57,7 +64,7 @@ export async function sendWelcomeEmail(email: string, token: string): Promise<bo
     </p>
   `)
   try {
-    const { error } = await r.emails.send({ from: FROM(), to: email, subject: 'Welcome to is the world breaking', html })
+    const { error } = await r.emails.send({ from: FROM(), to: email, subject: 'Welcome to is the world breaking', html, headers: unsubHeaders(unsub) })
     if (error) { console.error('Resend rejected welcome email:', error); return false }
     return true
   } catch (e) {
@@ -170,7 +177,7 @@ export async function sendWeeklyDigest(
   </div>`
 
   try {
-    const { error } = await r.emails.send({ from: FROM(), to: recipient.email, subject: `Your week in review · ${dateLabel}`, html })
+    const { error } = await r.emails.send({ from: FROM(), to: recipient.email, subject: `Your week in review · ${dateLabel}`, html, headers: unsubHeaders(unsub) })
     if (error) { console.error('Resend rejected weekly digest:', error); return false }
     return true
   } catch (e) {
@@ -322,6 +329,6 @@ export async function sendDigest(alerts: FiredAlert[], recipient: { email: strin
     </p>
   `)
 
-  await r.emails.send({ from: FROM(), to: recipient.email, subject, html })
+  await r.emails.send({ from: FROM(), to: recipient.email, subject, html, headers: unsubHeaders(unsub) })
   return true
 }
