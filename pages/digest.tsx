@@ -9,7 +9,7 @@ import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { INTEREST_CATALOG, readInterest } from '../lib/interests'
 import { getSupabaseBrowser } from '../lib/supabase/client'
 
-type Freq = 'breaking' | 'daily' | 'weekly'
+type Freq = 'breaking' | 'weekly'
 const FREQ: { id: Freq; label: string }[] = [
   { id: 'breaking', label: 'Only when breaking' }, { id: 'weekly', label: 'Weekly' },
 ]

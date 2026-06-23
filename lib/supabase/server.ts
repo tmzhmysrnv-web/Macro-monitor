@@ -76,7 +76,7 @@ export async function requireUser(
 // user's interests/preferences). Returns a getServerSideProps redirect when the
 // visitor isn't signed in.
 export type AppUser = { id: string; email: string; name: string | null; avatar: string | null }
-export type AppPrefs = { digest_frequency: 'breaking' | 'daily' | 'weekly'; email_enabled: boolean; push_enabled: boolean }
+export type AppPrefs = { digest_frequency: 'breaking' | 'weekly'; email_enabled: boolean; push_enabled: boolean }
 export type GatedProps = { user: AppUser; interests: string[]; preferences: AppPrefs }
 
 const DEFAULT_PREFS: AppPrefs = { digest_frequency: 'weekly', email_enabled: true, push_enabled: false }

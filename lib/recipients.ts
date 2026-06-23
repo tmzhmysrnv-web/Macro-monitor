@@ -12,7 +12,7 @@ export type AlertRecipient = {
   email: string
   token: string                 // unsubscribe token: Redis token, or `u:<userId>` for accounts
   interests: string[] | null    // null = follows everything (legacy subscriber)
-  frequency: 'breaking' | 'daily' | 'weekly'
+  frequency: 'breaking' | 'weekly'
   emailEnabled: boolean
 }
 

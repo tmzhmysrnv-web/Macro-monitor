@@ -8,7 +8,7 @@ import AppShell from '../components/app/AppShell'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
 import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 
-type Freq = 'breaking' | 'daily' | 'weekly'
+type Freq = 'breaking' | 'weekly'
 const FREQ: { id: Freq; label: string }[] = [
   { id: 'breaking', label: 'Only when breaking' }, { id: 'weekly', label: 'Weekly' },
 ]

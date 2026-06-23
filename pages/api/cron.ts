@@ -34,10 +34,11 @@ import {
 import { listAlertRecipients, alertsForRecipient } from '../../lib/recipients'
 import { sendDigest } from '../../lib/sendAlert'
 import { syncEconomicCalendar } from '../../lib/calendarSync'
+import { validCronAuth } from '../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!validCronAuth(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 

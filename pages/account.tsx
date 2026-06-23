@@ -41,7 +41,7 @@ export default function Account(props: GatedProps) {
       <div className="calm-card" style={{ marginTop: 20, maxWidth: 520 }}>
         <div className="ac-id">
           <div className="ac-avatar">
-            {props.user.avatar ? <img src={props.user.avatar} alt="" referrerPolicy="no-referrer" /> : <span>{initials}</span>}
+            {props.user.avatar ? <img src={props.user.avatar} alt="" width={52} height={52} referrerPolicy="no-referrer" /> : <span>{initials}</span>}
           </div>
           <div><div className="ac-email">{props.user.email}</div><div className="set-hint">Signed in</div></div>
         </div>

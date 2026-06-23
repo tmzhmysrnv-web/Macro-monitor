@@ -76,7 +76,7 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
           <div className="sb-user">
             <div className="sb-avatar">
               {user.avatar
-                ? <img src={user.avatar} alt="" referrerPolicy="no-referrer" />
+                ? <img src={user.avatar} alt="" width={34} height={34} referrerPolicy="no-referrer" />
                 : <span>{initials(user)}</span>}
             </div>
             <div className="sb-user-meta">

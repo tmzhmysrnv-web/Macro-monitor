@@ -12,7 +12,7 @@ import { INTEREST_CATALOG, type InterestCategory } from '../lib/interests'
 import { getSupabaseBrowser, supaErr } from '../lib/supabase/client'
 import { getSupabaseServer } from '../lib/supabase/server'
 
-type Freq = 'breaking' | 'daily' | 'weekly'
+type Freq = 'breaking' | 'weekly'
 const FREQ: { id: Freq; label: string; sub: string }[] = [
   { id: 'breaking', label: 'Only when the world is breaking', sub: 'We stay silent until something truly changes.' },
   { id: 'weekly', label: 'Weekly digest', sub: 'Breaking alerts, plus a recap every Sunday.' },

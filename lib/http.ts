@@ -4,6 +4,17 @@
 // mutations). Domain-agnostic — compares the request's Origin/Referer host to
 // its own Host header, so it works on the prod domain and Vercel previews alike.
 import type { NextApiRequest } from 'next'
+import { timingSafeEqual } from 'crypto'
+
+// Constant-time check of the `Authorization: Bearer <CRON_SECRET>` header used by
+// the cron / weekly-digest / admin routes (avoids leaking the secret via timing).
+export function validCronAuth(req: NextApiRequest): boolean {
+  const expected = `Bearer ${process.env.CRON_SECRET || ''}`
+  const got = req.headers.authorization || ''
+  const a = Buffer.from(got)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 export function clientIp(req: NextApiRequest): string {
   const xff = req.headers['x-forwarded-for']

@@ -4,9 +4,10 @@
 // alert dedup state. TEMPORARY — remove once a proper auth/admin layer exists.
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { resetSubscribers, resetFeedAndAlertState, redisReady } from '../../../lib/redis'
+import { validCronAuth } from '../../../lib/http'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!validCronAuth(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
   if (!redisReady()) return res.status(503).json({ error: 'Redis not configured' })

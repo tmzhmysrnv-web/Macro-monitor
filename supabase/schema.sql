@@ -19,11 +19,11 @@ create table if not exists public.profiles (
 );
 
 -- ── user_preferences ──────────────────────────────────────────────────
--- One row per user. digest_frequency: 'breaking' | 'daily' | 'weekly'.
+-- One row per user. digest_frequency: 'breaking' | 'weekly'.
 create table if not exists public.user_preferences (
   user_id          uuid primary key references auth.users (id) on delete cascade,
   digest_frequency text not null default 'weekly'
-                     check (digest_frequency in ('breaking', 'daily', 'weekly')),
+                     check (digest_frequency in ('breaking', 'weekly')),
   email_enabled    boolean not null default true,
   push_enabled     boolean not null default false,
   created_at       timestamptz not null default now(),

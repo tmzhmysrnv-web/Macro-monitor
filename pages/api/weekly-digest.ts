@@ -13,6 +13,7 @@ import { sendWeeklyDigest } from '../../lib/sendAlert'
 import { listAlertRecipients } from '../../lib/recipients'
 import { weeklyDigestSent, markWeeklyDigestSent } from '../../lib/redis'
 import { INTEREST_CATALOG } from '../../lib/interests'
+import { validCronAuth } from '../../lib/http'
 
 const ALL_CATEGORIES = INTEREST_CATALOG.map(c => c.category)
 
@@ -26,7 +27,7 @@ function isoWeek(d: Date): string {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!validCronAuth(req)) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
   const dry = req.query.dry === '1'
