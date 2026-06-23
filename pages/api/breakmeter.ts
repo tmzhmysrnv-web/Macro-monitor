@@ -7,6 +7,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildBreakMeterPayload } from '../../lib/breakMeter'
 import { cacheData } from '../../lib/http'
+import { captureError } from '../../lib/sentry'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -15,6 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json(payload)
   } catch (err) {
     console.error('Break meter error:', err)
+    await captureError(err, { route: 'breakmeter' })
     res.status(500).json({ error: 'Failed to compute break meter' })
   }
 }

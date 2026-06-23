@@ -9,6 +9,7 @@ import { sendWelcomeEmail, sendDigest } from '../../lib/sendAlert'
 import { buildAlertReport } from '../../lib/alertEngine'
 import { clientIp } from '../../lib/http'
 import { verifyTurnstile } from '../../lib/turnstile'
+import { captureError } from '../../lib/sentry'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -68,6 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (err) {
     console.error('Subscribe error:', err)
+    await captureError(err, { route: 'subscribe' })
     return res.status(500).json({ error: 'Something went wrong. Try again.' })
   }
 }

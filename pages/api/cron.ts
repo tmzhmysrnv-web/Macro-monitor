@@ -27,6 +27,7 @@ const EVENT_FAMILIES = new Set(['market-selloff', 'yield-spike'])
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildAlertReport, type FiredAlert } from '../../lib/alertEngine'
 import { alertFamily, alertRank } from '../../lib/alertSeverity'
+import { captureError } from '../../lib/sentry'
 import {
   getAlertStates, setAlertStates, clearAlertStates, pushFeed, recordBreakMeterTotal,
   type AlertState, type FeedItem,
@@ -152,6 +153,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (err) {
     console.error('Cron error:', err)
+    await captureError(err, { route: 'cron' })
     res.status(500).json({ error: 'Cron failed' })
   }
 }

@@ -1,6 +1,9 @@
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
+import { useEffect } from 'react'
 import { DM_Sans, DM_Mono, Space_Mono } from 'next/font/google'
+import ErrorBoundary from '../components/ErrorBoundary'
+import { initSentryClient } from '../lib/sentryClient'
 
 // Self-hosted via next/font (audit M5) — no render-blocking Google Fonts request,
 // no layout shift. Exposed as :root CSS vars so the existing --mono/--sans/--c-*
@@ -16,6 +19,7 @@ const fontVars = `:root{`
   + `}`
 
 export default function App({ Component, pageProps }: AppProps) {
+  useEffect(() => { initSentryClient() }, [])
   return (
     <>
       <Head>
@@ -23,7 +27,9 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="theme-color" content="#1B1C1F" />
       </Head>
       <style>{fontVars}</style>
-      <Component {...pageProps} />
+      <ErrorBoundary>
+        <Component {...pageProps} />
+      </ErrorBoundary>
     </>
   )
 }

@@ -6,6 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildBundle } from '../../lib/bundle'
 import { cacheData } from '../../lib/http'
+import { captureError } from '../../lib/sentry'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
@@ -18,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json(bundle)
   } catch (err) {
     console.error('Bundle error:', err)
+    await captureError(err, { route: 'all' })
     res.status(500).json({ error: 'Failed to build bundle' })
   }
 }

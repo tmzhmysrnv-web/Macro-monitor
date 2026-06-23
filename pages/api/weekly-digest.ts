@@ -14,6 +14,7 @@ import { listAlertRecipients } from '../../lib/recipients'
 import { weeklyDigestSent, markWeeklyDigestSent } from '../../lib/redis'
 import { INTEREST_CATALOG } from '../../lib/interests'
 import { validCronAuth } from '../../lib/http'
+import { captureError } from '../../lib/sentry'
 
 const ALL_CATEGORIES = INTEREST_CATALOG.map(c => c.category)
 
@@ -60,6 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ week, recipients: recipients.length, sent, skipped, failed, at: new Date().toISOString() })
   } catch (err) {
     console.error('Weekly digest error:', err)
+    await captureError(err, { route: 'weekly-digest' })
     return res.status(500).json({ error: 'Weekly digest failed' })
   }
 }
