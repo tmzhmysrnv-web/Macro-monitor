@@ -4,7 +4,7 @@ import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
 import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus, type Indicator } from '../lib/thresholds'
 import type { DataPoint } from '../lib/fetchHistory'
-import Overview, { severity } from '../components/Overview'
+import Overview from '../components/Overview'
 import Housing from '../components/Housing'
 import Bonds from '../components/Bonds'
 import Credit from '../components/Credit'
@@ -403,18 +403,20 @@ export default function Dashboard({ initial }: HomeProps) {
   const [alertsSeenAt, setAlertsSeenAt] = useState(0)
   const [authed, setAuthed] = useState<boolean | null>(null)
   // Easter egg: clicking the "is the world breaking?" title while on Overview
-  // briefly shows the logo (we registered your worry) then flashes the live Break
-  // Meter status (the answer). `egg` holds a click id; null = hidden.
-  const [egg, setEgg] = useState<number | null>(null)
+  // briefly reveals the logo dead-center in the topbar (we registered your worry),
+  // then glows the live Break Meter status below the meter (the answer).
+  const [eggPulse, setEggPulse] = useState(0)   // bump -> Overview glows the status
+  const [eggLogo, setEggLogo] = useState(false) // the brief centered topbar logo
   const eggTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onTitleActivate = useCallback(() => {
     setActiveTab('overview')
     // Only "answer" when already on Overview and there's a real status to give.
     if (activeTab === 'overview' && breakmeter?.available) {
-      setEgg(Date.now())
+      setEggPulse(p => p + 1)
+      setEggLogo(true)
       if (eggTimer.current) clearTimeout(eggTimer.current)
-      eggTimer.current = setTimeout(() => setEgg(null), 3800)
+      eggTimer.current = setTimeout(() => setEggLogo(false), 1500)
     }
   }, [activeTab, breakmeter])
   useEffect(() => () => { if (eggTimer.current) clearTimeout(eggTimer.current) }, [])
@@ -749,7 +751,7 @@ export default function Dashboard({ initial }: HomeProps) {
         /* Keep long prose readable even though the page is now wide */
         .summary-text, .hs-summary, .hs-subtitle, .hs-callout-text { max-width: 78ch; }
 
-        .topbar { margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+        .topbar { position: relative; margin-bottom: 0.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
         /* Cracked-bell alert mark, top-right — muted to match the title (no glow) */
         .topbar-actions { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
         /* Pixel-user logo — same amber as Bonds "Rates Higher For Longer" (var(--warn)),
@@ -877,21 +879,13 @@ export default function Dashboard({ initial }: HomeProps) {
 
         @media (max-width: 480px) { .grid { grid-template-columns: 1fr 1fr; } .card-value { font-size: 17px; } }
 
-        /* Easter egg — clicking the title on Overview shows the logo, then flashes
-           the live Break Meter status. Centered, dims briefly, never blocks the UI. */
-        .egg-overlay { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; pointer-events: none; }
-        .egg-overlay::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 45%, rgba(0,0,0,0.5), transparent 62%); opacity: 0; animation: eggDim 3.6s ease-out forwards; }
-        .egg-logo { position: relative; width: clamp(72px, 12vw, 112px); height: auto; border-radius: 16px; opacity: 0; animation: eggLogo 1.3s ease-out forwards; }
-        .egg-status { position: relative; font-family: var(--font-space-mono), 'Space Mono', var(--mono); font-weight: 700; letter-spacing: 0.06em; font-size: clamp(20px, 5vw, 40px); opacity: 0; animation: eggStatus 2.6s ease-out 1s forwards; text-shadow: 0 0 18px currentColor; }
-        @keyframes eggLogo { 0% { opacity: 0; transform: scale(0.8); } 20% { opacity: 1; transform: scale(1); } 72% { opacity: 1; } 100% { opacity: 0; transform: scale(1.03); } }
-        @keyframes eggStatus { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; } }
-        @keyframes eggDim { 0% { opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-        @media (prefers-reduced-motion: reduce) {
-          .egg-logo { animation: eggLogoRM 1.3s ease-out forwards; }
-          .egg-status { animation: eggStatusRM 2.6s ease-out 1s forwards; }
-        }
-        @keyframes eggLogoRM { 0% { opacity: 0; } 20% { opacity: 1; } 72% { opacity: 1; } 100% { opacity: 0; } }
-        @keyframes eggStatusRM { 0% { opacity: 0; } 12% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+        /* Easter egg — clicking the title on Overview briefly reveals the logo
+           dead-center in the topbar (no dimming, never blocks the UI). The "answer"
+           is a glow on the Break Meter status itself (.bm-sev.is-egg-glow in Overview). */
+        .tb-egg-logo { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; filter: drop-shadow(0 0 6px rgba(236,162,59,0.55)); animation: tbEggLogo 1.5s ease-out; }
+        @keyframes tbEggLogo { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); } 22% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
+        @media (prefers-reduced-motion: reduce) { .tb-egg-logo { animation: tbEggLogoRM 1.5s ease-out; } }
+        @keyframes tbEggLogoRM { 0%, 100% { opacity: 0; } 22%, 70% { opacity: 1; } }
       `}</style>
 
       {activeChart && (
@@ -899,17 +893,9 @@ export default function Dashboard({ initial }: HomeProps) {
       )}
 
       <div className="page">
-        {egg !== null && breakmeter?.available && (() => {
-          const sev = severity(Math.round(breakmeter.total ?? 0))
-          return (
-            <div className="egg-overlay" aria-hidden="true" key={egg}>
-              <img src="/favicon.png" alt="" className="egg-logo" />
-              <div className="egg-status" style={{ color: sev.color }}>{sev.label}</div>
-            </div>
-          )
-        })()}
         {tuner && <GlowTuner />}
         <div className="topbar">
+          {eggLogo && <img key={eggPulse} className="tb-egg-logo" src="/favicon.svg" alt="" aria-hidden="true" />}
           <div className="topbar-left">
             <div className="site-name" role="button" tabIndex={0} title="Back to overview"
               onClick={onTitleActivate}
@@ -955,7 +941,7 @@ export default function Dashboard({ initial }: HomeProps) {
         {activeTab === 'overview' && (
           <>
             <ComingUp events={events} theme="graphite" />
-            <Overview data={data} events={events} bm={breakmeter} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} />
+            <Overview data={data} events={events} bm={breakmeter} onViewCard={handleViewCard} onNavigate={setActiveTab} onViewFedPolicy={goToFedPolicy} onOpenAlerts={openAlerts} activeCount={activeAlerts.length} statusPulse={eggPulse} />
 
             {/* Economic calendar — recent releases & upcoming */}
             {events.length > 0 && (() => {

@@ -2,7 +2,7 @@
 // The Overview tab — an economic early-warning control room.
 // Order answers the page's question fastest: Alerts → Break Meter → Recent
 // Breaks → Watching → Drivers → What Changed → Today's Situation.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Icon, { TAB_ICON, KEY_ICON } from './Icon'
 import type { MacroData } from '../lib/fetchData'
 import trendSnapshot from '../data/trendSnapshot.json'
@@ -169,11 +169,21 @@ function BreakMeterTrend({ history, color, concernLabel }: { history: { date: st
   )
 }
 
-export default function Overview({ data = null, events = [], bm = null, onViewCard, onNavigate, onViewFedPolicy, onOpenAlerts, activeCount = 0 }: { data?: MacroData | null; events?: EventItem[]; bm?: BreakMeter | null; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onViewFedPolicy?: () => void; onOpenAlerts?: () => void; activeCount?: number }) {
+export default function Overview({ data = null, events = [], bm = null, onViewCard, onNavigate, onViewFedPolicy, onOpenAlerts, activeCount = 0, statusPulse = 0 }: { data?: MacroData | null; events?: EventItem[]; bm?: BreakMeter | null; onViewCard?: (key: string, label: string) => void; onNavigate?: (tab: string) => void; onViewFedPolicy?: () => void; onOpenAlerts?: () => void; activeCount?: number; statusPulse?: number }) {
   // The Break Meter is now supplied by the parent (server-rendered via getStaticProps
   // / refreshed via /api/all) instead of fetched here — so the above-the-fold content
   // is in the initial HTML (SEO + instant paint) rather than a client round-trip.
   const loading = bm == null
+
+  // Easter-egg "answer": when the parent bumps statusPulse (title clicked on
+  // Overview), glow the Break Meter status word below the meter for a moment.
+  const [statusGlow, setStatusGlow] = useState(false)
+  useEffect(() => {
+    if (!statusPulse) return
+    setStatusGlow(true)
+    const t = setTimeout(() => setStatusGlow(false), 2400)
+    return () => clearTimeout(t)
+  }, [statusPulse])
 
   // Shared "past 7 days" delta, reconstructed server-side — same for everyone.
   const delta = bm?.weekChange ?? null
@@ -260,7 +270,7 @@ export default function Overview({ data = null, events = [], bm = null, onViewCa
             <text x={CX} y={CY-4} textAnchor="middle" fontSize="26" fontWeight="500" fontFamily="var(--mono)" fill="var(--text-primary)">{bm ? bm.total : '—'}</text>
             <text x={CX} y={CY+11} textAnchor="middle" fontSize="9" fontFamily="var(--mono)" fill="var(--text-muted)">/ 100</text>
           </svg>
-          <div className="bm-sev" style={{ color }}>{sev.label}</div>
+          <div className={`bm-sev${statusGlow ? ' is-egg-glow' : ''}`} style={{ color }}>{sev.label}</div>
           <div className="bm-label">Break Meter</div>
           {bm && delta != null && (
             delta === 0
@@ -544,6 +554,14 @@ const ovStyles = `
   .bm-hero { display: flex; gap: 1.75rem; align-items: center; background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
   .bm-gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 160px; }
   .bm-sev { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .bm-sev.is-egg-glow { animation: bmSevGlow 2.4s ease-out; }
+  @keyframes bmSevGlow {
+    0% { text-shadow: 0 0 0 transparent; }
+    14% { text-shadow: 0 0 18px currentColor, 0 0 5px currentColor; }
+    68% { text-shadow: 0 0 15px currentColor, 0 0 4px currentColor; }
+    100% { text-shadow: 0 0 0 transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bm-sev.is-egg-glow { animation: none; } }
   .bm-delta { font-size: 11px; font-weight: 500; font-family: var(--mono); margin-top: 3px; }
   .bm-delta-flat { color: var(--text-muted); font-weight: 400; }
   .bm-label { font-size: 10px; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
