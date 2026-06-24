@@ -38,14 +38,14 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 // Spec severity scale — drives the prominent status label and the legend.
-const SEVERITY_BANDS = [
+export const SEVERITY_BANDS = [
   { lo: 0, hi: 20, label: 'Healthy', color: '#8AB84A' },
   { lo: 21, hi: 40, label: 'Worth Watching', color: '#A9C24E' },
   { lo: 41, hi: 60, label: 'Elevated', color: '#D88B2F' },
   { lo: 61, hi: 80, label: 'High Risk', color: '#E07A4A' },
   { lo: 81, hi: 100, label: 'Breaking', color: '#EF6B5E' },
 ]
-function severity(total: number): { label: string; color: string } {
+export function severity(total: number): { label: string; color: string } {
   const b = SEVERITY_BANDS.find(b => total >= b.lo && total <= b.hi) ?? SEVERITY_BANDS[0]
   return { label: b.label, color: b.color }
 }
