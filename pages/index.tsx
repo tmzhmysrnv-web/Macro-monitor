@@ -403,23 +403,29 @@ export default function Dashboard({ initial }: HomeProps) {
   const [alertsSeenAt, setAlertsSeenAt] = useState(0)
   const [authed, setAuthed] = useState<boolean | null>(null)
   // Easter egg: clicking the "is the world breaking?" title while on Overview
-  // briefly reveals the logo dead-center in the topbar (we registered your worry),
-  // then glows the live Break Meter status below the meter (the answer).
+  // turns on the logo like a neon "open" sign dead-center in the topbar; once it
+  // switches off, the live Break Meter status glows below the meter (the answer).
+  // Strictly sequential — the sign flickers on and off BEFORE the status flashes.
   const [eggPulse, setEggPulse] = useState(0)   // bump -> Overview glows the status
-  const [eggLogo, setEggLogo] = useState(false) // the brief centered topbar logo
-  const eggTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [eggLogo, setEggLogo] = useState(0)     // click id; >0 shows + (re)starts the neon anim
+  const eggOffTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const eggPulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onTitleActivate = useCallback(() => {
     setActiveTab('overview')
     // Only "answer" when already on Overview and there's a real status to give.
     if (activeTab === 'overview' && breakmeter?.available) {
-      setEggPulse(p => p + 1)
-      setEggLogo(true)
-      if (eggTimer.current) clearTimeout(eggTimer.current)
-      eggTimer.current = setTimeout(() => setEggLogo(false), 1500)
+      setEggLogo(Date.now())
+      if (eggOffTimer.current) clearTimeout(eggOffTimer.current)
+      if (eggPulseTimer.current) clearTimeout(eggPulseTimer.current)
+      eggOffTimer.current = setTimeout(() => setEggLogo(0), 1500)              // neon switches off
+      eggPulseTimer.current = setTimeout(() => setEggPulse(p => p + 1), 1650)  // THEN status flashes
     }
   }, [activeTab, breakmeter])
-  useEffect(() => () => { if (eggTimer.current) clearTimeout(eggTimer.current) }, [])
+  useEffect(() => () => {
+    if (eggOffTimer.current) clearTimeout(eggOffTimer.current)
+    if (eggPulseTimer.current) clearTimeout(eggPulseTimer.current)
+  }, [])
 
   // Is anyone signed in? Toggles the topbar entry between "Create your calm" and
   // "Dashboard". No-ops (stays logged-out) when Supabase isn't configured.
@@ -882,10 +888,15 @@ export default function Dashboard({ initial }: HomeProps) {
         /* Easter egg — clicking the title on Overview briefly reveals the logo
            dead-center in the topbar (no dimming, never blocks the UI). The "answer"
            is a glow on the Break Meter status itself (.bm-sev.is-egg-glow in Overview). */
-        .tb-egg-logo { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; filter: drop-shadow(0 0 6px rgba(236,162,59,0.55)); animation: tbEggLogo 1.5s ease-out; }
-        @keyframes tbEggLogo { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); } 22% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
+        .tb-egg-logo { position: absolute; left: 50%; top: 50%; width: 46px; height: auto; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; filter: drop-shadow(0 0 7px rgba(255,140,30,0.6)); animation: tbEggLogo 1.5s linear; }
+        @keyframes tbEggLogo {
+          0%, 5% { opacity: 0; } 6% { opacity: .9; } 8% { opacity: .05; } 13% { opacity: .85; } 15% { opacity: .1; }
+          20% { opacity: 1; } 23% { opacity: .45; } 27% { opacity: 1; }
+          60% { opacity: 1; } 62% { opacity: .85; } 64% { opacity: 1; }
+          85% { opacity: 1; } 100% { opacity: 0; }
+        }
         @media (prefers-reduced-motion: reduce) { .tb-egg-logo { animation: tbEggLogoRM 1.5s ease-out; } }
-        @keyframes tbEggLogoRM { 0%, 100% { opacity: 0; } 22%, 70% { opacity: 1; } }
+        @keyframes tbEggLogoRM { 0%, 100% { opacity: 0; } 15%, 85% { opacity: 1; } }
       `}</style>
 
       {activeChart && (
@@ -895,7 +906,7 @@ export default function Dashboard({ initial }: HomeProps) {
       <div className="page">
         {tuner && <GlowTuner />}
         <div className="topbar">
-          {eggLogo && <img key={eggPulse} className="tb-egg-logo" src="/favicon.svg" alt="" aria-hidden="true" />}
+          {eggLogo > 0 && <img key={eggLogo} className="tb-egg-logo" src="/logo.png" alt="" aria-hidden="true" />}
           <div className="topbar-left">
             <div className="site-name" role="button" tabIndex={0} title="Back to overview"
               onClick={onTitleActivate}
