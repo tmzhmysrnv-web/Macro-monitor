@@ -88,11 +88,15 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
     async function load() {
       try {
         const leads = Array.from(new Set(myInterests.map(i => i.metrics[0])))
-        // /api/breakmeter is the single source for score + Redis-backed weekChange
-        // + recentTrend (the old /api/stress endpoint was redundant and could 500).
+        // The SSR seed (getCachedBundle -> Redis, <=15min old) already carries the
+        // score, Redis-backed weekChange, recentTrend, whatChanged and values, so on
+        // a normal load we ONLY fetch the per-metric history sparklines the bundle
+        // doesn't include. We refresh the core score/values from /api/* only when the
+        // seed came back empty (Redis cold + a FRED blip at render time).
+        const needCore = !bm0
         const [bm, data, ...hist] = await Promise.all([
-          fetch('/api/breakmeter').then(r => r.json()),
-          fetch('/api/data').then(r => r.json()),
+          needCore ? fetch('/api/breakmeter').then(r => r.json()) : Promise.resolve(null),
+          needCore ? fetch('/api/data').then(r => r.json()) : Promise.resolve(null),
           ...leads.map(k => fetch(`/api/history?key=${k}`).then(r => r.json()).then(j => ({ k, s: j.series })).catch(() => ({ k, s: null }))),
         ])
         if (cancelled) return
@@ -100,7 +104,13 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         for (const h of hist as { k: string; s: { value: number }[] | null }[]) {
           if (h.s?.length) series[h.k] = h.s.slice(-40).map(p => p.value)
         }
-        // Don't let a rate-limited refresh overwrite the good SSR seed.
+        // Normal path: keep the complete seed, just attach the sparklines.
+        if (!needCore) {
+          setD(prev => (prev ? { ...prev, series } : prev))
+          return
+        }
+        // Fallback path: seed was empty, fill the core from the live fetch.
+        // Don't let a rate-limited refresh overwrite whatever we do have.
         const bmOk = bm && bm.available !== false
         setD(prev => ({
           total: bmOk ? Math.round(bm.total ?? 0) : (prev?.total ?? 0),

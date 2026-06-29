@@ -1,17 +1,24 @@
 // pages/index.tsx — Is the World Breaking?
 import { useEffect, useState, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
 import { INDICATORS, getStatus, getPercentile, getContextText, getOpportunityText, type AlertStatus, type Indicator } from '../lib/thresholds'
 import type { DataPoint } from '../lib/fetchHistory'
 import Overview from '../components/Overview'
-import Housing from '../components/Housing'
-import Bonds from '../components/Bonds'
-import Credit from '../components/Credit'
-import Inflation from '../components/Inflation'
-import Labor from '../components/Labor'
-import Markets from '../components/Markets'
-import Global from '../components/Global'
+// Overview is the default tab (above the fold), so it stays in the main bundle.
+// The other seven intelligence tabs are only rendered once their tab is opened,
+// so they're code-split into their own chunks — they no longer bloat the landing
+// page's initial JS / hydration. A lightweight placeholder reserves space while
+// the chunk loads.
+const TabLoading = () => <div style={{ padding: '64px 0', textAlign: 'center', opacity: 0.5, fontSize: 14 }}>Loading…</div>
+const Housing = dynamic(() => import('../components/Housing'), { loading: TabLoading })
+const Bonds = dynamic(() => import('../components/Bonds'), { loading: TabLoading })
+const Credit = dynamic(() => import('../components/Credit'), { loading: TabLoading })
+const Inflation = dynamic(() => import('../components/Inflation'), { loading: TabLoading })
+const Labor = dynamic(() => import('../components/Labor'), { loading: TabLoading })
+const Markets = dynamic(() => import('../components/Markets'), { loading: TabLoading })
+const Global = dynamic(() => import('../components/Global'), { loading: TabLoading })
 import NotificationPanel, { type PanelAlert } from '../components/NotificationPanel'
 import { severityOf } from '../lib/alertSeverity'
 import { barFor } from '../lib/alertMeta'
