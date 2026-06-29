@@ -5,6 +5,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildBondModel, type BondModel } from '../../lib/bonds'
 import { cacheData } from '../../lib/http'
+import { getCached } from '../../lib/redis'
 
 // Deterministic briefing composed from the four theme statuses + risk callout.
 function buildSummary(m: BondModel): string {
@@ -18,7 +19,7 @@ function buildSummary(m: BondModel): string {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
-    const model = await buildBondModel()
+    const model = await getCached('bonds', 300, buildBondModel, m => m.available)
     // Short edge cache so a fresh FOMC decision (the 2pm statement override)
     // surfaces within minutes rather than the prior hour-long window.
     cacheData(res, model.available, 300, 3600)

@@ -16,7 +16,7 @@ import { toneFor, bottomLine, TONE_TEXT, TONE_BADGE } from '../lib/statusLadder'
 import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
 import { getSupabaseBrowser } from '../lib/supabase/client'
 import ComingUp from '../components/ComingUp'
-import { buildBundle, type Bundle } from '../lib/bundle'
+import { getCachedBundle, type Bundle } from '../lib/bundle'
 
 type Vals = Record<string, number | null>
 type StressPt = { date: string; total: number }
@@ -306,7 +306,8 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
   if ('redirect' in gated) return gated
   // Fetch the shared macro bundle server-side too, so the dashboard's Current
   // Status / score / watchlist render in the initial HTML (same instant paint as
-  // the public landing). Usually served from the warm FRED Data Cache.
-  const initial = JSON.parse(JSON.stringify(await buildBundle())) as Bundle
+  // the public landing). Reads the shared Redis-cached bundle so TTFB isn't blocked
+  // on a fresh ~25-call FRED build on every dashboard load.
+  const initial = JSON.parse(JSON.stringify(await getCachedBundle())) as Bundle
   return { props: { ...gated.props, initial } }
 }

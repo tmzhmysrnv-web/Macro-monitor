@@ -25,6 +25,52 @@ function getRedis(): Redis | null {
   return _redis
 }
 
+// ── Read-through cache for computed payloads ──────────────────────────
+// Caches expensive FRED-derived payloads (the landing bundle, each tab model)
+// in Redis so we compute once per `freshTtl` instead of on every request. This
+// is the ORIGIN-side cache: it collapses the redundant FRED calls a cold page
+// load / tab-warm fan-out makes, and — crucially — survives FRED rate-limit
+// blips. We keep TWO keys per payload:
+//   cache:<key>  — the fresh copy, expires after freshTtl (the served-as-current window)
+//   stale:<key>  — the last KNOWN-GOOD copy, kept ~a day, served when a rebuild fails
+// so a momentary FRED outage serves slightly-stale-but-real data instead of the
+// "data temporarily unavailable" state. Only OK payloads are ever written, so a
+// rate-limited build can't poison either key. Degrades to a live build when Redis
+// is absent (local dev) or on any Redis error.
+export async function getCached<T>(
+  key: string,
+  freshTtl: number,
+  build: () => Promise<T>,
+  isOk: (v: T) => boolean,
+  staleTtl = 86400,
+): Promise<T> {
+  const r = getRedis()
+  if (!r) return build()
+  const freshKey = `cache:${key}`
+  const staleKey = `stale:${key}`
+  try {
+    const hit = await r.get<T>(freshKey)
+    if (hit) return hit
+  } catch (e) { console.error(`getCached read ${key}`, e) }
+
+  const fresh = await build()
+  if (isOk(fresh)) {
+    try {
+      await Promise.all([
+        r.set(freshKey, fresh, { ex: freshTtl }),
+        r.set(staleKey, fresh, { ex: staleTtl }),
+      ])
+    } catch (e) { console.error(`getCached write ${key}`, e) }
+    return fresh
+  }
+  // Rebuild failed (FRED rate-limited / sparse): serve last known-good if we have it.
+  try {
+    const stale = await r.get<T>(staleKey)
+    if (stale) return stale
+  } catch (e) { console.error(`getCached stale ${key}`, e) }
+  return fresh
+}
+
 // ── Rate limiting ─────────────────────────────────────────────────────
 // Fixed-window counter: INCR a key, set its TTL on first hit. Degrades to
 // "allow" when Redis is absent so the app still runs locally without Upstash.

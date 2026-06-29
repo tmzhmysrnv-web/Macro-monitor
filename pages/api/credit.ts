@@ -5,6 +5,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildCreditModel, type CreditModel } from '../../lib/credit'
 import { cacheData } from '../../lib/http'
+import { getCached } from '../../lib/redis'
 
 function buildSummary(m: CreditModel): string {
   if (!m.available) return 'Live credit-market data is temporarily unavailable. Check back shortly.'
@@ -16,7 +17,7 @@ function buildSummary(m: CreditModel): string {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
-    const model = await buildCreditModel()
+    const model = await getCached('credit', 3600, buildCreditModel, m => m.available)
     cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,

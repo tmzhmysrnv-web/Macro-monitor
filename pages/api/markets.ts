@@ -5,11 +5,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildMarketsModel } from '../../lib/markets'
 import { cacheData } from '../../lib/http'
+import { getCached } from '../../lib/redis'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
-    const model = await buildMarketsModel()
+    const model = await getCached('markets', 3600, buildMarketsModel, m => m.available)
     cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,

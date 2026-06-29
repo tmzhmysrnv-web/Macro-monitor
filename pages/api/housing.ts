@@ -5,6 +5,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildHousingModel, type HousingModel } from '../../lib/housing'
 import { cacheData } from '../../lib/http'
+import { getCached } from '../../lib/redis'
 
 // Deterministic briefing composed from the category statuses + risk callout.
 function buildSummary(m: HousingModel): string {
@@ -17,7 +18,7 @@ function buildSummary(m: HousingModel): string {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
-    const model = await buildHousingModel()
+    const model = await getCached('housing', 3600, buildHousingModel, m => m.available)
     cacheData(res, model.available, 3600, 86400)
     res.status(200).json({
       available: model.available,

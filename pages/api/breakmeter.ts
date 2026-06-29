@@ -7,11 +7,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { buildBreakMeterPayload } from '../../lib/breakMeter'
 import { cacheData } from '../../lib/http'
+import { getCached } from '../../lib/redis'
 import { captureError } from '../../lib/sentry'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const payload = await buildBreakMeterPayload()
+    const payload = await getCached('breakmeter', 900, buildBreakMeterPayload, p => p.available)
     cacheData(res, payload.available, 900, 3600)
     res.status(200).json(payload)
   } catch (err) {

@@ -4,14 +4,14 @@
 // page's old ~9-endpoint client fan-out; also used to refresh the ISR-seeded
 // data after first paint.
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { buildBundle } from '../../lib/bundle'
+import { getCachedBundle } from '../../lib/bundle'
 import { cacheData } from '../../lib/http'
 import { captureError } from '../../lib/sentry'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   try {
-    const bundle = await buildBundle()
+    const bundle = await getCachedBundle()
     // Only edge-cache when the Break Meter (the above-the-fold payload the landing
     // page reads) actually came back available; a rate-limited bundle must not be
     // cached or it pins the Overview to "temporarily unavailable" for the whole TTL.
