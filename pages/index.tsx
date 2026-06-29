@@ -1,5 +1,5 @@
 // pages/index.tsx — Is the World Breaking?
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import type { MacroData } from '../lib/fetchData'
@@ -603,7 +603,7 @@ export default function Dashboard({ initial }: HomeProps) {
   // Live alerts = what's firing across the prefetched intelligence-tab models.
   // This is the client-side mirror of lib/alertEngine, so the bell badge and the
   // notification panel always agree with the cron-driven email + feed.
-  const liveAlerts: PanelAlert[] = ([
+  const liveAlerts: PanelAlert[] = useMemo(() => ([
     [inflationData, 'inflation', 'Inflation'],
     [laborData, 'labor', 'Labor'],
     [marketsData, 'markets', 'Markets'],
@@ -617,14 +617,18 @@ export default function Dashboard({ initial }: HomeProps) {
       severity: severityOf(a.id, a.title), title: a.title, what: a.what,
       why: a.why, affected: a.affected, context: a.context,
     }))
-  ).sort((x, y) => y.severity - x.severity)
+  ).sort((x, y) => y.severity - x.severity),
+  [inflationData, laborData, marketsData, globalData, bondsData, creditData, housingData])
 
   // Which tabs have actually loaded — only those can authoritatively "clear" a
   // stored alert (an unloaded tab tells us nothing, so we keep its last state).
-  const loadedTabs = new Set<string>()
-  ;([['inflation', inflationData], ['labor', laborData], ['markets', marketsData],
-     ['global', globalData], ['bonds', bondsData], ['credit', creditData], ['housing', housingData]] as [string, any][])
-    .forEach(([t, d]) => { if (d && !d.error) loadedTabs.add(t) })
+  const loadedTabs = useMemo(() => {
+    const s = new Set<string>()
+    ;([['inflation', inflationData], ['labor', laborData], ['markets', marketsData],
+       ['global', globalData], ['bonds', bondsData], ['credit', creditData], ['housing', housingData]] as [string, any][])
+      .forEach(([t, d]) => { if (d && !d.error) s.add(t) })
+    return s
+  }, [inflationData, laborData, marketsData, globalData, bondsData, creditData, housingData])
 
   // Reconcile live alerts into the persistent history. Keyed on stable
   // signatures so this only runs when the firing set or loaded tabs change.
@@ -670,10 +674,10 @@ export default function Dashboard({ initial }: HomeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveSig, loadedSig])
 
-  const activeAlerts = alertHistory.filter(h => !h.cleared)
-  const pastAlerts = alertHistory.filter(h => h.cleared)
+  const activeAlerts = useMemo(() => alertHistory.filter(h => !h.cleared), [alertHistory])
+  const pastAlerts = useMemo(() => alertHistory.filter(h => h.cleared), [alertHistory])
   // Badge = unread: active alerts that first appeared since the panel was last opened.
-  const unreadCount = activeAlerts.filter(a => a.firstSeen > alertsSeenAt).length
+  const unreadCount = useMemo(() => activeAlerts.filter(a => a.firstSeen > alertsSeenAt).length, [activeAlerts, alertsSeenAt])
 
   // Per-section status colors for the monitor's status row — straight from each
   // prefetched model's overall tone (so it agrees with the email's status row).
