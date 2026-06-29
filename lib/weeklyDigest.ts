@@ -12,6 +12,8 @@ import { fetchEvents, upcoming } from './economicCalendar'
 import { getSupabaseAdmin } from './supabase/server'
 import { toneFor, headlineFor, bottomLine, changeLine, type Tone, type ChangeLine } from './statusLadder'
 import { INTEREST_CATALOG, readInterest, type InterestCategory } from './interests'
+import { getCachedBundle } from './bundle'
+import { getCached } from './redis'
 
 export type DigestMover = { label: string; pct: number; dir: 'better' | 'worse' | 'neutral' }
 export type DigestEvent = { name: string; weekday: string }
@@ -35,14 +37,27 @@ function weekdayOf(dateStr: string): string {
 // Computed once per run and shared across recipients. Returns null when live data
 // is too sparse to report (don't fabricate a status).
 export async function buildWeeklyDigestBase(): Promise<DigestBase | null> {
-  const data = await fetchAllData()
+  // Pull current values from the warm, stale-protected bundle cache (kept fresh by
+  // site traffic, falls back to last-known-good) so a Sunday-noon FRED blip can't
+  // blank the whole digest. Fall back to a direct fetch if the cache has nothing.
+  const bundle = await getCachedBundle()
+  const data = (bundle.data ?? (await fetchAllData())) as MacroData
   if (data.vix == null && data.sp500 == null && data.treasury10y == null) return null
 
   const stress = computeStressIndex(data)
   const total = Math.round(stress.total)
-  const history = await fetchAllHistory(1, 'd')
-  const weekChange = buildMeterChange(history, 7)
-  const changed = await buildWhatChanged(data, history)
+
+  // History is best-effort: a blip on the historical series shouldn't blank the
+  // digest — degrade to "change unknown / no movers" and still send the recap.
+  let weekChange: number | null = null
+  let changed: Awaited<ReturnType<typeof buildWhatChanged>> = []
+  try {
+    const history = await fetchAllHistory(1, 'd')
+    weekChange = buildMeterChange(history, 7)
+    changed = await buildWhatChanged(data, history)
+  } catch (e) {
+    console.error('weeklyDigest: history unavailable, sending without movers', e)
+  }
 
   const movers: DigestMover[] = changed.slice(0, 3).map(r => ({
     label: r.label,
@@ -67,6 +82,13 @@ export async function buildWeeklyDigestBase(): Promise<DigestBase | null> {
     events,
     values: data as unknown as Record<string, number | null>,
   }
+}
+
+// Cached + stale-protected base: computes once per 30min and serves last-known-good
+// for up to ~3 days through a FRED blip. Used by the cron, the dry-run, and the
+// force test-send so they share one build and survive transient data gaps.
+export function getCachedDigestBase(): Promise<DigestBase | null> {
+  return getCached('digest-base', 1800, buildWeeklyDigestBase, b => b != null, 3 * 86400)
 }
 
 // Per-recipient watchlist rows, in catalog order, for the categories they follow.

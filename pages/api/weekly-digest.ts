@@ -8,7 +8,7 @@
 // ?dry=1 (still authed) builds the shared model + recipient count WITHOUT the
 // Sunday gate and WITHOUT sending — for verification.
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { buildWeeklyDigestBase, digestInterestRows } from '../../lib/weeklyDigest'
+import { getCachedDigestBase, digestInterestRows } from '../../lib/weeklyDigest'
 import { sendWeeklyDigest } from '../../lib/sendAlert'
 import { listAlertRecipients } from '../../lib/recipients'
 import { weeklyDigestSent, markWeeklyDigestSent } from '../../lib/redis'
@@ -32,20 +32,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: 'Unauthorized' })
   }
   const dry = req.query.dry === '1'
+  const force = req.query.force === '1'
+  const forceEmail = typeof req.query.email === 'string' ? req.query.email.trim() : ''
 
   // Only run on Sunday in ET (the cron fires daily; this is the day gate).
+  // dry-run and force test-send bypass it.
   const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
-  if (!dry && et.getDay() !== 0) {
+  if (!dry && !force && et.getDay() !== 0) {
     return res.status(200).json({ skipped: 'not Sunday (ET)', etDay: et.getDay() })
   }
 
   try {
-    const base = await buildWeeklyDigestBase()
-    if (!base) return res.status(200).json({ skipped: 'data unavailable' })
+    const base = await getCachedDigestBase()
+    if (!base) {
+      // Surface a silent miss: nothing got sent because the data couldn't build.
+      await captureError(new Error('Weekly digest: data unavailable at build time'), { route: 'weekly-digest' })
+      return res.status(200).json({ skipped: 'data unavailable' })
+    }
 
     const recipients = (await listAlertRecipients()).filter(r => r.emailEnabled && r.frequency === 'weekly')
+
     if (dry) {
       return res.status(200).json({ dry: true, recipients: recipients.length, total: base.total, movers: base.movers.length, events: base.events.length })
+    }
+
+    // Authed on-demand test send: one real digest to a given address, bypassing the
+    // Sunday gate + per-week dedup. Reports whether that address resolves to a
+    // recipient and at what frequency — directly diagnoses "why didn't I get it".
+    if (force) {
+      if (!forceEmail) return res.status(400).json({ error: 'force=1 requires &email=<address>' })
+      const all = await listAlertRecipients()
+      const match = all.find(r => r.email.toLowerCase() === forceEmail.toLowerCase())
+      const rows = digestInterestRows(match?.interests ?? ALL_CATEGORIES, base.values)
+      const ok = await sendWeeklyDigest({ email: forceEmail, token: match?.token ?? 'u:test' }, base, rows)
+      return res.status(200).json({
+        forced: true, email: forceEmail, sent: ok,
+        recipientResolved: !!match,          // false = not email-enabled OR no prefs row
+        frequency: match?.frequency ?? null, // 'breaking' here = why no weekly digest
+        emailEnabled: match?.emailEnabled ?? null,
+      })
     }
 
     const week = isoWeek(et)
@@ -57,6 +82,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (ok) { await markWeeklyDigestSent(week, r.email); sent++ }
     }))
     const failed = results.filter(x => x.status === 'rejected').length
+
+    // Surface silent misses to Sentry: nobody eligible, or sends that errored.
+    if (recipients.length === 0) {
+      await captureError(new Error('Weekly digest: 0 eligible weekly recipients'), { route: 'weekly-digest', week })
+    } else if (failed > 0) {
+      await captureError(new Error(`Weekly digest: ${failed}/${recipients.length} sends failed`), { route: 'weekly-digest', week, sent, failed })
+    }
 
     return res.status(200).json({ week, recipients: recipients.length, sent, skipped, failed, at: new Date().toISOString() })
   } catch (err) {
