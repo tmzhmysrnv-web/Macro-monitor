@@ -74,9 +74,9 @@ export default function InterestCard({
       <style>{`
         .ic { display: block; width: 100%; text-align: left; cursor: pointer; background: var(--c-surface);
           border: 1px solid var(--c-border); border-radius: 16px; padding: 18px; transition: border-color .15s, box-shadow .15s; font-family: var(--c-sans); }
-        .ic:hover { border-color: var(--c-border-strong); box-shadow: 0 4px 16px rgba(20,40,30,.05); }
+        .ic:hover { border-color: var(--c-border-strong); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
         .ic-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-        .ic-icon { width: 40px; height: 40px; border-radius: 11px; background: var(--c-soft); color: var(--c-green-deep);
+        .ic-icon { width: 40px; height: 40px; border-radius: 11px; background: rgba(17,22,18,.08); color: var(--c-green-deep);
           display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .ic-titles { min-width: 0; }
         .ic-title { font-size: 16px; font-weight: 600; color: var(--c-text); }
@@ -86,7 +86,7 @@ export default function InterestCard({
         .ic-row b { color: var(--c-text); font-weight: 500; font-family: var(--c-mono); font-size: 13px; }
         .ic-spark { margin: 14px 0 4px; }
         .ic-insight { margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--c-text-soft);
-          background: var(--c-soft); border-radius: 10px; padding: 11px 13px; }
+          background: rgba(17,22,18,.07); border-radius: 10px; padding: 11px 13px; }
         .ic-insight.warn { background: var(--c-warn-bg); }
         .ic-insight.alert { background: var(--c-bad-bg); }
         .ic-insight b { color: var(--c-text); font-weight: 600; }
