@@ -6,6 +6,6 @@ export async function destinationAfterSignIn(supabase: SupabaseClient, userId: s
     .from('user_interests')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-  if (error) return '/onboarding'
+  if (error) return '/dashboard'
   return (count ?? 0) > 0 ? '/dashboard' : '/onboarding'
 }

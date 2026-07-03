@@ -5,6 +5,7 @@
 // (…/auth/callback) in Supabase Auth → URL Configuration and the Google client.
 import type { GetServerSidePropsContext } from 'next'
 import { getSupabaseServer } from '../../lib/supabase/server'
+import { destinationAfterSignIn } from '../../lib/authRouting'
 
 // Never rendered — getServerSideProps always redirects.
 export default function AuthCallback() {
@@ -23,12 +24,9 @@ export async function getServerSideProps(ctx: GetServerSidePropsContext) {
     return { redirect: { destination: '/welcome?error=auth', permanent: false } }
   }
 
-  // New vs returning: send users with no interests yet through onboarding.
-  const { count } = await supabase
-    .from('user_interests')
-    .select('id', { count: 'exact', head: true })
+  const { data } = await supabase.auth.getUser()
 
   return {
-    redirect: { destination: (count ?? 0) > 0 ? '/dashboard' : '/onboarding', permanent: false },
+    redirect: { destination: await destinationAfterSignIn(supabase, data.user?.id), permanent: false },
   }
 }
