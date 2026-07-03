@@ -10,6 +10,7 @@ const FRED_KEY = process.env.FRED_API_KEY
 export type DataPoint = { date: string; value: number }
 
 type Freq = 'd' | 'm'
+type HistoryFetcher = (years?: number, freq?: Freq) => Promise<DataPoint[]>
 
 async function fetchFredHistory(seriesId: string, years = 10, freq: Freq = 'd'): Promise<DataPoint[]> {
   try {
@@ -108,33 +109,57 @@ async function fetchYieldCurveHistory(years = 10, freq: Freq = 'd'): Promise<Dat
 
 export type HistoryMap = Record<string, DataPoint[]>
 
+export const HISTORY_FETCHERS: Record<string, HistoryFetcher> = {
+  vix: (years, freq) => fetchYahooHistory('^VIX', years, freq),
+  treasury10y: (years, freq) => fetchFredHistory('DGS10', years, freq),
+  treasury2y: (years, freq) => fetchFredHistory('DGS2', years, freq),
+  fedfunds: (years, freq) => fetchFredHistory('FEDFUNDS', years, freq),
+  cpi: (years, freq) => fetchFredYoYHistory('CPIAUCSL', years, freq),
+  joblessClaims: (years, freq) => fetchJoblessHistory(years, freq),
+  payrolls: (years, freq) => fetchPayrollsHistory(years, freq),
+  yieldCurve: (years, freq) => fetchYieldCurveHistory(years, freq),
+  hySpread: (years, freq) => fetchFredHistory('BAMLH0A0HYM2', years, freq),
+  igSpread: (years, freq) => fetchFredHistory('BAMLC0A0CM', years, freq),
+  sp500: (years, freq) => fetchYahooHistory('^GSPC', years, freq),
+  dxy: (years, freq) => fetchYahooHistory('DX-Y.NYB', years, freq),
+  gold: (years, freq) => fetchYahooHistory('GC=F', years, freq),
+  oil: (years, freq) => fetchYahooHistory('CL=F', years, freq),
+  copper: (years, freq) => fetchYahooHistory('HG=F', years, freq),
+  silver: (years, freq) => fetchYahooHistory('SI=F', years, freq),
+  mortgage30: (years, freq) => fetchFredHistory('MORTGAGE30US', years, freq),
+  homePriceYoY: (years, freq) => fetchFredYoYHistory('CSUSHPINSA', years, freq),
+  nasdaq: (years, freq) => fetchYahooHistory('^IXIC', years, freq),
+  russell2000: (years, freq) => fetchYahooHistory('^RUT', years, freq),
+}
+
+export const HISTORY_KEYS = Object.freeze(Object.keys(HISTORY_FETCHERS))
+
+export function isHistoryKey(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(HISTORY_FETCHERS, key)
+}
+
+export async function fetchHistoryByKey(key: string, years = 10, freq: Freq = 'd'): Promise<DataPoint[] | null> {
+  const fetcher = HISTORY_FETCHERS[key]
+  if (!fetcher) return null
+  return fetcher(years, freq)
+}
+
+export async function fetchHistoryForKeys(keys: string[], years = 10, freq: Freq = 'd'): Promise<HistoryMap> {
+  const unique = Array.from(new Set(keys))
+  const entries = await Promise.all(unique.map(async key => [key, await fetchHistoryByKey(key, years, freq)] as const))
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, DataPoint[]] => entry[1] != null))
+}
+
+export function downsampleSeries(series: DataPoint[], maxPoints: number): DataPoint[] {
+  if (maxPoints <= 0 || series.length <= maxPoints) return series
+  const recent = series.slice(-Math.max(maxPoints * 4, maxPoints))
+  const step = Math.max(1, Math.ceil(recent.length / maxPoints))
+  return recent.filter((_, i) => i % step === 0).slice(-maxPoints)
+}
+
 // years/freq let callers trade detail for speed: the indicator modal wants the
 // full 10y daily series, but the Overview only needs ~1y for what-changed and
 // monthly points for the long-range trend.
 export async function fetchAllHistory(years = 10, freq: Freq = 'd'): Promise<HistoryMap> {
-  const [vix, t10y, t2y, fedfunds, cpi, jobless, payrolls, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY, nasdaq, russell2000] =
-    await Promise.all([
-      fetchYahooHistory('^VIX', years, freq),
-      fetchFredHistory('DGS10', years, freq),
-      fetchFredHistory('DGS2', years, freq),
-      fetchFredHistory('FEDFUNDS', years, freq),
-      fetchFredYoYHistory('CPIAUCSL', years, freq),
-      fetchJoblessHistory(years, freq),
-      fetchPayrollsHistory(years, freq),
-      fetchYieldCurveHistory(years, freq),
-      fetchFredHistory('BAMLH0A0HYM2', years, freq),
-      fetchFredHistory('BAMLC0A0CM', years, freq),
-      fetchYahooHistory('^GSPC', years, freq),
-      fetchYahooHistory('DX-Y.NYB', years, freq),
-      fetchYahooHistory('GC=F', years, freq),
-      fetchYahooHistory('CL=F', years, freq),
-      fetchYahooHistory('HG=F', years, freq),
-      fetchYahooHistory('SI=F', years, freq),
-      fetchFredHistory('MORTGAGE30US', years, freq),
-      fetchFredYoYHistory('CSUSHPINSA', years, freq),  // home-price YoY (crash signal for the Break Meter)
-      fetchYahooHistory('^IXIC', years, freq),         // Nasdaq Composite
-      fetchYahooHistory('^RUT', years, freq),          // Russell 2000
-    ])
-
-  return { vix, treasury10y: t10y, treasury2y: t2y, fedfunds, cpi, joblessClaims: jobless, payrolls, yieldCurve, hySpread, igSpread, sp500, dxy, gold, oil, copper, silver, mortgage30, homePriceYoY, nasdaq, russell2000 }
+  return fetchHistoryForKeys([...HISTORY_KEYS], years, freq)
 }

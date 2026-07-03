@@ -29,6 +29,7 @@ type Payload = {
   briefing: Briefing
   whatChanged: Mover[]; history: StressPt[]; values: Vals; series: Record<string, number[]>
 }
+type HistoryBatch = { series?: Record<string, { value: number }[]> }
 
 // Status ladder (tone, headline, bottom-line copy, colors) lives in
 // lib/statusLadder.ts — shared with /digest and the weekly digest email.
@@ -90,19 +91,23 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         const leads = Array.from(new Set(myInterests.map(i => i.metrics[0])))
         // The SSR seed (getCachedBundle -> Redis, <=15min old) already carries the
         // score, Redis-backed weekChange, recentTrend, whatChanged and values, so on
-        // a normal load we ONLY fetch the per-metric history sparklines the bundle
+        // a normal load we ONLY fetch the batched history sparklines the bundle
         // doesn't include. We refresh the core score/values from /api/* only when the
         // seed came back empty (Redis cold + a FRED blip at render time).
         const needCore = !bm0
-        const [bm, data, ...hist] = await Promise.all([
+        const historyUrl = leads.length
+          ? `/api/history?keys=${encodeURIComponent(leads.join(','))}&mode=sparkline`
+          : null
+        const [bm, data, hist] = await Promise.all([
           needCore ? fetch('/api/breakmeter').then(r => r.json()) : Promise.resolve(null),
           needCore ? fetch('/api/data').then(r => r.json()) : Promise.resolve(null),
-          ...leads.map(k => fetch(`/api/history?key=${k}`).then(r => r.json()).then(j => ({ k, s: j.series })).catch(() => ({ k, s: null }))),
+          historyUrl ? fetch(historyUrl).then(r => r.json()).catch(() => null) : Promise.resolve(null),
         ])
         if (cancelled) return
         const series: Record<string, number[]> = {}
-        for (const h of hist as { k: string; s: { value: number }[] | null }[]) {
-          if (h.s?.length) series[h.k] = h.s.slice(-40).map(p => p.value)
+        const batch = hist as HistoryBatch | null
+        for (const [k, s] of Object.entries(batch?.series ?? {})) {
+          if (s?.length) series[k] = s.map(p => p.value)
         }
         // Normal path: keep the complete seed, just attach the sparklines.
         if (!needCore) {

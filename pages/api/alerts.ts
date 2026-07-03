@@ -7,7 +7,7 @@ import { buildAlertReport } from '../../lib/alertEngine'
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
-    const report = await buildAlertReport()
+    const report = await buildAlertReport({ mode: 'cached' })
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
     res.status(200).json({ alerts: report.alerts, breakLevel: report.breakLevel })
   } catch (err) {

@@ -17,6 +17,7 @@ import { buildHousingModel } from './housing'
 import { severityOf, type Severity } from './alertSeverity'
 import { fetchAllData } from './fetchData'
 import { computeStressIndex } from './stressIndex'
+import { getCached } from './redis'
 
 export type FiredAlert = {
   key: string        // `<tab>:<id>` — globally unique dedup key
@@ -42,21 +43,28 @@ export type AlertReport = {
 }
 
 type GenericAlert = { id: string; title: string; what: string; why: string; affected?: string[]; context?: string }
-type GenericModel = { alerts?: GenericAlert[]; status?: { tone?: string } }
+type GenericModel = { available?: boolean; alerts?: GenericAlert[]; status?: { tone?: string } }
+type AlertReportMode = 'fresh' | 'cached'
 
-const SOURCES: { tab: string; tabLabel: string; build: () => Promise<GenericModel> }[] = [
-  { tab: 'inflation', tabLabel: 'Inflation', build: buildInflationModel },
-  { tab: 'labor',     tabLabel: 'Labor',     build: buildLaborModel },
-  { tab: 'markets',   tabLabel: 'Markets',   build: buildMarketsModel },
-  { tab: 'global',    tabLabel: 'Global',    build: buildGlobalModel },
-  { tab: 'bonds',     tabLabel: 'Bonds',     build: buildBondModel },
-  { tab: 'credit',    tabLabel: 'Credit',    build: buildCreditModel },
-  { tab: 'housing',   tabLabel: 'Housing',   build: buildHousingModel },
+const SOURCES: { tab: string; tabLabel: string; cacheKey: string; ttl: number; build: () => Promise<GenericModel> }[] = [
+  { tab: 'inflation', tabLabel: 'Inflation', cacheKey: 'inflation', ttl: 3600, build: buildInflationModel },
+  { tab: 'labor',     tabLabel: 'Labor',     cacheKey: 'labor',     ttl: 3600, build: buildLaborModel },
+  { tab: 'markets',   tabLabel: 'Markets',   cacheKey: 'markets',   ttl: 3600, build: buildMarketsModel },
+  { tab: 'global',    tabLabel: 'Global',    cacheKey: 'global',    ttl: 3600, build: buildGlobalModel },
+  { tab: 'bonds',     tabLabel: 'Bonds',     cacheKey: 'bonds',     ttl: 300,  build: buildBondModel },
+  { tab: 'credit',    tabLabel: 'Credit',    cacheKey: 'credit',    ttl: 3600, build: buildCreditModel },
+  { tab: 'housing',   tabLabel: 'Housing',   cacheKey: 'housing',   ttl: 3600, build: buildHousingModel },
 ]
 
-export async function buildAlertReport(): Promise<AlertReport> {
+function buildSource(src: (typeof SOURCES)[number], mode: AlertReportMode): Promise<GenericModel> {
+  if (mode === 'fresh') return src.build()
+  return getCached(src.cacheKey, src.ttl, src.build, m => m.available !== false)
+}
+
+export async function buildAlertReport(opts: { mode?: AlertReportMode } = {}): Promise<AlertReport> {
+  const mode = opts.mode ?? 'fresh'
   const [modelResults, breakLevel] = await Promise.all([
-    Promise.allSettled(SOURCES.map(s => s.build())),
+    Promise.allSettled(SOURCES.map(s => buildSource(s, mode))),
     fetchAllData().then(d => computeStressIndex(d).total).catch(() => null),
   ])
 
