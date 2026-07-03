@@ -267,8 +267,8 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
 
       <style>{`
         .dh { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-        .dh-title { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
-        .dh-sub { font-size: 14px; color: var(--c-text-soft); margin-top: 3px; }
+        .dh-title { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; color: var(--c-shell-text); }
+        .dh-sub { font-size: 14px; color: var(--c-shell-text-soft); margin-top: 3px; }
         .dh-refresh { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 10px; padding: 9px; cursor: pointer; color: var(--c-text-soft); }
         .dh-refresh:hover { color: var(--c-text); }
         .cs { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; margin-bottom: 30px; }
@@ -287,13 +287,15 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         .cs-delta.flat { background: var(--c-soft); color: var(--c-text-soft); }
         .cs-trend { margin-top: 12px; }
         .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
-        .sec-title { font-size: 19px; font-weight: 600; }
+        .sec-head .sec-title { color: var(--c-shell-text); }
+        .sec-title { font-size: 19px; font-weight: 600; color: var(--c-text); }
+        .sec-head .sec-sub { color: var(--c-shell-text-soft); }
         .sec-sub { font-size: 13px; color: var(--c-text-soft); margin-top: 2px; }
         .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px; }
         .moved { margin-bottom: 30px; }
         .moved-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
         .moved-item { display: flex; gap: 12px; align-items: flex-start; }
-        .moved-arrow { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--c-soft); color: var(--c-muted); }
+        .moved-arrow { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(17,22,18,.08); color: var(--c-muted); }
         .moved-arrow.bad { background: var(--c-bad-bg); color: var(--c-bad); }
         .moved-arrow.ok { background: var(--c-green-bg); color: var(--c-green-deep); }
         .moved-label { font-size: 14px; font-weight: 600; }

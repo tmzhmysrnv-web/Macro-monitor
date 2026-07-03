@@ -11,14 +11,14 @@ import { getSupabaseBrowser } from '../../lib/supabase/client'
 
 export type ShellUser = { email: string; name: string | null; avatar: string | null }
 
-const NAV: { href: string; label: string; icon: IconName; accent: 'green' | 'amber' }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'layout-dashboard', accent: 'green' },
-  { href: '/alerts', label: 'Alerts', icon: 'bell', accent: 'amber' },
-  { href: '/digest', label: 'Weekly Digest', icon: 'calendar', accent: 'amber' },
-  { href: '/watchlist', label: 'Watchlist', icon: 'heart', accent: 'green' },
-  { href: '/settings', label: 'Settings', icon: 'settings', accent: 'green' },
-  { href: '/account', label: 'Account', icon: 'user', accent: 'amber' },
-  { href: '/support', label: 'Support', icon: 'heart', accent: 'amber' },
+const NAV: { href: string; label: string; icon: IconName }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+  { href: '/alerts', label: 'Alerts', icon: 'bell' },
+  { href: '/digest', label: 'Weekly Digest', icon: 'calendar' },
+  { href: '/watchlist', label: 'Watchlist', icon: 'heart' },
+  { href: '/settings', label: 'Settings', icon: 'settings' },
+  { href: '/account', label: 'Account', icon: 'user' },
+  { href: '/support', label: 'Support', icon: 'heart' },
 ]
 
 // Next Sunday, formatted like "Sunday, May 25".
@@ -59,7 +59,7 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
 
           <nav className="sb-nav">
             {NAV.map(n => (
-              <Link key={n.href} href={n.href} className={`sb-link ${active === n.href ? 'on' : ''}`} data-accent={n.accent}>
+              <Link key={n.href} href={n.href} className={`sb-link ${active === n.href ? 'on' : ''}`}>
                 <Icon name={n.icon} size={18} /> {n.label}
               </Link>
             ))}
@@ -101,19 +101,18 @@ export default function AppShell({ user, active, children }: { user: ShellUser; 
         .sb-brand-link, .sb-brand-link:hover { text-decoration: none; }
         .sb-tag { font-size: 12px; color: var(--c-shell-muted); line-height: 1.4; margin: 10px 2px 20px; }
         .sb-nav { display: flex; flex-direction: column; gap: 2px; }
-        .sb-link { --nav-accent: var(--c-shell-green); display: flex; align-items: center; gap: 11px; font-size: 14px; color: var(--nav-accent);
+        .sb-link { display: flex; align-items: center; gap: 11px; font-size: 14px; color: var(--c-shell-green);
           padding: 10px 12px; border-radius: 10px; transition: background .12s, color .12s; }
-        .sb-link[data-accent="amber"] { --nav-accent: var(--c-shell-amber); }
-        .sb-link:hover { background: rgba(255,255,255,.06); text-decoration: none; color: var(--nav-accent); }
-        .sb-link.on { background: color-mix(in srgb, var(--nav-accent) 22%, #fff 78%); color: var(--nav-accent); font-weight: 600; }
-        .sb-digest { margin-top: 22px; background: rgba(255,255,255,.72); border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 13px; color: var(--c-text); }
+        .sb-link:hover { background: rgba(255,255,255,.06); text-decoration: none; color: var(--c-shell-green); }
+        .sb-link.on { background: var(--c-shell-active-bg); color: var(--c-shell-active-text); font-weight: 600; }
+        .sb-digest { margin-top: 22px; background: var(--c-surface); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 13px; color: var(--c-text); }
         .sb-digest-h { font-size: 13px; font-weight: 600; }
         .sb-digest-d { font-size: 12.5px; color: var(--c-text); display: flex; align-items: center; gap: 6px; margin: 7px 0 5px; }
         .sb-digest-s { font-size: 11.5px; color: var(--c-text-soft); line-height: 1.45; }
         .sb-spacer { flex: 1; }
         .sb-user { display: flex; align-items: center; gap: 10px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--c-shell-border); }
         .sb-avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
-          background: rgba(138,184,74,.16); color: var(--c-shell-green); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+          background: rgba(111,174,125,.16); color: var(--c-shell-green); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
         .sb-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .sb-user-meta { min-width: 0; flex: 1; }
         .sb-user-name { font-size: 13px; font-weight: 600; color: var(--c-shell-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
