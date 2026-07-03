@@ -10,12 +10,14 @@ export default function AppTheme() {
     <>
       <style>{`
         .app {
-          --c-bg: #FAFAF8; --c-surface: #FFFFFF; --c-soft: #EEF5EF; --c-soft-line: #DCEAE0;
-          --c-border: #E8E9E4; --c-border-strong: #D7D9D2;
-          --c-text: #20272300; /* overridden below */
-          --c-text: #1E2622; --c-text-soft: #59615B; --c-muted: #8B928C;
-          --c-green: #2F9160; --c-green-deep: #25734C; --c-green-bg: #E7F2EB;
-          --c-ok: #2F9160; --c-warn: #C07A1C; --c-warn-bg: #FBF3E6; --c-bad: #D2564F; --c-bad-bg: #FBECEA;
+          --c-bg: #232522; --c-surface: #F0F2EC; --c-soft: #E3EADF; --c-soft-line: #CCD7C8;
+          --c-border: rgba(28,35,30,.12); --c-border-strong: rgba(28,35,30,.22);
+          --c-text: #1F2924; --c-text-soft: #59645D; --c-muted: #7E887F;
+          --c-green: #2F9160; --c-green-deep: #2F7C55; --c-green-bg: #DCEBDD;
+          --c-ok: #2F9160; --c-warn: #B8731B; --c-warn-bg: #F4EAD8; --c-bad: #C84F49; --c-bad-bg: #F3DEDB;
+          --c-shell-bg: #1B1C1F; --c-shell-border: rgba(255,255,255,.09);
+          --c-shell-text: #F2F2EF; --c-shell-text-soft: #C8CBC5; --c-shell-muted: #969A93;
+          --c-shell-green: #8AB84A; --c-shell-amber: #D88B2F;
           --c-sans: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif; --c-mono: var(--font-dm-mono), 'DM Mono', monospace;
           background: var(--c-bg); color: var(--c-text); font-family: var(--c-sans);
           min-height: 100vh; -webkit-font-smoothing: antialiased;
@@ -25,11 +27,11 @@ export default function AppTheme() {
         .app a:hover { text-decoration: underline; }
 
         /* Site identity — mirrors the public site's .site-name (Space Mono, lowercase,
-           blinking terminal cursor), tinted for the light theme. No logo glyph. */
+           blinking terminal cursor), tinted for the graphite shell. No logo glyph. */
         .app .brand { font-family: var(--font-space-mono), 'Space Mono', var(--c-mono); font-size: 14px; font-weight: 400;
-          letter-spacing: 0.04em; color: var(--c-green-deep); line-height: 1.3; }
+          letter-spacing: 0.04em; color: var(--c-shell-green); line-height: 1.3; }
         .app .brand-cursor { display: inline-block; width: 0.5em; height: 0.95em; margin-left: 3px;
-          vertical-align: -0.1em; background: var(--c-green-deep); animation: brandblink 1.2s steps(1, end) infinite; }
+          vertical-align: -0.1em; background: var(--c-shell-green); animation: brandblink 1.2s steps(1, end) infinite; }
         @keyframes brandblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 
         /* ── buttons ── */
@@ -88,7 +90,7 @@ export default function AppTheme() {
 
         /* ── auth screen layout ── */
         .app.auth-screen { display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
-        .app .auth-box { width: 100%; max-width: 420px; }
+        .app .auth-box { width: 100%; max-width: 420px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 18px; padding: 26px; }
         .app .auth-brand { display: flex; align-items: center; gap: 9px; justify-content: center; color: var(--c-green-deep); margin-bottom: 26px; }
         .app .auth-brand span { font-size: 15px; font-weight: 600; }
         .app .auth-h1 { font-size: 28px; font-weight: 600; text-align: center; letter-spacing: -0.01em; }
