@@ -23,9 +23,9 @@ describe('destinationAfterSignIn', () => {
     await expect(destinationAfterSignIn(s.client as never, 'user-1')).resolves.toBe('/onboarding')
   })
 
-  it('falls back to onboarding when the interests check fails', async () => {
+  it('falls back to the dashboard when the interests check fails', async () => {
     const s = supabaseWithInterestCount(null, new Error('nope'))
 
-    await expect(destinationAfterSignIn(s.client as never, 'user-1')).resolves.toBe('/onboarding')
+    await expect(destinationAfterSignIn(s.client as never, 'user-1')).resolves.toBe('/dashboard')
   })
 })

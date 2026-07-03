@@ -52,13 +52,16 @@ export default function Welcome() {
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         })
         if (error) throw error
-        if (data.session) { router.push('/onboarding'); return }
+        if (data.session) {
+          router.replace(await destinationAfterSignIn(supabase, data.user?.id))
+          return
+        }
         setNote('Check your inbox to confirm your email, then sign in.')
         setMode('signin')
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        router.push(await destinationAfterSignIn(supabase, data.user?.id))
+        router.replace(await destinationAfterSignIn(supabase, data.user?.id))
         return
       }
     } catch (e) {
