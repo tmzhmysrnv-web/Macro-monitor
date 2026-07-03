@@ -562,23 +562,21 @@ export default function Dashboard({ initial }: HomeProps) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [highlightKey])
 
-  // Load sparklines for all indicators after data loads
+  // Load sparklines for all indicators after data loads. Use the compact batch
+  // endpoint so the main page does not fire one heavy history request per card.
   useEffect(() => {
     if (!data) return
     const keys = INDICATORS.map(i => i.key)
-    keys.forEach(key => {
-      fetch(`/api/history?key=${key}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d.series?.length > 1) {
-            // Downsample to ~60 points for sparkline
-            const s: DataPoint[] = d.series
-            const step = Math.max(1, Math.floor(s.length / 60))
-            setSparklines(prev => ({ ...prev, [key]: s.filter((_: DataPoint, i: number) => i % step === 0) }))
-          }
-        })
-        .catch(() => {})
-    })
+    fetch(`/api/history?keys=${encodeURIComponent(keys.join(','))}&mode=sparkline`)
+      .then(r => r.json())
+      .then(d => {
+        const next: Record<string, DataPoint[]> = {}
+        for (const [key, series] of Object.entries(d.series ?? {}) as [string, DataPoint[]][]) {
+          if (series?.length > 1) next[key] = series
+        }
+        setSparklines(next)
+      })
+      .catch(() => {})
   }, [data])
 
   const handleCardClick = useCallback((key: string, label: string) => {

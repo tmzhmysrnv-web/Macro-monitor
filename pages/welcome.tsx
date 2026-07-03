@@ -8,6 +8,7 @@ import type { GetServerSidePropsContext } from 'next'
 import AppTheme from '../components/app/AppTheme'
 import { getSupabaseBrowser, supabaseReady } from '../lib/supabase/client'
 import { getSupabaseServer } from '../lib/supabase/server'
+import { destinationAfterSignIn } from '../lib/authRouting'
 
 function GoogleMark() {
   return (
@@ -55,9 +56,9 @@ export default function Welcome() {
         setNote('Check your inbox to confirm your email, then sign in.')
         setMode('signin')
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        router.push('/onboarding')
+        router.push(await destinationAfterSignIn(supabase, data.user?.id))
         return
       }
     } catch (e) {
