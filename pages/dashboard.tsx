@@ -11,7 +11,7 @@ import InterestCard from '../components/app/InterestCard'
 import SupportCard from '../components/app/SupportCard'
 import Icon from '../components/Icon'
 import { loadGatedProps, type GatedProps } from '../lib/supabase/server'
-import { INTEREST_CATALOG, readInterest } from '../lib/interests'
+import { INTEREST_CATALOG, TAB_TO_CATEGORIES, readInterest } from '../lib/interests'
 import { toneFor, bottomLine, TONE_TEXT, TONE_BADGE } from '../lib/statusLadder'
 import { fetchEvents, recentAndUpcoming, type EconomicEvent } from '../lib/economicCalendar'
 import { getSupabaseBrowser } from '../lib/supabase/client'
@@ -23,6 +23,10 @@ type StressPt = { date: string; total: number }
 type Mover = { key: string; label: string; current: number; weekAgo: number; unit: string; direction: string }
 type Concern = { label: string; detail: string; tab: string } | null
 type Briefing = { headline: string; concern: Concern; stabilizer: Concern } | null
+type WatchingItem = {
+  key: string; tab: string; tabLabel: string; label: string; text: string; why: string
+  proximity: number; heat: 'near' | 'warming' | 'hot'
+}
 
 type Payload = {
   total: number; level: string; verdict: string; weekChange: number | null
@@ -81,6 +85,7 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
     series: {},
   }) as Payload : null)
   const [events, setEvents] = useState<EconomicEvent[]>(seed?.events ?? [])
+  const [watching, setWatching] = useState<WatchingItem[]>([])
   const [err, setErr] = useState(false)
   const myInterests = INTEREST_CATALOG.filter(i => props.interests.includes(i.category))
 
@@ -135,9 +140,21 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
     return () => { cancelled = true }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/alerts')
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setWatching(d.watching ?? []) })
+      .catch(() => { if (!cancelled) setWatching([]) })
+    return () => { cancelled = true }
+  }, [])
+
   const bl = d ? bottomLine(d.total) : null
   const tone = d ? toneFor(d.total) : 'calm'
   const movers = (d?.whatChanged ?? []).slice(0, 3)
+  const myWatching = watching
+    .filter(w => (TAB_TO_CATEGORIES[w.tab] ?? []).some(c => props.interests.includes(c)))
+    .slice(0, 4)
 
   return (
     <AppShell user={props.user} active="/dashboard">
@@ -187,6 +204,33 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
           <div className="cs-trend">{d && <StressTrend pts={d.history} />}</div>
         </div>
       </div>
+
+      {myWatching.length > 0 && (
+        <div className="watching-sec">
+          <div className="sec-head watching-head">
+            <div>
+              <h2 className="sec-title">Watching Closely</h2>
+              <p className="sec-sub">Not alerting yet. These are near enough to keep on the radar.</p>
+            </div>
+          </div>
+          <div className="watching-grid">
+            {myWatching.map(w => (
+              <div key={w.key} className={`watching-card ${w.heat}`}>
+                <div className="watching-top">
+                  <span className="watching-tab">{w.tabLabel}</span>
+                  <span className="badge badge-warn">Watching</span>
+                </div>
+                <div className="watching-title">{w.label}</div>
+                <div className="watching-text">{w.text}</div>
+                <div className="watching-why">{w.why}</div>
+                <button className="watching-open" onClick={() => router.push(`/?tab=${w.tab}`)}>
+                  Open {w.tabLabel.toLowerCase()} <Icon name="arrow-right" size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Watchlist */}
       <div className="sec-head">
@@ -291,6 +335,20 @@ export default function DashboardPage(props: GatedProps & { initial: Bundle }) {
         .sec-title { font-size: 19px; font-weight: 600; color: var(--c-text); }
         .sec-head .sec-sub { color: var(--c-shell-text-soft); }
         .sec-sub { font-size: 13px; color: var(--c-text-soft); margin-top: 2px; }
+        .watching-sec { margin-bottom: 30px; }
+        .watching-head { margin-bottom: 12px; }
+        .watching-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+        .watching-card { background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid var(--c-warn);
+          border-radius: 12px; padding: 15px 16px; color: var(--c-text); }
+        .watching-card.hot { border-left-color: var(--c-bad); }
+        .watching-card.near { border-left-color: var(--c-muted); }
+        .watching-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+        .watching-tab { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--c-muted); }
+        .watching-title { font-size: 15px; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+        .watching-text { font-size: 13px; color: var(--c-text-soft); line-height: 1.45; }
+        .watching-why { font-size: 12.5px; color: var(--c-muted); line-height: 1.45; margin-top: 8px; }
+        .watching-open { margin-top: 12px; background: none; border: none; padding: 0; color: var(--c-green-deep);
+          cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: var(--c-sans); font-size: 12.5px; font-weight: 600; }
         .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px; }
         .moved { margin-bottom: 30px; }
         .moved-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }

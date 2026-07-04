@@ -1,6 +1,5 @@
-// pages/alerts.tsx — live alerts, filtered to the topics the user follows.
-// Pulls the rich active alerts (/api/alerts → buildAlertReport) and renders full
-// alert cards (what / why / areas affected), themed for the calm app.
+// pages/alerts.tsx - live alerts, filtered to the topics the user follows.
+// Pulls rich active alerts and the quiet Watching Closely layer from /api/alerts.
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -14,6 +13,10 @@ type FiredAlert = {
   key: string; id: string; tab: string; tabLabel: string; severity: number
   title: string; what: string; why: string; affected: string[]; context: string
 }
+type WatchingItem = {
+  key: string; tab: string; tabLabel: string; label: string; text: string; why: string
+  proximity: number; heat: 'near' | 'warming' | 'hot'
+}
 
 // Light-theme tier color: high severity = red, lowest = green, else amber.
 function sev(s: number): { color: string; bg: string } {
@@ -25,54 +28,93 @@ function sev(s: number): { color: string; bg: string } {
 export default function Alerts(props: GatedProps) {
   const router = useRouter()
   const [alerts, setAlerts] = useState<FiredAlert[] | null>(null)
+  const [watching, setWatching] = useState<WatchingItem[]>([])
   const follows = new Set(props.interests)
 
   useEffect(() => {
-    fetch('/api/alerts').then(r => r.json()).then(d => setAlerts(d.alerts ?? [])).catch(() => setAlerts([]))
+    fetch('/api/alerts').then(r => r.json()).then(d => {
+      setAlerts(d.alerts ?? [])
+      setWatching(d.watching ?? [])
+    }).catch(() => {
+      setAlerts([])
+      setWatching([])
+    })
   }, [])
 
-  // Keep only alerts whose tab maps to a followed interest.
+  // Keep only alerts/watch items whose tab maps to a followed interest.
   const mine = (alerts ?? []).filter(a => (TAB_TO_CATEGORIES[a.tab] ?? []).some(c => follows.has(c)))
+  const mineWatching = watching.filter(w => (TAB_TO_CATEGORIES[w.tab] ?? []).some(c => follows.has(c))).slice(0, 6)
+
+  const watchBlock = mineWatching.length > 0 && (
+    <div className="al-watch-wrap">
+      <div className="al-watch-head">
+        <div className="al-watch-kicker">Watching Closely</div>
+        <div className="al-watch-sub">Not alerting yet. These are simply close enough to keep on the radar.</div>
+      </div>
+      <div className="al-watch-grid">
+        {mineWatching.map(w => (
+          <div key={w.key} className={`al-watch ${w.heat}`}>
+            <div className="al-watch-top">
+              <span className="al-watch-tab">{w.tabLabel}</span>
+              <span className="badge badge-warn">Watching</span>
+            </div>
+            <div className="al-watch-title">{w.label}</div>
+            <div className="al-watch-text">{w.text}</div>
+            <div className="al-watch-why">{w.why}</div>
+            <button className="al-watch-open" onClick={() => router.push(`/?tab=${w.tab}`)}>
+              Open {w.tabLabel.toLowerCase()} <Icon name="arrow-right" size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <AppShell user={props.user} active="/alerts">
-      <Head><title>Alerts · Is the World Breaking?</title></Head>
+      <Head><title>Alerts - Is the World Breaking?</title></Head>
       <h1 className="p-title">Alerts</h1>
       <p className="p-sub">Active alerts on the topics you follow. We stay quiet until something truly crosses a line.</p>
 
       <div style={{ marginTop: 22 }}>
         {alerts == null ? (
-          <div className="calm-card" style={{ color: 'var(--c-muted)' }}>Checking the latest readings…</div>
+          <div className="calm-card" style={{ color: 'var(--c-muted)' }}>Checking the latest readings...</div>
         ) : mine.length === 0 ? (
-          <div className="calm-card al-empty">
-            <div className="al-empty-mark"><Icon name="circle-check" size={40} /></div>
-            <div className="al-empty-h">Nothing is breaking right now.</div>
-            <div className="al-empty-s">We'll surface alerts here — and email you — the moment one of your topics crosses a line.</div>
-          </div>
+          <>
+            <div className="calm-card al-empty">
+              <div className="al-empty-mark"><Icon name="circle-check" size={40} /></div>
+              <div className="al-empty-h">Nothing is breaking right now.</div>
+              <div className="al-empty-s">We'll surface alerts here, and email you, only when one of your topics crosses a line.</div>
+            </div>
+            {watchBlock}
+          </>
         ) : (
-          mine.map(a => {
-            const s = sev(a.severity)
-            return (
-              <div key={a.key} className="al-card" style={{ borderLeftColor: s.color }}>
-                <div className="al-top">
-                  <span className="al-chip" style={{ color: s.color, background: s.bg }}>{a.tabLabel}</span>
-                  <button className="al-open" onClick={() => router.push(`/?tab=${a.tab}`)}>
-                    Open {a.tabLabel.toLowerCase()} <Icon name="arrow-right" size={14} />
-                  </button>
+          <>
+            {mine.map(a => {
+              const s = sev(a.severity)
+              return (
+                <div key={a.key} className="al-card" style={{ borderLeftColor: s.color }}>
+                  <div className="al-top">
+                    <span className="al-chip" style={{ color: s.color, background: s.bg }}>{a.tabLabel}</span>
+                    <button className="al-open" onClick={() => router.push(`/?tab=${a.tab}`)}>
+                      Open {a.tabLabel.toLowerCase()} <Icon name="arrow-right" size={14} />
+                    </button>
+                  </div>
+                  <div className="al-title">{a.title}</div>
+                  {a.what && <div className="al-line"><b>What - </b>{a.what}</div>}
+                  {a.why && <div className="al-line"><b>Why - </b>{a.why}</div>}
+                  {a.affected?.length > 0 && (
+                    <>
+                      <div className="al-areas-label">areas affected</div>
+                      <div className="al-areas">{a.affected.map(x => <span key={x} className="al-area">{x.toLowerCase()}</span>)}</div>
+                    </>
+                  )}
+                  {a.context && <div className="al-ctx"><b>Historically - </b>{a.context}</div>}
                 </div>
-                <div className="al-title">{a.title}</div>
-                {a.what && <div className="al-line"><b>What — </b>{a.what}</div>}
-                {a.why && <div className="al-line"><b>Why — </b>{a.why}</div>}
-                {a.affected?.length > 0 && (
-                  <>
-                    <div className="al-areas-label">areas affected</div>
-                    <div className="al-areas">{a.affected.map(x => <span key={x} className="al-area">{x.toLowerCase()}</span>)}</div>
-                  </>
-                )}
-                {a.context && <div className="al-ctx"><b>Historically — </b>{a.context}</div>}
-              </div>
-            )
-          })
+              )
+            })}
+            {watchBlock}
+          </>
         )}
       </div>
 
@@ -96,6 +138,22 @@ export default function Alerts(props: GatedProps) {
         .al-area { font-size: 11.5px; color: var(--c-text-soft); background: var(--c-soft); padding: 3px 9px; border-radius: 7px; }
         .al-ctx { font-size: 12.5px; color: var(--c-muted); line-height: 1.5; margin-top: 8px; }
         .al-ctx b { color: var(--c-text-soft); font-weight: 600; }
+        .al-watch-wrap { margin-top: 18px; }
+        .al-watch-head { margin-bottom: 10px; }
+        .al-watch-kicker { font-size: 13px; font-weight: 700; color: var(--c-page-text); }
+        .al-watch-sub { font-size: 13px; color: var(--c-page-text-soft); line-height: 1.45; margin-top: 2px; }
+        .al-watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+        .al-watch { background: var(--c-surface); border: 1px solid var(--c-border); border-left: 3px solid var(--c-warn);
+          border-radius: 12px; padding: 15px 16px; color: var(--c-text); }
+        .al-watch.hot { border-left-color: var(--c-bad); }
+        .al-watch.near { border-left-color: var(--c-muted); }
+        .al-watch-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+        .al-watch-tab { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--c-muted); }
+        .al-watch-title { font-size: 15px; font-weight: 600; color: var(--c-text); margin-bottom: 5px; }
+        .al-watch-text { font-size: 13px; color: var(--c-text-soft); line-height: 1.45; }
+        .al-watch-why { font-size: 12.5px; color: var(--c-muted); line-height: 1.45; margin-top: 8px; }
+        .al-watch-open { margin-top: 12px; background: none; border: none; padding: 0; color: var(--c-green-deep);
+          cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: var(--c-sans); font-size: 12.5px; font-weight: 600; }
       `}</style>
     </AppShell>
   )
