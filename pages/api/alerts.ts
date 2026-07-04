@@ -9,9 +9,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const report = await buildAlertReport({ mode: 'cached' })
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600')
-    res.status(200).json({ alerts: report.alerts, breakLevel: report.breakLevel })
+    res.status(200).json({ alerts: report.alerts, watching: report.watching, breakLevel: report.breakLevel })
   } catch (err) {
     console.error('Alerts API error:', err)
-    res.status(200).json({ alerts: [], breakLevel: null })
+    res.status(200).json({ alerts: [], watching: [], breakLevel: null })
   }
 }

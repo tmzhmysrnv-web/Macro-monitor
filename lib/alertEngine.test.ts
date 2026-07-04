@@ -45,6 +45,10 @@ beforeEach(() => {
       available: true,
       status: { tone: i === 0 ? 'warn' : 'good' },
       alerts: i === 0 ? [{ id: 'cpi-4', title: 'CPI alert', what: 'CPI is high', why: 'Prices matter' }] : [],
+      watching: i === 1 ? [
+        { label: 'Payroll Growth', text: '7k above the 50k slowdown trigger', proximity: 0.88, key: 'employment' },
+        { label: 'Job Openings', text: 'comfortable', proximity: 0.4, key: 'hiring' },
+      ] : [],
     })
   })
   mocks.fetchAllData.mockResolvedValue({})
@@ -63,6 +67,21 @@ describe('buildAlertReport', () => {
       expect.objectContaining({ key: 'inflation:cpi-4', tab: 'inflation', severity: 2 }),
     ])
     expect(report.breakLevel).toBe(42)
+  })
+
+  it('returns a separate low-noise watching layer', async () => {
+    const report = await buildAlertReport()
+
+    expect(report.watching).toEqual([
+      expect.objectContaining({
+        key: 'labor:employment',
+        tab: 'labor',
+        tabLabel: 'Labor',
+        label: 'Payroll Growth',
+        heat: 'warming',
+      }),
+    ])
+    expect(report.watching.find(w => w.id === 'hiring')).toBeUndefined()
   })
 
   it('uses the tab model caches in cached mode', async () => {
