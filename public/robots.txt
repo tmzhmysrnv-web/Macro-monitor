@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
+Allow: /8f2e6d4c9b1a4370a2f6d8e3c5b7a901.txt
 Disallow: /dashboard
 Disallow: /onboarding
 Disallow: /settings
