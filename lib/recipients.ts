@@ -1,8 +1,7 @@
 // lib/recipients.ts
 // Resolves WHO an alert digest goes to, and filters each digest to the topics
-// that recipient follows. When Supabase is configured, recipients come from the
-// account system (profiles + preferences + interests). Otherwise it falls back
-// to the legacy Upstash email subscribers (who follow everything).
+// that recipient follows. Account preferences take precedence, but legacy
+// Upstash subscribers remain eligible while the product transitions to accounts.
 import { getSupabaseAdmin } from './supabase/server'
 import { listActiveSubscribers } from './redis'
 import { TAB_TO_CATEGORIES } from './interests'
@@ -16,46 +15,78 @@ export type AlertRecipient = {
   emailEnabled: boolean
 }
 
+export function mergeAlertRecipients(
+  accountRecipients: AlertRecipient[],
+  legacyRecipients: AlertRecipient[],
+): AlertRecipient[] {
+  const byEmail = new Map<string, AlertRecipient>()
+  for (const recipient of legacyRecipients) {
+    byEmail.set(recipient.email.trim().toLowerCase(), recipient)
+  }
+  // An account's explicit frequency/interests/unsubscribe token override the
+  // legacy all-topics record for the same address.
+  for (const recipient of accountRecipients) {
+    byEmail.set(recipient.email.trim().toLowerCase(), recipient)
+  }
+  return [...byEmail.values()]
+}
+
 export async function listAlertRecipients(): Promise<AlertRecipient[]> {
+  let subs: Awaited<ReturnType<typeof listActiveSubscribers>> = []
+  try {
+    subs = await listActiveSubscribers()
+  } catch (e) {
+    // A Redis outage must not hide healthy account recipients.
+    console.error('legacy recipients unavailable:', e)
+  }
+  const legacyRecipients: AlertRecipient[] = subs.map(s => ({
+    email: s.email,
+    token: s.token,
+    interests: null,
+    frequency: 'weekly',
+    emailEnabled: true,
+  }))
+
   const admin = getSupabaseAdmin()
-  if (admin) {
-    const { data: prefs } = await admin
-      .from('user_preferences')
-      .select('user_id, digest_frequency, email_enabled')
-      .eq('email_enabled', true)
-    const ids = (prefs ?? []).map(p => p.user_id as string)
-    if (ids.length === 0) return []
+  if (!admin) return legacyRecipients
 
-    const [{ data: profs }, { data: ints }] = await Promise.all([
-      admin.from('profiles').select('id, email').in('id', ids),
-      admin.from('user_interests').select('user_id, category').in('user_id', ids),
-    ])
-    const emailById = new Map((profs ?? []).map(p => [p.id as string, p.email as string | null]))
-    const interestsById = new Map<string, string[]>()
-    for (const r of ints ?? []) {
-      const arr = interestsById.get(r.user_id as string) ?? []
-      arr.push(r.category as string)
-      interestsById.set(r.user_id as string, arr)
-    }
+  const { data: prefs, error: prefsError } = await admin
+    .from('user_preferences')
+    .select('user_id, digest_frequency, email_enabled')
+    .eq('email_enabled', true)
+  if (prefsError) throw new Error(`recipient preferences: ${prefsError.message}`)
 
-    const out: AlertRecipient[] = []
-    for (const p of prefs ?? []) {
-      const email = emailById.get(p.user_id as string)
-      if (!email) continue
-      out.push({
-        email,
-        token: `u:${p.user_id}`,
-        interests: interestsById.get(p.user_id as string) ?? [],
-        frequency: (p.digest_frequency as AlertRecipient['frequency']) ?? 'weekly',
-        emailEnabled: true,
-      })
-    }
-    return out
+  const ids = (prefs ?? []).map(p => p.user_id as string)
+  if (ids.length === 0) return legacyRecipients
+
+  const [profilesResult, interestsResult] = await Promise.all([
+    admin.from('profiles').select('id, email').in('id', ids),
+    admin.from('user_interests').select('user_id, category').in('user_id', ids),
+  ])
+  if (profilesResult.error) throw new Error(`recipient profiles: ${profilesResult.error.message}`)
+  if (interestsResult.error) throw new Error(`recipient interests: ${interestsResult.error.message}`)
+
+  const emailById = new Map((profilesResult.data ?? []).map(p => [p.id as string, p.email as string | null]))
+  const interestsById = new Map<string, string[]>()
+  for (const r of interestsResult.data ?? []) {
+    const arr = interestsById.get(r.user_id as string) ?? []
+    arr.push(r.category as string)
+    interestsById.set(r.user_id as string, arr)
   }
 
-  // Fallback: legacy email-only subscribers follow every topic.
-  const subs = await listActiveSubscribers()
-  return subs.map(s => ({ email: s.email, token: s.token, interests: null, frequency: 'weekly', emailEnabled: true }))
+  const accountRecipients: AlertRecipient[] = []
+  for (const p of prefs ?? []) {
+    const email = emailById.get(p.user_id as string)
+    if (!email) continue
+    accountRecipients.push({
+      email,
+      token: `u:${p.user_id}`,
+      interests: interestsById.get(p.user_id as string) ?? [],
+      frequency: (p.digest_frequency as AlertRecipient['frequency']) ?? 'weekly',
+      emailEnabled: true,
+    })
+  }
+  return mergeAlertRecipients(accountRecipients, legacyRecipients)
 }
 
 // Narrow a digest's alerts to the ones on tabs the recipient follows.

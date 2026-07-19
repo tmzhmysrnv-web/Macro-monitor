@@ -36,7 +36,6 @@ import { listAlertRecipients, alertsForRecipient } from '../../lib/recipients'
 import { sendDigest } from '../../lib/sendAlert'
 import { syncEconomicCalendar } from '../../lib/calendarSync'
 import { validCronAuth } from '../../lib/http'
-import { runWeeklyDigest } from '../../lib/weeklyDigestRunner'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
@@ -133,9 +132,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       emailed = sends.filter(r => r.status === 'fulfilled' && r.value).length
     }
 
-    // Refresh the economic calendar and weekly digest from this single daily
-    // cron. Keeping all scheduled work here avoids relying on a second Vercel
-    // cron slot for the Sunday email.
+    // Refresh the economic calendar from the daily alert cron.
     // Never let a calendar failure break the alert run.
     let calendar: Awaited<ReturnType<typeof syncEconomicCalendar>> | { errors: string[] } = { errors: [] }
     try {
@@ -145,15 +142,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       calendar = { errors: [e instanceof Error ? e.message : String(e)] }
     }
 
-    let weeklyDigest: Awaited<ReturnType<typeof runWeeklyDigest>> | { error: string } = { error: 'not run' }
-    try {
-      weeklyDigest = await runWeeklyDigest()
-    } catch (e) {
-      console.error('Weekly digest run failed:', e)
-      await captureError(e, { route: 'cron', task: 'weekly-digest' })
-      weeklyDigest = { error: e instanceof Error ? e.message : String(e) }
-    }
-
     res.status(200).json({
       firing: alerts.length,
       notified: toNotify.length,
@@ -161,7 +149,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       emailed,
       errors,
       calendar,
-      weeklyDigest,
       at: new Date().toISOString(),
     })
   } catch (err) {

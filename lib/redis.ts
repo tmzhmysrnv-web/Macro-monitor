@@ -251,6 +251,32 @@ export async function markWeeklyDigestSent(week: string, id: string): Promise<vo
   await r.expire(weeklyKey(week), 60 * 60 * 24 * 14) // keep ~2 weeks, then forget
 }
 
+const WEEKLY_DIGEST_RUNS = 'wd:runs'
+const WEEKLY_DIGEST_RUNS_MAX = 30
+export type WeeklyDigestRunReceipt = {
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  mode: 'scheduled' | 'dry' | 'forced'
+  outcome: 'skipped' | 'completed' | 'failed'
+  detail: string
+  recipients?: number
+  sent?: number
+  skipped?: number
+  failed?: number
+}
+
+export async function recordWeeklyDigestRun(receipt: WeeklyDigestRunReceipt): Promise<void> {
+  const r = getRedis(); if (!r) return
+  await r.lpush(WEEKLY_DIGEST_RUNS, receipt)
+  await r.ltrim(WEEKLY_DIGEST_RUNS, 0, WEEKLY_DIGEST_RUNS_MAX - 1)
+}
+
+export async function getWeeklyDigestRuns(limit = 10): Promise<WeeklyDigestRunReceipt[]> {
+  const r = getRedis(); if (!r) return []
+  return (await r.lrange<WeeklyDigestRunReceipt>(WEEKLY_DIGEST_RUNS, 0, Math.max(0, limit - 1))) ?? []
+}
+
 // ── Admin / testing maintenance ───────────────────────────────────────
 // Removes every subscriber (sub:*, tok:*, and the index set). Returns the count.
 export async function resetSubscribers(): Promise<number> {
