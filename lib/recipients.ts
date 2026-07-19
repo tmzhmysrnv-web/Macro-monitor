@@ -54,7 +54,13 @@ export async function listAlertRecipients(): Promise<AlertRecipient[]> {
     .from('user_preferences')
     .select('user_id, digest_frequency, email_enabled')
     .eq('email_enabled', true)
-  if (prefsError) throw new Error(`recipient preferences: ${prefsError.message}`)
+  if (prefsError) {
+    // These legacy records are active opt-ins, so they are the safe delivery
+    // fallback when Supabase is temporarily unreachable. The prior behavior
+    // silently returned zero recipients and dropped the whole digest.
+    console.error(`account recipient preferences unavailable: ${prefsError.message}`)
+    return legacyRecipients
+  }
 
   const ids = (prefs ?? []).map(p => p.user_id as string)
   if (ids.length === 0) return legacyRecipients
@@ -63,8 +69,11 @@ export async function listAlertRecipients(): Promise<AlertRecipient[]> {
     admin.from('profiles').select('id, email').in('id', ids),
     admin.from('user_interests').select('user_id, category').in('user_id', ids),
   ])
-  if (profilesResult.error) throw new Error(`recipient profiles: ${profilesResult.error.message}`)
-  if (interestsResult.error) throw new Error(`recipient interests: ${interestsResult.error.message}`)
+  if (profilesResult.error || interestsResult.error) {
+    const errors = [profilesResult.error?.message, interestsResult.error?.message].filter(Boolean).join('; ')
+    console.error(`account recipient details unavailable: ${errors}`)
+    return legacyRecipients
+  }
 
   const emailById = new Map((profilesResult.data ?? []).map(p => [p.id as string, p.email as string | null]))
   const interestsById = new Map<string, string[]>()
